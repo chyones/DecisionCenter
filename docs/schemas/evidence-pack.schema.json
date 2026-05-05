@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chyones/DecisionCenter/docs/schemas/evidence-pack.schema.json",
+  "title": "EvidencePack",
+  "type": "object",
+  "required": ["request_id", "evidence"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "evidence": {
+      "type": "array",
+      "items": {"$ref": "evidence-object.schema.json"}
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,5 @@
+description: Decision Center EDR evaluation placeholder
+prompts:
+  - apps/edr/prompts/draft_report.md
+providers: []
+tests: []

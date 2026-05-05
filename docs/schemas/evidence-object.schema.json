@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chyones/DecisionCenter/docs/schemas/evidence-object.schema.json",
+  "title": "EvidenceObject",
+  "type": "object",
+  "required": ["evidence_id", "source_type", "source_uri", "title", "excerpt", "hash_sha256", "confidence"],
+  "properties": {
+    "evidence_id": {"type": "string"},
+    "source_type": {"enum": ["sharepoint", "owncloud", "email", "odoo", "cad"]},
+    "source_uri": {"type": "string"},
+    "title": {"type": "string"},
+    "project_code": {"type": ["string", "null"]},
+    "contract_no": {"type": ["string", "null"]},
+    "revision": {"type": ["string", "null"]},
+    "timestamp": {"type": ["string", "null"]},
+    "excerpt": {"type": "string"},
+    "hash_sha256": {"type": "string"},
+    "confidence": {"enum": ["high", "medium", "low"]},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "metadata": {"type": "object"}
+  },
+  "additionalProperties": false
+}

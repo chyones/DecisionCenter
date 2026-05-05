@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chyones/DecisionCenter/docs/schemas/executive-decision-report.schema.json",
+  "title": "ExecutiveDecisionReport",
+  "type": "object",
+  "required": ["request_id", "question", "executive_summary", "missing_data", "claims"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "question": {"type": "string"},
+    "executive_summary": {"type": "string"},
+    "recommendation": {"type": ["string", "null"]},
+    "financials": {"type": "object"},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "missing_data": {"type": "array", "items": {"type": "string"}},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "text", "evidence_ids", "status"],
+        "properties": {
+          "claim_id": {"type": "string"},
+          "text": {"type": "string"},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

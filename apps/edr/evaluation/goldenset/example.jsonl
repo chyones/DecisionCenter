@@ -1,0 +1,1 @@
+{"id":"missing_financials","query":"What is the current cost overrun for project X?","expected":"If Odoo has no value, report Not available."}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chyones/DecisionCenter/docs/schemas/audit-log.schema.json",
+  "title": "AuditLog",
+  "type": "object",
+  "required": ["request_id", "user_id_hash", "events"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "user_id_hash": {"type": "string"},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "node", "action", "status"],
+        "properties": {
+          "timestamp": {"type": "string"},
+          "node": {"type": "string"},
+          "action": {"type": "string"},
+          "status": {"type": "string"},
+          "details": {"type": "object"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

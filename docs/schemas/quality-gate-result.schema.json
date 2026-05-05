@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chyones/DecisionCenter/docs/schemas/quality-gate-result.schema.json",
+  "title": "QualityGateResult",
+  "type": "object",
+  "required": ["request_id", "verdict", "checks"],
+  "properties": {
+    "request_id": {"type": "string"},
+    "verdict": {"enum": ["passed", "failed", "needs_review"]},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "verdict", "evidence_ids", "reason"],
+        "properties": {
+          "claim_id": {"type": "string"},
+          "verdict": {"enum": ["supported", "unsupported", "needs_review"]},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "reason": {"type": "string"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

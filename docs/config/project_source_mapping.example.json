@@ -1,0 +1,21 @@
+{
+  "project_code": "PRJ-001",
+  "sharepoint": {
+    "site_id": "example-site-id",
+    "drive_id": "example-drive-id",
+    "root_path": "/Projects/PRJ-001"
+  },
+  "owncloud": {
+    "base_path": "/Projects/PRJ-001"
+  },
+  "email": {
+    "shared_mailboxes": ["project-prj-001@example.com"],
+    "document_control_mailbox": "doc-control@example.com"
+  },
+  "odoo": {
+    "project_model": "project.project",
+    "cost_model": "account.analytic.line",
+    "project_external_id": "PRJ-001"
+  },
+  "contract_numbers": ["CON-001"]
+}
