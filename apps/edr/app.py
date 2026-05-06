@@ -1,16 +1,18 @@
 import socket
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from apps.edr.auth.validator import EntraJWTValidator, JWTClaims
 from apps.edr.config import settings
 from apps.edr.exporters.base import MIME_TYPES
 from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
+from apps.edr.rbac.project_mapping import RbacDeniedError
 
 app = FastAPI(
     title="Decision Center",
@@ -29,6 +31,30 @@ class ReportRequest(BaseModel):
     document_type: str | None = None
     mailbox_scope: str | None = None
     output_formats: list[Literal["md", "docx", "xlsx", "pdf", "pptx"]] = ["md"]
+
+
+def _extract_claims(
+    authorization: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
+) -> JWTClaims | None:
+    """Returns JWTClaims from a real Entra Bearer token, or None in bypass mode.
+
+    Bypass mode is active when ENTRA_CLIENT_ID is not configured — for local dev
+    and CI only. In bypass mode, pass X-User-Role header to set the role.
+    """
+    if settings.entra_client_id and settings.entra_tenant_id:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authorization: Bearer <token> required")
+        token = authorization.removeprefix("Bearer ")
+        validator = EntraJWTValidator(settings.entra_tenant_id, settings.entra_client_id)
+        try:
+            return validator.validate(token)
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail=f"Invalid token: {exc}")
+    # Bypass mode — Entra not configured
+    if settings.app_env == "production":
+        raise HTTPException(status_code=500, detail="ENTRA_CLIENT_ID not configured in production")
+    return JWTClaims(user_id="", role=x_user_role)
 
 
 @app.get("/healthz")
@@ -97,15 +123,27 @@ def _http_ok(url: str) -> None:
 
 
 @app.post("/reports/staging")
-def stage_report(request: ReportRequest) -> dict[str, object]:
+def stage_report(
+    request: ReportRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> dict[str, object]:
+    user_id = (claims.user_id if claims and claims.user_id else None) or request.user_id
+    role = claims.role if claims else None
+
     state = DecisionState(
         request_id="local-preview",
-        user_id=request.user_id,
+        user_id=user_id,
+        role=role,
+        project_code=request.project_code,
         query=request.query,
         inputs=request.model_dump(exclude_none=True),
         output_formats=list(request.output_formats),
     )
-    result = run_workflow(state)
+    try:
+        result = run_workflow(state)
+    except RbacDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
     exports = result.outputs.get("exported_reports", {})
     return {
         "request_id": result.request_id,

@@ -7,6 +7,13 @@ class DecisionState:
     request_id: str
     user_id: str
     query: str
+    # RBAC fields — set by API layer (JWT) or directly in tests
+    role: str | None = None
+    project_code: str | None = None
+    allowed_projects: list[str] = field(default_factory=list)
+    allowed_mailboxes: list[str] = field(default_factory=list)
+    allowed_odoo_ids: list[str] = field(default_factory=list)
+    # Workflow state
     inputs: dict[str, Any] = field(default_factory=dict)
     evidence: list[dict[str, Any]] = field(default_factory=list)
     outputs: dict[str, Any] = field(default_factory=dict)

@@ -1,0 +1,44 @@
+[
+  {
+    "project_code": "PRJ-001",
+    "sharepoint": {
+      "site_id": "example-site-id-001",
+      "drive_id": "example-drive-id-001",
+      "root_path": "/Projects/PRJ-001"
+    },
+    "owncloud": {
+      "base_path": "/Projects/PRJ-001"
+    },
+    "email": {
+      "shared_mailboxes": ["project-prj-001@example.com"],
+      "document_control_mailbox": "doc-control@example.com"
+    },
+    "odoo": {
+      "project_model": "project.project",
+      "cost_model": "account.analytic.line",
+      "project_external_id": "PRJ-001"
+    },
+    "contract_numbers": ["CON-001"]
+  },
+  {
+    "project_code": "PRJ-002",
+    "sharepoint": {
+      "site_id": "example-site-id-002",
+      "drive_id": "example-drive-id-002",
+      "root_path": "/Projects/PRJ-002"
+    },
+    "owncloud": {
+      "base_path": "/Projects/PRJ-002"
+    },
+    "email": {
+      "shared_mailboxes": ["project-prj-002@example.com"],
+      "document_control_mailbox": "doc-control-002@example.com"
+    },
+    "odoo": {
+      "project_model": "project.project",
+      "cost_model": "account.analytic.line",
+      "project_external_id": "PRJ-002"
+    },
+    "contract_numbers": ["CON-002", "CON-003"]
+  }
+]
