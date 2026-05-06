@@ -2,7 +2,7 @@
 
 > **Date:** 2026-05-06
 > **Scope:** `/root/DecisionCenter` only.
-> **Type:** Planning document — read-only analysis. No code, no edits, no assumptions.
+> **Type:** Planning/control document. No application logic, connector wiring, or code behavior changes.
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, 1,700+ lines).
 
 ---
@@ -12,6 +12,20 @@
 **NOT FOUND.** No file, directory, reference, or mention of `VIPCODEEN` exists anywhere inside
 `/root/DecisionCenter`. The locked specification (`EDR-AGENTIC-RAG-v2.1.md`) does not define or
 use this term.
+
+---
+
+## Phase 0 Control Lock Decisions
+
+| Area | Locked Decision |
+|---|---|
+| Environment baseline | `.env.example` is authoritative and currently contains 36 keys. Earlier references to 50 keys were stale planning text. |
+| Phase sequence | Phase 1A is Infrastructure Foundation. Product/node logic starts only in later assigned phases. |
+| RBAC model | The canonical RBAC model is the 9-role matrix in `docs/security/rbac_matrix.md`, aligned to spec Sections 8 and 9. |
+| n8n status | `n8n/*.json` files are placeholders with empty `nodes` arrays and are not functional retrieval workflows. |
+| Evaluation baseline | One executable JSONL golden example exists. The spec requires 12 baseline categories and at least 50 executable cases before go-live. |
+| Control plane | No Admin UI is specified. Control-plane coverage is documentation, configuration, RBAC/source mapping, audit/approval policy, CI, and operations. |
+| Readiness after this cleanup | READY FOR PHASE 1, meaning Phase 1A Infrastructure Foundation only. |
 
 ---
 
@@ -35,6 +49,7 @@ producing four output artifacts:
 | Approval rule | Every report must pass human review before publishing to `/final` |
 | Cost ceiling | USD 12/day · USD 300/month |
 | Spec status | Locked — `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` |
+| Execution sequence | Phase 1A starts with Infrastructure Foundation after Phase 0 control cleanup |
 | Code status | **Skeleton** — Phase 0 scaffolding complete, no node has real logic |
 
 The system runs end-to-end today in under one millisecond by setting stub string values and
@@ -44,7 +59,7 @@ returning. Zero intelligence is produced.
 
 ## 2. What Is Ready
 
-Assets that are correct as-written and require no changes before implementation begins.
+Assets that are usable as planning inputs before implementation begins.
 
 | Asset | Contents | Usable Now |
 |-------|----------|------------|
@@ -52,7 +67,7 @@ Assets that are correct as-written and require no changes before implementation 
 | `docs/schemas/` (5 JSON Schema files) | Evidence object, evidence pack, executive report, audit log, quality gate | Yes — validate against these |
 | `docs/policies/` (9 files) | Financial truth, RBAC, email excerpts, conflict resolution, prompt injection, data minimization, disaster recovery | Yes — enforce in every node |
 | `docs/contracts/` (4 files) | SharePoint Graph, Email Graph, Odoo read-only, ownCloud WebDAV API contracts | Yes — wire n8n against these |
-| `docs/evaluation/` (3 files) | 5 required test cases, golden set spec, metrics (precision, faithfulness, RBAC denial, QG false-pass) | Yes — write tests against these |
+| `docs/evaluation/` (3 files) | 12 required baseline categories, golden set spec, metrics (precision, faithfulness, RBAC denial, QG false-pass) | Yes — write tests against these |
 | `docs/operations/` (5 files) | Runbook, hosting guide, cost model, observability plan, backup/restore | Yes — reference during infra setup |
 | `apps/edr/schemas/` (4 Python files) | `EvidenceObject`, `EvidencePack`, `ExecutiveDecisionReport`, `AuditLog`, `QualityGateResult` Pydantic models | Yes — match the JSON schemas |
 | `apps/edr/prompts/` (3 markdown files) | `intent_classifier.md`, `draft_report.md`, `compose_markdown.md` — production-ready prompts | Yes — wire to LLM calls |
@@ -64,7 +79,7 @@ Assets that are correct as-written and require no changes before implementation 
 | `apps/edr/connectors/base.py` | `N8NWebhookClient` HTTP wrapper | Yes — correct pattern |
 | `apps/edr/connectors/` (4 files) | SharePoint, Email, Odoo, ownCloud — each calls correct n8n webhook | Yes — shell correct, n8n workflows empty |
 | `apps/edr/tests/smoke/test_smoke.py` | 2 tests: node count = 18, publish blocked until approval | Yes — passes now |
-| `.env.example` | All 50 required environment variables documented | Yes — complete template |
+| `.env.example` | All 36 environment variables currently evidenced in the repo | Yes — authoritative env template |
 | `docker-compose.yml` | All 7 services defined with volumes and health checks | Yes — not yet end-to-end validated |
 | `Makefile` | `up`, `down`, `logs`, `smoke`, `test`, `eval`, `format` targets | Yes |
 | `pyproject.toml` | Correct dependencies listed | Partial — no version pins |
@@ -78,7 +93,7 @@ Assets that are correct as-written and require no changes before implementation 
 
 | Component | What Is Missing |
 |-----------|----------------|
-| `config.py` | Loads only 6 of 50 `.env.example` keys — Anthropic, Voyage, Cohere, Qdrant, MinIO, Redis, Odoo, Langfuse, n8n credentials never read |
+| `config.py` | Loads only 6 of 36 `.env.example` keys — Anthropic, Voyage, Cohere, Qdrant, MinIO, Redis, Odoo, Langfuse, n8n credentials never read |
 | All 18 graph nodes | Real logic — every node sets a stub string and returns |
 | Node 01 (Auth) | Entra JWT validation, role resolution, project-scope enforcement — none exists |
 | Nodes 02–04 (Light LLM) | Zero LLM calls — Haiku 4.5 never called |
@@ -105,7 +120,7 @@ Assets that are correct as-written and require no changes before implementation 
 | Project source mapping loader | `example.json` exists — no code loads or validates it |
 | CI/CD pipeline | `.github/workflows/` directory does not exist |
 | Version pins | `pyproject.toml` has no `==` pins |
-| Golden set | 1 example in `goldenset/example.jsonl` — spec requires 5 test cases |
+| Golden set | 1 executable example in `apps/edr/evaluation/goldenset/example.jsonl` — spec requires 12 baseline categories and at least 50 executable cases before go-live |
 | `evaluation/run.py` | Prints "stubbed until Phase 1G" and exits |
 
 ---
@@ -114,7 +129,7 @@ Assets that are correct as-written and require no changes before implementation 
 
 Listed in dependency order. Each blocks the next.
 
-### B1 — `config.py` loads 6 of 50 env vars
+### B1 — `config.py` loads 6 of 36 env vars
 
 Every node that touches an LLM, Qdrant, MinIO, Redis, Odoo, or n8n will raise `AttributeError`
 on `settings.<missing_field>`. This is the root blocker — all other blockers depend on it.
@@ -164,14 +179,14 @@ embedding insert will fail.
 |------|----------|----------------------|
 | `quality_gate` stub returns `"needs_review"` — Node 14 treats this as non-failed and exports fire on empty data | **Critical** | `node_14_compose_md.py`: checks `quality_gate != "failed"` only |
 | RBAC stub allows every user to access every project | **Critical** | `node_01_auth.py`: `outputs["rbac_status"] = "stubbed"` |
-| 44 missing `config.py` fields — services start, crash silently on first real use | **High** | `config.py` vs. `.env.example` |
+| 30 missing `config.py` fields — services start, crash silently on first real use | **High** | `config.py` vs. `.env.example` |
 | Chunking uses character limits, not token limits — chunk sizes wrong by factor of 3–5 | **High** | `chunking.py` vs. spec Section 19 |
 | Caddyfile ACME email is `admin@example.com` — Let's Encrypt will reject cert issuance | **High** | `Caddyfile` line 2 |
 | No token cost tracking — a runaway Sonnet 4.6 call can exceed monthly budget with no circuit breaker | **High** | `config.py` has field, no enforcement |
 | n8n starts with no credentials — first `make up` produces a blank n8n with no connections | **Medium** | `docker-compose.yml`: no seed data |
 | PDF Arabic RTL renders as gibberish — Helvetica does not support Arabic glyphs | **Medium** | `pdf.py`: Helvetica only |
 | No version pins — `pip install` in a new environment may produce a broken dependency tree | **Medium** | `pyproject.toml` |
-| Golden set has 1 case out of 5 required — evaluation is not meaningful | **Medium** | `goldenset/example.jsonl` |
+| Golden set has 1 executable case; spec requires 12 baseline categories and 50 go-live cases — evaluation is not meaningful yet | **Medium** | `apps/edr/evaluation/goldenset/example.jsonl`, spec Section 26 |
 | No CI/CD — regressions go undetected between phases | **Medium** | `.github/` directory absent |
 | No Qdrant collection enforcement — misconfigured `project_code` could mix evidence across projects | **Medium** | No collection-creation code found |
 
@@ -183,7 +198,7 @@ Complete every item before writing any node logic. Each item is verifiable.
 
 ### Environment
 
-- [ ] Copy `.env.example` to `.env` and fill all 50 values with real credentials
+- [ ] Copy `.env.example` to `.env` and fill all 36 values with real credentials
 - [ ] Confirm Anthropic API key has access to `claude-haiku-4-5` and `claude-sonnet-4-6`
 - [ ] Confirm Voyage API key is active (`voyage-3-large`)
 - [ ] Confirm Cohere API key is active (`rerank-multilingual-v3.0`)
@@ -231,7 +246,7 @@ Complete every item before writing any node logic. Each item is verifiable.
 No LLM calls. No n8n changes. No node logic.
 
 **Scope:**
-- Expand `config.py` to load all 50 `.env.example` keys with Pydantic field types
+- Expand `config.py` to load all 36 `.env.example` keys with Pydantic field types
 - Rewrite `GET /healthz` to ping PostgreSQL, Redis, Qdrant, MinIO — per-service status in response
 - Pin all dependencies in `pyproject.toml` to exact current versions
 - Create `.github/workflows/ci.yml` — ruff lint, type check, `make smoke`
@@ -343,9 +358,9 @@ No LLM calls. No n8n changes. No node logic.
 **Goal:** Prove correctness against spec before production use.
 
 **Scope:**
-- Expand `goldenset/example.jsonl` to all 5 required cases from `docs/evaluation/edr_test_cases.md`
+- Expand the executable golden set from 1 example toward the 12 required baseline categories and 50 go-live cases from spec Section 26
 - Wire `evaluation/run.py` to execute against golden set and report metrics from `docs/evaluation/edr_metrics.md`
-- Wire `promptfoo.config.yaml` with real providers and test cases
+- Wire `apps/edr/evaluation/promptfoo.config.yaml` with real providers and test cases
 - Fix PDF Arabic RTL — register a bundled Arabic TTF font (Amiri or Scheherazade)
 - Cost cap circuit breaker — abort request and return structured error if daily cap exceeded at any LLM node
 - Add `make eval` step to CI pipeline
@@ -362,7 +377,7 @@ No LLM calls. No n8n changes. No node logic.
 ### Why this is the correct first move
 
 Every phase from 1B onward requires `config.py` to successfully load credentials. Today it loads
-6 of 50. That gap will cause `AttributeError` crashes in every node the moment a real service is
+6 of 36. That gap will cause `AttributeError` crashes in every node the moment a real service is
 contacted. Fixing it first means all subsequent phases can be developed without fighting silent
 config failures.
 
@@ -379,7 +394,7 @@ Phase 1A touches zero business logic and zero security-sensitive code.
 
 ### What Phase 1A contains — exactly
 
-1. Expand `config.py` — all 50 `.env.example` keys, Pydantic types matching each value
+1. Expand `config.py` — all 36 `.env.example` keys, Pydantic types matching each value
 2. Rewrite `GET /healthz` — ping PostgreSQL, Redis, Qdrant, MinIO; return per-service status
 3. Pin all dependencies in `pyproject.toml` to current exact versions
 4. Create `.github/workflows/ci.yml` — ruff, type check, `make smoke`
@@ -397,14 +412,14 @@ No node logic. No LLM calls. No n8n changes. No schema changes. No auth logic.
 
 | Phase | All Must Pass Before Proceeding |
 |-------|--------------------------------|
-| **1A → 1B** | `make smoke` passes in CI with zero warnings. `GET /healthz` returns `{"postgres": "ok", "redis": "ok", "qdrant": "ok", "minio": "ok"}`. `ruff check` exits 0. All 50 `.env.example` keys have a corresponding `config.py` field. `pyproject.toml` contains `==` version pins for all dependencies. CI pipeline runs on every push. |
+| **1A → 1B** | `make smoke` passes in CI with zero warnings. `GET /healthz` returns `{"postgres": "ok", "redis": "ok", "qdrant": "ok", "minio": "ok"}`. `ruff check` exits 0. All 36 `.env.example` keys have a corresponding `config.py` field. `pyproject.toml` contains `==` version pins for all dependencies. CI pipeline runs on every push. |
 | **1B → 1C** | Three integration tests pass: (1) authorized user + valid `project_code` receives `rbac_status: authorized` and populated `allowed_projects`; (2) user with no project mapping receives HTTP 403; (3) user with correct project but insufficient role receives HTTP 403. All three in CI. No stub strings remain in Node 01 output. |
 | **1C → 1D** | Each of the 4 n8n workflows tested independently via `curl` — each returns at least 1 payload that validates against `docs/schemas/evidence-object.schema.json`. Email workflow confirmed to return excerpt only (field length ≤ 500 characters). Odoo workflow confirmed to return `model`, `id`, `value`, `timestamp`, `hash_sha256`. n8n workflow JSON files in repo are no longer empty. |
 | **1D → 1E** | `embed()` returns vectors of correct dimension for Voyage-3-large. `chunk_text()` verified via test to produce chunks of 500–800 tokens (not characters) with 100–150 token overlap. Qdrant insert and round-trip retrieval test passes for at least one project collection. RRF fusion produces a ranked list from two result sets. Redis cache key confirmed to include both `user_id` and `project_code`. |
 | **1E → 1F** | End-to-end test with real query and real evidence: (1) Node 12 output validates against `docs/schemas/executive-decision-report.schema.json`; (2) Node 13 rejects any report with a claim containing no `evidence_id`; (3) financial value with no Odoo `evidence_id` is absent or explicitly `"Not available"`; (4) Langfuse dashboard shows traces for all LLM nodes with token counts. |
 | **1F → 1G** | `POST /reports/staging` with real query returns `request_id`. `GET /reports/staging/{request_id}/download/md` returns real Markdown content. MinIO `/staging/{request_id}/` contains all 4 output files. PostgreSQL `audit_log` has a row for the request with hashed `user_id`. Token cost per request is logged. |
 | **1G → 1H** | Full approval flow verified: submit → staging files appear → `POST /approve` → `/final` files appear and cannot be overwritten. Full reject flow verified: submit → `POST /reject` → no `/final` files. Approval record in PostgreSQL contains approver hash and timestamp. `publish_status` in Node 17 output is `"published"` only after a real approval record — never from stub. |
-| **1H → Production** | All 5 golden set cases pass and `make eval` exits 0 in CI. PDF with Arabic content renders correctly. Load test: 5 concurrent requests complete within spec-defined latency bounds. Langfuse monthly cost projection ≤ USD 300. Both `make smoke` and `make eval` required to pass before any production deploy. |
+| **1H → Production** | At least 50 executable golden set cases pass and `make eval` exits 0 in CI. PDF with Arabic content renders correctly. Load test: 5 concurrent requests complete within spec-defined latency bounds. Langfuse monthly cost projection ≤ USD 300. Both `make smoke` and `make eval` required to pass before any production deploy. |
 
 ---
 

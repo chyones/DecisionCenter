@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-implementation-green.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase0_control_locked-blue.svg)](#)
 
 ---
 
@@ -93,6 +93,8 @@ Supporting documents:
 | Operations (hosting, cost, runbook) | [docs/operations/](docs/operations/) |
 | Evaluation (test cases, metrics) | [docs/evaluation/](docs/evaluation/) |
 | JSON schemas | [docs/schemas/](docs/schemas/) |
+| Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
+| Control-plane lock | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) |
 
 ## Deployment profile (locked)
 
@@ -135,16 +137,17 @@ See [docs/operations/runbook.md](docs/operations/runbook.md) for the full deploy
 
 The repo is structured for **vibe coding** with Claude Code: each session implements one phase from Section 31 of the spec, with a clear exit test.
 
-| Phase | Hours | Status |
-|---|---|---|
-| 0 — Server + skeleton | ~2 | Skeleton ready |
-| 1A — Minimal report (SharePoint + Odoo) | ~4 | Stubs in place |
-| 1B — Email evidence | ~2 | Stubs in place |
-| 1C — ownCloud | ~2 | Stubs in place |
-| 1D — Evidence governance | ~3 | Stubs in place |
-| 1E — Approval and publishing | ~2 | Stubs in place |
-| 1F — Observability and cost caps | ~2 | Stubs in place |
-| 1G — Evaluation and hardening | ~3 | Stubs in place |
+| Phase | Status |
+|---|---|
+| 0 — Control and documentation lock | Locked |
+| 1A — Infrastructure Foundation | Not started |
+| 1B — RBAC and Identity | Not started |
+| 1C — n8n Connector Workflows | Placeholders only |
+| 1D — Embedding and Vector Retrieval | Not started |
+| 1E — LLM Nodes | Not started |
+| 1F — Persistence and Audit | Not started |
+| 1G — Human Review Gate | Not started |
+| 1H — Evaluation and Hardening | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

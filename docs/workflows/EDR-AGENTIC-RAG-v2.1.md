@@ -1428,89 +1428,112 @@ The audit log MUST NOT include full confidential source content.
 
 ## 31. Implementation Sequence (Vibe Coding)
 
-Implementation is delivered in focused Claude Code sessions, not weeks. Each phase below corresponds to one or more sessions and MUST end with a green test before the next phase begins.
+Implementation is delivered in focused Claude Code sessions, not weeks. Each phase below
+corresponds to one or more sessions and MUST end with validation proof before the next
+phase begins.
 
-### Phase 0 — Server and Skeleton (Session 1, ~2 hours)
+Phase 0 control cleanup on 2026-05-06 superseded the earlier product-first phase labels in
+this section. The product behavior in Sections 0–30 remains locked; this section defines the
+safe execution order for implementing that behavior.
 
-- Provision Hetzner CCX23 (Section 23).
-- DNS, SSH key, `ufw`, `fail2ban`.
-- Install Docker and Docker Compose.
-- Create the repo with the structure in Section 32.
-- Bring up the base `docker-compose.yml`: Postgres, Qdrant, Redis, MinIO, Caddy, n8n, the LangGraph app skeleton.
-- Health-check endpoints respond on all services.
+### Phase 0 — Control and Documentation Lock
 
-Exit test: every container reports healthy; Caddy serves the app over HTTPS.
+- Reconcile environment, phase, RBAC, evaluation, n8n, and control-plane documentation.
+- Confirm missing files and placeholders are marked as missing, not implied as implemented.
+- Commit documentation/control changes before application implementation starts.
 
-### Phase 1A — Minimal Decision Report (Session 2, ~4 hours)
+Exit test: documentation consistency checks pass and readiness is one of
+`READY FOR PHASE 1`, `READY ONLY AFTER PHASE 0 CLEANUP`, or `BLOCKED`.
 
-Sources: SharePoint and Odoo.
+### Phase 1A — Infrastructure Foundation
 
-- Implement Nodes 0, 1, 2, 3, 4, 5, 8, 9, 10, 12, 13, 14, 15.
-- Implement the Evidence Object pipeline.
-- Implement the Quality Gate.
-- Render Markdown from JSON.
+No node logic. No LLM calls. No n8n workflow changes. No schema changes. No auth logic.
 
-Exit test: 5 of the 12 baseline test cases pass (Sections 26.1 cases 1, 2, 6, 7, 12).
+- Expand `apps/edr/config.py` to load all 36 keys from `.env.example`.
+- Rewrite `GET /healthz` to ping PostgreSQL, Redis, Qdrant, and MinIO.
+- Pin runtime dependencies to exact versions.
+- Create CI for lint, type/syntax checks, and smoke tests.
+- Add idempotent Qdrant collection initialization.
+- Replace the placeholder Caddy ACME email.
+- Verify Docker ignore rules for secrets, caches, and local data.
 
-### Phase 1B — Email Evidence (Session 3, ~2 hours)
+Exit test: Phase 1A validation proof in `docs/PRE_START_IMPLEMENTATION_PLAN.md` passes.
 
-- Implement Node 7 (email retrieval) via n8n Microsoft Graph.
-- Apply the email excerpt and hashing policy.
-- Add email-thread merge in Node 9.
+### Phase 1B — RBAC and Identity
 
-Exit test: cases 3, 4, 5 pass.
+- Wire Entra JWT validation into Node 01.
+- Load the 9-role RBAC model from `docs/security/rbac_matrix.md`.
+- Load project source mapping from the current example and the future real mapping file.
+- Enforce project, mailbox, and Odoo scope before retrieval.
+- Add authorization tests for allowed, denied, and unknown project cases.
 
-### Phase 1C — ownCloud (Session 4, ~2 hours)
+Exit test: no stub strings remain in Node 01 output and RBAC denial tests pass.
 
-- Implement Node 6 (ownCloud retrieval) via n8n WebDAV.
-- Add SharePoint vs ownCloud deduplication and revision handling.
+### Phase 1C — n8n Connector Workflows
 
-Exit test: deduplication validated on a folder with intentional duplicates.
+- Implement `n8n/sharepoint_search.json`.
+- Implement `n8n/email_search.json`.
+- Implement `n8n/owncloud_list.json`.
+- Implement `n8n/odoo_read.json`.
+- Validate connector output against `docs/schemas/evidence-object.schema.json`.
 
-### Phase 1D — Evidence Governance (Session 5, ~3 hours)
+Exit test: all four workflow files are no longer empty and each workflow returns valid
+evidence payloads in isolation.
 
-- Implement Node 11 (self-correction loop) with `max_loops = 3`.
-- Implement the Claim Checker (Section 15).
-- Implement the Conflict Resolution classifier (Section 7).
-- Implement RBAC enforcement at Node 1 and at every retrieval node.
+### Phase 1D — Embedding and Vector Retrieval
 
-Exit test: cases 8, 9, 10, 11 pass; the full 12-case baseline passes.
+- Wire `apps/edr/retrieval/embeddings.py` to Voyage-3-large.
+- Fix `apps/edr/retrieval/chunking.py` to use token counts.
+- Wire `apps/edr/retrieval/rerank.py` to Cohere Rerank 3.5.
+- Wire RBAC-aware cache behavior to Redis.
+- Insert and retrieve evidence from the correct Qdrant project collection.
+- Implement normalization, deduplication, confidence scoring, and sufficiency checks.
 
-### Phase 1E — Approval and Publishing (Session 6, ~2 hours)
+Exit test: embedding, chunking, Qdrant round-trip, RRF, reranking, and cache-key tests pass.
 
-- Implement Node 16 (human review) and Node 17 (publish).
-- Implement versioning per Section 28.
-- Implement the audit log writer per Section 30.
+### Phase 1E — LLM Nodes
 
-Exit test: a request flows from staging to final with a locked version.
+- Nodes 02, 03, and 04 use the light model for intent, scope, and retrieval planning.
+- Node 11 performs the bounded self-correction loop.
+- Node 12 uses the heavy model to produce structured JSON.
+- Node 13 performs deterministic claim checking and quality-gate validation.
+- Node 14 composes exports only after the quality gate allows it.
+- Langfuse tracing captures model, token, latency, and evidence metadata.
 
-### Phase 1F — Observability and Cost Caps (Session 7, ~2 hours)
+Exit test: structured report output validates and unsupported claims fail the quality gate.
 
-- Wire Langfuse Cloud SDK into every node.
-- Implement per-request token caps (Section 22.2).
-- Implement the daily cost cap (Section 22.3).
-- Wire alerts (Section 21.3).
+### Phase 1F — Persistence and Audit
 
-Exit test: a synthetic over-cap request is correctly halted; the trace appears in Langfuse.
+- Node 15 writes the four staging artifacts to MinIO.
+- Audit events are persisted to PostgreSQL with hashed user identifiers.
+- Token cost is accumulated and checked against configured caps.
+- Download endpoints serve persisted staged reports and respect quality-gate state.
 
-### Phase 1G — Evaluation and Hardening (Session 8, ~3 hours)
+Exit test: staged artifacts exist in MinIO and PostgreSQL contains linked audit rows.
 
-- Build the golden set to 50 cases.
-- Wire RAGAS and Promptfoo into a `make eval` target.
-- Run a restore rehearsal.
-- Pass the readiness gates in Section 33.
+### Phase 1G — Human Review Gate
 
-Exit test: production targets in Section 26.3 are met.
+- Add approval and rejection endpoints.
+- Node 16 waits for approval state from PostgreSQL with a timeout.
+- Node 17 publishes only after a valid approval record.
+- Final artifacts are immutable and linked to an approval log.
+
+Exit test: approval publishes to `/final`; rejection never publishes to `/final`.
+
+### Phase 1H — Evaluation and Hardening
+
+- Expand the executable golden set toward the required go-live baseline.
+- Wire evaluation runner and prompt regression tooling.
+- Fix Arabic PDF rendering.
+- Validate cost caps, load profile, backup/restore, and readiness gates.
+
+Exit test: Section 26.3 production targets and Section 33 readiness gates pass.
 
 ### Total Effort
 
-```
-Sessions: 8
-Hours: ~20
-Calendar time: 2–4 working days at vibe-coding pace
-```
-
-If a session overruns its hour budget by 50%, the session MUST stop and the spec MUST be re-examined for a missing decision.
+The original target remains within the Section 0 implementation budget of 30 hours. If a
+session overruns its hour budget by 50%, the session MUST stop and the spec MUST be
+re-examined for a missing decision.
 
 ---
 
@@ -1572,6 +1595,15 @@ n8n/                              # exported n8n workflows as JSON
   odoo_read.json
 
 docs/workflows/EDR-AGENTIC-RAG-v2.1.md
+docs/PRE_START_IMPLEMENTATION_PLAN.md
+
+docs/execution/
+  IMPLEMENTATION_PHASES.md
+  PHASE_1A_SCOPE.md
+
+docs/admin/
+  CONTROL_PLANE_LOCK.md
+  FEATURE_MATRIX.md
 
 docs/templates/executive-decision-report.template.md
 
