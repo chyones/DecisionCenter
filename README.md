@@ -77,24 +77,52 @@ Decision Center uses an **agentic workflow** — Plan → Retrieve → Normalize
 
 Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
+## Quick orientation
+
+| Need | Start here |
+|---|---|
+| Understand the locked behavior | [docs/workflows/EDR-AGENTIC-RAG-v2.1.md](docs/workflows/EDR-AGENTIC-RAG-v2.1.md) |
+| Understand what is safe to implement next | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) and [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
+| Audit current feature coverage | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
+| Find documentation by purpose | [docs/README.md](docs/README.md) |
+| Understand the Python app package | [apps/edr/README.md](apps/edr/README.md) |
+| Understand n8n workflow status | [n8n/README.md](n8n/README.md) |
+| Understand utility scripts | [scripts/README.md](scripts/README.md) |
+
+Phase 0 and Phase 1A are control locks. Treat the files above as the current authority before
+changing code, workflows, schemas, or operational assumptions.
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| `apps/edr/` | FastAPI app, workflow skeleton, schemas, retrieval helpers, exporters, prompts, and tests |
+| `docs/` | Locked workflow spec, control docs, execution plans, policies, contracts, schemas, operations, and evaluation docs |
+| `n8n/` | Placeholder workflow JSON files; real connector workflows are Phase 1C |
+| `scripts/` | Infrastructure/operations utilities, currently Qdrant collection initialization |
+| `.github/workflows/` | CI validation for lint, syntax, config coverage, and smoke tests |
+| Root config files | Docker Compose, Caddy, Python packaging, Makefile, env template, and ignore rules |
+
 ## Documentation
 
 The single source of truth is the workflow specification:
 
 - **[docs/workflows/EDR-AGENTIC-RAG-v2.1.md](docs/workflows/EDR-AGENTIC-RAG-v2.1.md)** — full specification (35 sections, ~1,700 lines)
 
-Supporting documents:
+Use [docs/README.md](docs/README.md) as the full documentation index. Key supporting documents:
 
 | Topic | Location |
 |---|---|
+| Control-plane lock | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) |
+| Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
+| Phase 1A scope | [docs/execution/PHASE_1A_SCOPE.md](docs/execution/PHASE_1A_SCOPE.md) |
+| Feature matrix | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | RBAC matrix | [docs/security/rbac_matrix.md](docs/security/rbac_matrix.md) |
 | API contracts | [docs/contracts/](docs/contracts/) |
 | Policies | [docs/policies/](docs/policies/) |
 | Operations (hosting, cost, runbook) | [docs/operations/](docs/operations/) |
 | Evaluation (test cases, metrics) | [docs/evaluation/](docs/evaluation/) |
 | JSON schemas | [docs/schemas/](docs/schemas/) |
-| Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
-| Control-plane lock | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) |
 
 ## Deployment profile (locked)
 
