@@ -4,6 +4,7 @@
 > **Date locked:** 2026-05-06
 > **Derived from:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, all section references below are to this file)
 > **Corrections applied:** Six corrections from design review (detailed in Section 0).
+> **Revision:** v1.1 — 2026-05-06: Applied verification finding CF-2 (PDF/XLSX export format restriction corrected to spec-accurate content-section restriction); added N-1, N-2 footnotes.
 > **Scope:** Specification only. No frontend code. No product logic.
 > **Constraint:** Every element in this document maps to a named spec requirement. Nothing is decorative.
 
@@ -170,8 +171,8 @@ Access violations return HTTP 403 from the server. Client-side routing guards ar
 | Upload | Expandable zone | See Section 6 | |
 | MD | Toggle | Pre-selected | Always available. |
 | DOCX | Toggle | Optional | Available to all content-producing roles. |
-| PDF | Toggle | Optional | Greyed with tooltip "Finance permission required" if role lacks `can_access_odoo_budget`. |
-| XLSX | Toggle | Optional | Greyed with tooltip "Finance permission required" if role lacks `can_access_odoo_budget`. |
+| PDF | Toggle | Optional | Available to all content-producing roles. Financial section within the generated PDF is conditionally rendered: absent with explicit "[Financial data not available for your role]" statement for roles without `can_access_odoo_budget` (spec Section 8.3). |
+| XLSX | Toggle | Optional | Available to all content-producing roles. Financial rows within the generated XLSX are conditionally rendered per spec Section 8.3. |
 | PPTX | Toggle | Optional | Available to all content-producing roles. |
 | Submit | Button | — | Disabled until Project and Query are both set. |
 
@@ -387,8 +388,8 @@ For `needs_review` — reviewer (can_approve = True) sees:
 │  Report formats                         │
 │  [↓ Markdown (.md)]                     │
 │  [↓ Word (.docx)]                       │
-│  [↓ PDF (.pdf)]          ← finance only │
-│  [↓ Excel (.xlsx)]       ← finance only │
+│  [↓ PDF (.pdf)]                         │
+│  [↓ Excel (.xlsx)]                      │
 │  [↓ PowerPoint (.pptx)]                 │
 │  ──────────────────────────────────     │
 │  Artifacts                              │
@@ -891,8 +892,8 @@ This matrix is the single authoritative reference for what each role may see in 
 |---|---|---|---|---|---|---|---|---|---|
 | report.md | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ final | ✗ |
 | report.docx | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ final | ✗ |
-| report.pdf | If fin perm | If fin perm | ✓ approved | If fin perm | ✗ | PO only | If fin perm | If perm | ✗ |
-| report.xlsx | If fin perm | If fin perm | ✓ approved | If fin perm | ✗ | PO only | If fin perm | If perm | ✗ |
+| report.pdf | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ final | ✗ |
+| report.xlsx | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ final | ✗ |
 | report.pptx | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ approved | ✓ final | ✗ |
 | evidence-pack.json | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ scope | ✗ |
 | audit-log.json (per-req) | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ own req | ✓ scope | via UI only |
@@ -901,9 +902,9 @@ Notes:
 - "own req" — only the user who submitted the request. No cross-user access.
 - "scope" — auditor has read access across all projects in their `allowed_projects`.
 - "approved" — state must be `approved` or `final`.
-- "If fin perm" — role must have `can_access_odoo_budget = True`.
 - "via UI only" — admin reads `audit-log.json` content via the Audit Log UI screen, not via download API.
 - All download access is blocked when `quality_gate_status = "failed"` regardless of role.
+- **N-2 (artifact scope):** `audit-log.json` in this table is the per-request MinIO artifact. It is a different artifact from the system-wide Audit Log (Admin screen Section 3.6). The RBAC matrix Audit Logs column ("Summary" for executive, "Own project" for project_manager, etc.) governs access to the system Audit Log screen, not the per-request artifact download.
 
 ### 4.3 Admin Screen Visibility
 
@@ -929,6 +930,7 @@ Notes:
 | Edit role mapping | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Test connector | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | View audit log (full) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | Scoped | ✓ |
+- **N-1 (admin override):** "Admin override" for Approve and Reject is an exceptional path, not a standard approval role. The RBAC matrix lists admin Approval as "No by default" (spec Section 9). Admin override is permitted only as an administrative action, requires a mandatory comment, and is logged with distinct event types `report.admin_override_approved` / `report.admin_override_rejected` — separate from all normal reviewer approval events.
 
 ---
 
@@ -1010,8 +1012,8 @@ Formats are generated only if selected at query submission time. Non-generated f
 |---|---|---|
 | `.md` | Always selected by default | All content roles |
 | `.docx` | When selected | All content roles |
-| `.pdf` | When selected AND role has `can_access_odoo_budget` | Finance-permitted roles only |
-| `.xlsx` | When selected AND role has `can_access_odoo_budget` | Finance-permitted roles only |
+| `.pdf` | When selected | All content roles. The Financial Position section within the generated PDF is conditionally rendered per spec Section 8.3: absent for roles without `can_access_odoo_budget`, replaced with explicit "[Financial data not available for your role]" statement. |
+| `.xlsx` | When selected | All content roles. Financial rows within the generated XLSX are conditionally rendered per spec Section 8.3: financial data cells absent for roles without `can_access_odoo_budget`. |
 | `.pptx` | When selected | All content roles |
 
 ### 6.2 State Gate
