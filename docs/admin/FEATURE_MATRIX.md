@@ -49,7 +49,7 @@
 
 | Feature | Spec Section | Endpoint | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|----------|-----------|----------------|-------------|------------------|--------|
-| Health check | 27 | `GET /healthz` | All (unauthenticated) | Static JSON | None | `make smoke`, CI | partial |
+| Health check | 27 | `GET /healthz` | All (unauthenticated) | Service status JSON | None | health proof + CI smoke | implemented |
 | Stage report | 27 | `POST /reports/staging` | All authenticated | `ReportRequest` → `DecisionState` | `request_id` generated | `make smoke` (1A) | partial |
 | Download report | 27 | `GET /reports/staging/{id}/download/{fmt}` | Request owner + approver roles | MIME type response | `download` event | integration test (1F) | partial |
 | Approve report | 27, 16.16 | `POST /reports/staging/{id}/approve` | Approval roles per `docs/security/rbac_matrix.md` | Approval record | `approval` event | integration test (1G) | missing |
@@ -68,7 +68,7 @@
 | Reranking | 19.5 | `apps/edr/retrieval/rerank.py` | N/A | Ranked `EvidenceObject` list (top 10) | None | unit test: top-k (1D) | partial |
 | Query expansion | 19.6 | Not yet created | N/A | Expanded query strings | None | eval test (1H) | missing |
 | RBAC-aware caching | 19.7 | `MemoryCache` / Redis | N/A | Cache key: `user_id:project_code:query_hash` | None | unit test: key format (1D) | partial |
-| Qdrant collection init | 19.3 | `scripts/init_qdrant.py` | Admin | Collection config | `init_qdrant` | idempotent run ×2 (1A) | missing |
+| Qdrant collection init | 19.3 | `scripts/init_qdrant.py` | Admin | Collection config | `init_qdrant` | idempotent run ×2 (1A) | implemented |
 
 ---
 
@@ -117,15 +117,15 @@
 
 | Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
-| Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 36 (1A) | partial |
-| Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | `pip install` reproducible (1A) | partial |
-| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | push triggers green build (1A) | missing |
+| Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 36 (1A) | implemented |
+| Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | exact dependency pins (1A) | implemented |
+| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | push/pull_request workflow file exists (1A) | implemented |
 | Docker Compose stack | 23 | `docker-compose.yml` | N/A | 7 services | None | `make up` healthy (1A) | partial |
 | Reverse proxy | 23 | `Caddyfile` | N/A | Caddy config | None | cert issuance works (1A) | partial |
 | PostgreSQL persistence | 20.4 | `docker-compose.yml` | N/A | `audit_log` table | N/A | health ping (1A) | partial |
 | Redis caching | 20.4 | `docker-compose.yml` | N/A | Redis key-value | N/A | health ping (1A) | partial |
 | MinIO object storage | 20.4 | `docker-compose.yml` | N/A | `/staging`, `/final` buckets | N/A | health ping + write test (1A/1F) | partial |
-| Qdrant vector store | 20.4 | `docker-compose.yml` | N/A | per-project collections | N/A | health ping + init script (1A/1D) | partial |
+| Qdrant vector store | 20.4 | `docker-compose.yml`, `scripts/init_qdrant.py` | N/A | per-project collections | N/A | health ping + init script (1A/1D) | partial |
 | n8n orchestration | 20.2 | `docker-compose.yml` | N/A | 4 workflow files | N/A | workflow responds to curl (1C) | partial |
 | Langfuse tracing | 21.1 | `.env.example` only | N/A | Trace + span | token count | dashboard visible (1E) | missing |
 | Cost cap enforcement | 18, 22 | `config.py` fields only | N/A | `daily_cost_cap_usd` | `cost_exceeded` | circuit breaker test (1H) | missing |
@@ -185,6 +185,5 @@
 | G2 | `apps/edr/evaluation/promptfoo.config.yaml` has empty providers/tests | `apps/edr/evaluation/promptfoo.config.yaml` | Cannot run automated prompt regression yet | 1H |
 | G3 | `apps/edr/evaluation/run.py` prints "stubbed until Phase 1G" while evaluation is now Phase 1H | `apps/edr/evaluation/run.py` | Stale runtime message; no behavior implemented | 1H |
 | G4 | No `POST /approve` or `POST /reject` endpoints exist | `apps/edr/app.py` | Human review gate has no API surface | 1G |
-| G5 | `apps/edr/config.py` loads 6 of 36 env keys | `apps/edr/config.py`, `.env.example` | Real service calls will hit missing settings | 1A |
-| G6 | n8n workflows are present but empty placeholders | `n8n/*.json` | No retrieval possible | 1C |
-| G7 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |
+| G5 | n8n workflows are present but empty placeholders | `n8n/*.json` | No retrieval possible | 1C |
+| G6 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |

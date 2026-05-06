@@ -6,4 +6,4 @@ from apps.edr.connectors.base import N8NWebhookClient
 
 async def search_sharepoint(payload: dict[str, Any]) -> dict[str, Any]:
     client = N8NWebhookClient(settings.n8n_base_url, settings.n8n_webhook_token)
-    return await client.post("/webhook/sharepoint-search", payload)
+    return await client.post(settings.sharepoint_search_webhook, payload)

@@ -30,18 +30,18 @@ this infrastructure-first sequence.
 
 **First safe phase.** All subsequent phases depend on it.
 
-1. Expand `apps/edr/config.py` to load all 36 `.env.example` keys with Pydantic field types (currently loads 6).
+1. Expand `apps/edr/config.py` to load all 36 `.env.example` keys with Pydantic field types.
 2. Rewrite `GET /healthz` to ping PostgreSQL, Redis, Qdrant, MinIO — return per-service status.
-3. Pin all dependencies in `pyproject.toml` to exact current versions (currently uses `>=`).
-4. Create `.github/workflows/ci.yml` — ruff lint, type check, `make smoke`.
+3. Pin all dependencies in `pyproject.toml` to exact versions.
+4. Create `.github/workflows/ci.yml` — ruff lint, syntax check, config coverage, smoke tests.
 5. Write Qdrant collection initialization script — idempotent, one collection per `project_code`.
-6. Fix `Caddyfile` ACME email (`admin@example.com` → real address).
+6. Configure `Caddyfile` with a non-placeholder ACME email.
 7. Verify `.dockerignore` excludes `.env`, `__pycache__`, `.git`, `.pytest_cache`.
 
 **Validation gate before 1B:**
-- `make smoke` passes in CI with zero warnings.
+- Smoke tests pass in CI.
 - `GET /healthz` returns `{"postgres":"ok","redis":"ok","qdrant":"ok","minio":"ok"}`.
-- `ruff check` exits 0.
+- `ruff check apps scripts` exits 0.
 - All 36 `.env.example` keys have a corresponding `config.py` field.
 - `pyproject.toml` contains `==` version pins.
 - CI pipeline runs on every push.

@@ -1,5 +1,6 @@
 {
-	email admin@example.com
+	# Non-secret ACME contact. Override by changing this deployment config.
+	email admin@elrace.com
 }
 
 :80 {

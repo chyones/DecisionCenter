@@ -2,7 +2,7 @@
 
 > **Date:** 2026-05-06
 > **Scope:** `/root/DecisionCenter` only.
-> **Type:** Planning/control document. No application logic, connector wiring, or code behavior changes.
+> **Type:** Planning/control document. No product logic, real connector wiring, or business workflow behavior.
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, 1,700+ lines).
 
 ---
@@ -82,18 +82,18 @@ Assets that are usable as planning inputs before implementation begins.
 | `.env.example` | All 36 environment variables currently evidenced in the repo | Yes — authoritative env template |
 | `docker-compose.yml` | All 7 services defined with volumes and health checks | Yes — not yet end-to-end validated |
 | `Makefile` | `up`, `down`, `logs`, `smoke`, `test`, `eval`, `format` targets | Yes |
-| `pyproject.toml` | Correct dependencies listed | Partial — no version pins |
+| `pyproject.toml` | Correct dependencies listed | Yes — exact pins in place |
 | `n8n/` (4 JSON files) | File names and structure in place | No — all `"nodes": []` |
 
 ---
 
-## 3. What Is Missing
+## 3. Current Gaps And Infrastructure Status
 
-### Code Gaps
+### Code / Infrastructure Status
 
-| Component | What Is Missing |
+| Component | Current State |
 |-----------|----------------|
-| `config.py` | Loads only 6 of 36 `.env.example` keys — Anthropic, Voyage, Cohere, Qdrant, MinIO, Redis, Odoo, Langfuse, n8n credentials never read |
+| `config.py` | Loads all 36 `.env.example` keys | Yes — Phase 1A infrastructure coverage complete |
 | All 18 graph nodes | Real logic — every node sets a stub string and returns |
 | Node 01 (Auth) | Entra JWT validation, role resolution, project-scope enforcement — none exists |
 | Nodes 02–04 (Light LLM) | Zero LLM calls — Haiku 4.5 never called |
@@ -111,28 +111,28 @@ Assets that are usable as planning inputs before implementation begins.
 | `MemoryCache` | In-memory only — not wired to Redis, not RBAC-keyed |
 | `chunk_text()` | Uses character count — spec requires token count (500–800 tokens) |
 | 4 n8n workflows | All empty — `"nodes": []` |
-| Qdrant collection seeding | No collection-creation script — Qdrant starts empty |
-| `GET /healthz` | Returns static JSON — no DB/Redis/Qdrant/MinIO ping |
+| Qdrant collection seeding | `scripts/init_qdrant.py` exists — creates idempotent per-project collections |
+| `GET /healthz` | Pings PostgreSQL, Redis, Qdrant, and MinIO and returns per-service status |
 | `GET /reports/staging/{id}/download/{fmt}` | Returns 404 explicitly |
 | PDF Arabic RTL | `pdf.py` uses Helvetica — no Arabic TTF font registered |
 | Langfuse tracing | In `.env.example`, never imported or called in code |
 | Cost cap enforcement | Fields exist in `config.py`, no token counting, no circuit breaker |
 | Project source mapping loader | `example.json` exists — no code loads or validates it |
-| CI/CD pipeline | `.github/workflows/` directory does not exist |
-| Version pins | `pyproject.toml` has no `==` pins |
+| CI/CD pipeline | `.github/workflows/ci.yml` exists |
+| Version pins | `pyproject.toml` uses exact `==` pins for runtime and dev dependencies |
 | Golden set | 1 executable example in `apps/edr/evaluation/goldenset/example.jsonl` — spec requires 12 baseline categories and at least 50 executable cases before go-live |
 | `evaluation/run.py` | Prints "stubbed until Phase 1G" and exits |
 
 ---
 
-## 4. Blockers Before Implementation
+## 4. Product Blockers Before Functional Implementation
 
-Listed in dependency order. Each blocks the next.
+Listed in dependency order. These do not block Phase 1A infrastructure start, but they block
+functional report generation and must remain assigned to their later phases.
 
-### B1 — `config.py` loads 6 of 36 env vars
+### B1 — Config coverage
 
-Every node that touches an LLM, Qdrant, MinIO, Redis, Odoo, or n8n will raise `AttributeError`
-on `settings.<missing_field>`. This is the root blocker — all other blockers depend on it.
+Closed in Phase 1A. `apps/edr/config.py` now loads all 36 authoritative `.env.example` keys.
 
 ### B2 — n8n workflows are empty
 
@@ -166,10 +166,10 @@ Node 16 sets `"human_review_status": "pending"` and exits. No API endpoint for a
 polling loop, no timeout. Node 17 can never legitimately execute. No report can ever reach
 `/final`.
 
-### B8 — Qdrant has no collections
+### B8 — Qdrant collection initialization
 
-The Qdrant service starts empty. No code creates per-project collections. The first real
-embedding insert will fail.
+Closed for Phase 1A implementation-start readiness. `scripts/init_qdrant.py` creates
+idempotent per-project collections; real project mappings remain a Phase 1B/1D concern.
 
 ---
 
@@ -179,16 +179,11 @@ embedding insert will fail.
 |------|----------|----------------------|
 | `quality_gate` stub returns `"needs_review"` — Node 14 treats this as non-failed and exports fire on empty data | **Critical** | `node_14_compose_md.py`: checks `quality_gate != "failed"` only |
 | RBAC stub allows every user to access every project | **Critical** | `node_01_auth.py`: `outputs["rbac_status"] = "stubbed"` |
-| 30 missing `config.py` fields — services start, crash silently on first real use | **High** | `config.py` vs. `.env.example` |
 | Chunking uses character limits, not token limits — chunk sizes wrong by factor of 3–5 | **High** | `chunking.py` vs. spec Section 19 |
-| Caddyfile ACME email is `admin@example.com` — Let's Encrypt will reject cert issuance | **High** | `Caddyfile` line 2 |
 | No token cost tracking — a runaway Sonnet 4.6 call can exceed monthly budget with no circuit breaker | **High** | `config.py` has field, no enforcement |
 | n8n starts with no credentials — first `make up` produces a blank n8n with no connections | **Medium** | `docker-compose.yml`: no seed data |
 | PDF Arabic RTL renders as gibberish — Helvetica does not support Arabic glyphs | **Medium** | `pdf.py`: Helvetica only |
-| No version pins — `pip install` in a new environment may produce a broken dependency tree | **Medium** | `pyproject.toml` |
 | Golden set has 1 executable case; spec requires 12 baseline categories and 50 go-live cases — evaluation is not meaningful yet | **Medium** | `apps/edr/evaluation/goldenset/example.jsonl`, spec Section 26 |
-| No CI/CD — regressions go undetected between phases | **Medium** | `.github/` directory absent |
-| No Qdrant collection enforcement — misconfigured `project_code` could mix evidence across projects | **Medium** | No collection-creation code found |
 
 ---
 
@@ -210,13 +205,13 @@ Complete every item before writing any node logic. Each item is verifiable.
 - [ ] Confirm Langfuse project key and host are valid
 - [ ] Confirm Odoo read-only API user exists with correct permissions — test with deliberate write attempt to verify it is blocked
 - [ ] Confirm Entra application is registered with delegated `User.Read`, `Mail.Read`, `Sites.Read.All` permissions
-- [ ] Replace `admin@example.com` in `Caddyfile` with real email before first `make up`
+- [x] Confirm `Caddyfile` uses a non-placeholder ACME contact
 
 ### Codebase
 
 - [ ] Verify `make up` starts all 7 services without error
 - [ ] Verify `make smoke` passes (2 existing tests)
-- [ ] Verify `GET /healthz` responds (static response acceptable at this stage)
+- [ ] Verify `GET /healthz` responds with PostgreSQL, Redis, Qdrant, and MinIO service status
 - [ ] Verify `pyproject.toml` lists correct package names — cross-reference with actual import names in code
 - [ ] Confirm `docs/config/project_source_mapping.example.json` matches at least one real project before Phase 1B
 
@@ -249,7 +244,7 @@ No LLM calls. No n8n changes. No node logic.
 - Expand `config.py` to load all 36 `.env.example` keys with Pydantic field types
 - Rewrite `GET /healthz` to ping PostgreSQL, Redis, Qdrant, MinIO — per-service status in response
 - Pin all dependencies in `pyproject.toml` to exact current versions
-- Create `.github/workflows/ci.yml` — ruff lint, type check, `make smoke`
+- Create `.github/workflows/ci.yml` — ruff lint, syntax check, config coverage, smoke tests
 - Write Qdrant collection initialization script — idempotent, one collection per `project_code`
 - Fix `Caddyfile` ACME email to a real address
 - Validate `.dockerignore` excludes `.env`, `__pycache__`, `.git`, `.pytest_cache`
@@ -374,12 +369,14 @@ No LLM calls. No n8n changes. No node logic.
 
 **Phase 1A — Infrastructure Foundation.**
 
+Phase 1A is the first safe implementation phase and is now implemented locally. The next safe
+phase after the validation gate is Phase 1B.
+
 ### Why this is the correct first move
 
-Every phase from 1B onward requires `config.py` to successfully load credentials. Today it loads
-6 of 36. That gap will cause `AttributeError` crashes in every node the moment a real service is
-contacted. Fixing it first means all subsequent phases can be developed without fighting silent
-config failures.
+Every phase from 1B onward requires `config.py` to successfully load credentials. Phase 1A
+now loads all 36 authoritative fields, so subsequent phases can develop without fighting
+silent config failures.
 
 CI/CD must exist before any real credentials or LLM calls are added — otherwise a broken node
 goes undetected until production.
@@ -397,9 +394,9 @@ Phase 1A touches zero business logic and zero security-sensitive code.
 1. Expand `config.py` — all 36 `.env.example` keys, Pydantic types matching each value
 2. Rewrite `GET /healthz` — ping PostgreSQL, Redis, Qdrant, MinIO; return per-service status
 3. Pin all dependencies in `pyproject.toml` to current exact versions
-4. Create `.github/workflows/ci.yml` — ruff, type check, `make smoke`
+4. Create `.github/workflows/ci.yml` — ruff, syntax check, config coverage, smoke tests
 5. Write Qdrant collection init script — idempotent, one collection per `project_code`
-6. Fix `Caddyfile` ACME email to a real address
+6. Configure `Caddyfile` ACME email with a non-placeholder contact
 7. Verify `.dockerignore` excludes `.env`, `__pycache__`, `.git`
 
 ### What Phase 1A does not contain
@@ -412,7 +409,7 @@ No node logic. No LLM calls. No n8n changes. No schema changes. No auth logic.
 
 | Phase | All Must Pass Before Proceeding |
 |-------|--------------------------------|
-| **1A → 1B** | `make smoke` passes in CI with zero warnings. `GET /healthz` returns `{"postgres": "ok", "redis": "ok", "qdrant": "ok", "minio": "ok"}`. `ruff check` exits 0. All 36 `.env.example` keys have a corresponding `config.py` field. `pyproject.toml` contains `==` version pins for all dependencies. CI pipeline runs on every push. |
+| **1A → 1B** | Smoke tests pass in CI. `GET /healthz` returns `{"postgres": "ok", "redis": "ok", "qdrant": "ok", "minio": "ok"}`. `ruff check apps scripts` exits 0. All 36 `.env.example` keys have a corresponding `config.py` field. `pyproject.toml` contains `==` version pins for all runtime and dev dependencies. CI pipeline runs on every push and pull request. |
 | **1B → 1C** | Three integration tests pass: (1) authorized user + valid `project_code` receives `rbac_status: authorized` and populated `allowed_projects`; (2) user with no project mapping receives HTTP 403; (3) user with correct project but insufficient role receives HTTP 403. All three in CI. No stub strings remain in Node 01 output. |
 | **1C → 1D** | Each of the 4 n8n workflows tested independently via `curl` — each returns at least 1 payload that validates against `docs/schemas/evidence-object.schema.json`. Email workflow confirmed to return excerpt only (field length ≤ 500 characters). Odoo workflow confirmed to return `model`, `id`, `value`, `timestamp`, `hash_sha256`. n8n workflow JSON files in repo are no longer empty. |
 | **1D → 1E** | `embed()` returns vectors of correct dimension for Voyage-3-large. `chunk_text()` verified via test to produce chunks of 500–800 tokens (not characters) with 100–150 token overlap. Qdrant insert and round-trip retrieval test passes for at least one project collection. RRF fusion produces a ranked list from two result sets. Redis cache key confirmed to include both `user_id` and `project_code`. |

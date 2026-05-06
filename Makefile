@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format
+.PHONY: up down logs ps smoke test eval format init-qdrant
 
 up:
 	docker compose up -d --build
@@ -23,3 +23,6 @@ eval:
 
 format:
 	docker compose exec app ruff format apps
+
+init-qdrant:
+	docker compose exec app python scripts/init_qdrant.py --mapping docs/config/project_source_mapping.example.json

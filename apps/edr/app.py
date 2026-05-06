@@ -1,9 +1,13 @@
+import socket
 from typing import Literal
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from apps.edr.config import settings
 from apps.edr.exporters.base import MIME_TYPES
 from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
@@ -28,8 +32,68 @@ class ReportRequest(BaseModel):
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, str | int]:
-    return {"status": "ok", "workflow_nodes": NODE_COUNT}
+def healthz() -> dict[str, object]:
+    service_checks = {
+        "postgres": _check_postgres,
+        "redis": _check_redis,
+        "qdrant": _check_qdrant,
+        "minio": _check_minio,
+    }
+    response: dict[str, object] = {"status": "ok", "workflow_nodes": NODE_COUNT}
+    errors: dict[str, str] = {}
+
+    for service_name, check in service_checks.items():
+        try:
+            check()
+            response[service_name] = "ok"
+        except Exception as exc:
+            response[service_name] = "error"
+            errors[service_name] = str(exc)
+
+    if errors:
+        response["status"] = "error"
+        response["errors"] = errors
+        raise HTTPException(status_code=503, detail=response)
+
+    return response
+
+
+def _check_postgres() -> None:
+    _tcp_connect(settings.postgres_host, settings.postgres_port)
+
+
+def _check_redis() -> None:
+    redis_url = urlparse(settings.redis_url)
+    if redis_url.scheme != "redis" or not redis_url.hostname:
+        raise ValueError("REDIS_URL must be a redis:// URL with a hostname")
+
+    port = redis_url.port or 6379
+    with socket.create_connection((redis_url.hostname, port), timeout=2) as sock:
+        sock.sendall(b"*1\r\n$4\r\nPING\r\n")
+        if not sock.recv(16).startswith(b"+PONG"):
+            raise ConnectionError("Redis PING did not return PONG")
+
+
+def _check_qdrant() -> None:
+    _http_ok(f"{settings.qdrant_url.rstrip('/')}/collections")
+
+
+def _check_minio() -> None:
+    endpoint = settings.minio_endpoint
+    if not endpoint.startswith(("http://", "https://")):
+        endpoint = f"http://{endpoint}"
+    _http_ok(f"{endpoint.rstrip('/')}/minio/health/ready")
+
+
+def _tcp_connect(host: str, port: int) -> None:
+    with socket.create_connection((host, port), timeout=2):
+        return
+
+
+def _http_ok(url: str) -> None:
+    with urlopen(url, timeout=2) as response:
+        if response.status >= 400:
+            raise ConnectionError(f"{url} returned HTTP {response.status}")
 
 
 @app.post("/reports/staging")

@@ -6,4 +6,4 @@ from apps.edr.connectors.base import N8NWebhookClient
 
 async def list_owncloud(payload: dict[str, Any]) -> dict[str, Any]:
     client = N8NWebhookClient(settings.n8n_base_url, settings.n8n_webhook_token)
-    return await client.post("/webhook/owncloud-list", payload)
+    return await client.post(settings.owncloud_list_webhook, payload)

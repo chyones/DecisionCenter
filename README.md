@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase0_control_locked-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase1a_infra_ready-blue.svg)](#)
 
 ---
 
@@ -140,7 +140,7 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | Phase | Status |
 |---|---|
 | 0 — Control and documentation lock | Locked |
-| 1A — Infrastructure Foundation | Not started |
+| 1A — Infrastructure Foundation | Implemented locally |
 | 1B — RBAC and Identity | Not started |
 | 1C — n8n Connector Workflows | Placeholders only |
 | 1D — Embedding and Vector Retrieval | Not started |

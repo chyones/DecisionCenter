@@ -13,3 +13,7 @@ qdrant-data
 redis-data
 n8n-data
 logs
+dist
+build
+*.egg-info
+node_modules

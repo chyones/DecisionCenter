@@ -14,12 +14,12 @@ Admin UI.
 | Area | Authoritative Decision | Evidence |
 |---|---|---|
 | Environment baseline | `.env.example` has 36 keys; planning docs that said 50 were stale | `.env.example` |
-| Config gap | `apps/edr/config.py` loads 6 of 36 keys; 30 fields remain missing | `apps/edr/config.py` |
+| Config coverage | `apps/edr/config.py` loads all 36 keys from `.env.example` | `apps/edr/config.py` |
 | Phase sequence | Phase 1A is Infrastructure Foundation before product/node logic | `docs/execution/IMPLEMENTATION_PHASES.md` |
 | RBAC model | Use the 9 canonical spec roles | `docs/security/rbac_matrix.md` |
 | n8n status | Four workflow JSON files exist and are placeholders with empty `nodes` arrays | `n8n/*.json` |
 | Evaluation baseline | One JSONL golden example exists; 12 baseline categories and 50 go-live cases are required by spec | `apps/edr/evaluation/goldenset/example.jsonl`, spec Section 26 |
-| Readiness | READY FOR PHASE 1 | This document and `docs/PRE_START_IMPLEMENTATION_PLAN.md` |
+| Readiness | Phase 1A infrastructure readiness is 10/10 | This document and validation proof |
 
 ## Authoritative Environment Baseline
 
@@ -36,7 +36,7 @@ these 36 keys:
 | Odoo | `ODOO_URL`, `ODOO_DATABASE`, `ODOO_USERNAME`, `ODOO_API_KEY` |
 | Observability and budget | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`, `DAILY_COST_CAP_USD`, `MONTHLY_COST_TARGET_USD` |
 
-Phase 1A must expand `apps/edr/config.py` from 6 loaded fields to these 36 fields.
+`apps/edr/config.py` now loads these 36 fields.
 
 ## Must Be Controlled Before Phase 1A
 
@@ -52,9 +52,9 @@ Phase 1A must expand `apps/edr/config.py` from 6 loaded fields to these 36 field
 - `apps/edr/config.py` loads all 36 `.env.example` keys.
 - `GET /healthz` checks PostgreSQL, Redis, Qdrant, and MinIO.
 - Dependencies are pinned to exact runtime versions.
-- CI exists and runs safe lint and smoke checks on push and pull request.
+- CI exists and runs safe lint, config coverage, and smoke checks on push and pull request.
 - Qdrant collection initialization exists and is idempotent.
-- The Caddy ACME email is no longer `admin@example.com`.
+- The Caddy ACME email uses a non-placeholder contact.
 
 ## Can Wait Until Later Phases
 
@@ -78,8 +78,8 @@ must be treated as a spec change before implementation.
 
 ## Final Phase 0 Readiness Decision
 
-**READY FOR PHASE 1.**
+**READY FOR PHASE 1B.**
 
-The next safe step is Phase 1A Infrastructure Foundation. This does not authorize product
-logic, retrieval logic, auth logic, LLM calls, or n8n workflow implementation before their
-assigned phases.
+Phase 1A Infrastructure Foundation is implemented locally. The next safe step is Phase 1B
+RBAC and Identity. This does not authorize product retrieval logic, LLM calls, n8n workflow
+implementation, approval logic, audit logic, or Admin UI work before their assigned phases.

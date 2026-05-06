@@ -6,4 +6,4 @@ from apps.edr.connectors.base import N8NWebhookClient
 
 async def search_email(payload: dict[str, Any]) -> dict[str, Any]:
     client = N8NWebhookClient(settings.n8n_base_url, settings.n8n_webhook_token)
-    return await client.post("/webhook/email-search", payload)
+    return await client.post(settings.email_search_webhook, payload)

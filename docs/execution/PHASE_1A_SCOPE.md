@@ -11,8 +11,8 @@
 ## Task 1 — Expand `config.py` to load all `.env.example` keys
 
 **Current state:**
-- File: `apps/edr/config.py` (15 lines)
-- Loads 6 fields: `app_env`, `public_base_url`, `n8n_base_url`, `n8n_webhook_token`, `daily_cost_cap_usd`, `monthly_cost_target_usd`
+- File: `apps/edr/config.py`
+- Loads all 36 authoritative fields from `.env.example`
 - Template: `.env.example` (36 keys; authoritative Phase 0 env baseline)
 
 **Required changes:**
@@ -41,16 +41,16 @@
 ## Task 2 — Rewrite `GET /healthz` with real dependency pings
 
 **Current state:**
-- File: `apps/edr/app.py`, lines 30–32
-- Returns static JSON: `{"status": "ok", "workflow_nodes": 18}`
+- File: `apps/edr/app.py`
+- Checks PostgreSQL, Redis, Qdrant, and MinIO with safe infrastructure-only probes.
 
 **Required changes:**
-1. Import clients for PostgreSQL (`psycopg` or `asyncpg`), Redis (`redis`), Qdrant (`qdrant_client`), MinIO (`minio`).
+1. Use safe lightweight infrastructure checks without business queries.
 2. Ping each service with a lightweight operation:
-   - PostgreSQL: `SELECT 1`
-   - Redis: `PING`
-   - Qdrant: `client.get_collections()`
-   - MinIO: `client.list_buckets()`
+   - PostgreSQL: TCP reachability to configured host and port
+   - Redis: RESP `PING`
+   - Qdrant: `GET /collections`
+   - MinIO: `GET /minio/health/ready`
 3. Return structured response:
    ```json
    {
@@ -72,36 +72,37 @@
 
 **Current state:**
 - File: `pyproject.toml`
-- All dependencies use `>=` (e.g., `fastapi>=0.115.0`, `langgraph>=0.2.0`)
+- Runtime and dev dependencies use exact `==` pins.
 - No lock file (`requirements.lock` or `uv.lock`) present
 
 **Required changes:**
-1. Run `pip freeze` inside the running Docker container or local venv to capture exact installed versions.
-2. Replace all `>=` with `==` for runtime dependencies.
-3. Keep `>=` for build-system deps (`setuptools`) and optional test deps if CI depends on latest.
+1. Keep runtime and dev dependencies pinned with exact `==` versions.
+2. Keep `requires-python` as a range and build-system requirements separate from runtime pins.
+3. Review pins intentionally when upgrading dependencies.
 4. Add a lock artifact if selected during Phase 1A; no lock artifact exists yet.
 
-**Acceptance:** `pip install -e .` installs exactly the same tree on a fresh environment.
+**Acceptance:** Runtime and dev dependencies are pinned with exact `==` versions in
+`pyproject.toml`; only `requires-python` and build-system requirements remain ranges.
 
 ---
 
 ## Task 4 — Create `.github/workflows/ci.yml`
 
 **Current state:**
-- Directory `.github/workflows/` does not exist and must be created in Phase 1A.
+- Directory `.github/workflows/` exists with `ci.yml`.
 - `Makefile` has `smoke`, `test`, `eval`, `format` targets.
 - `pyproject.toml` has `[tool.ruff]` and `[tool.pytest.ini_options]` configured.
 
-**Required changes:**
-1. Create `.github/workflows/ci.yml`.
-2. Trigger: `push` to `main`, `pull_request` to `main`.
+**Implemented state:**
+1. `.github/workflows/ci.yml` exists.
+2. Triggers: `push` to `main`, `pull_request` to `main`.
 3. Job steps:
    - Checkout code.
    - Set up Python 3.11.
    - Install dependencies: `pip install -e ".[dev]"`.
-   - Run `ruff check apps` (must exit 0).
-   - Run `ruff format --check apps`.
-   - Run `make smoke` (inside Docker Compose or via `pytest -q apps/edr/tests/smoke`).
+   - Run `ruff check apps scripts` (must exit 0).
+   - Run `python -m compileall -q apps scripts`.
+   - Run smoke tests via `pytest -q apps/edr/tests/smoke`.
 4. Do NOT run `make eval` in CI (requires API keys and costs money).
 5. Cache `pip` dependencies between runs.
 
@@ -112,20 +113,20 @@
 ## Task 5 — Write Qdrant collection initialization script
 
 **Current state:**
-- No collection-creation code exists.
-- Qdrant service starts empty in `docker-compose.yml`.
+- `scripts/init_qdrant.py` exists and creates idempotent per-project collections.
+- Qdrant service persists data through `qdrant-data` in `docker-compose.yml`.
 - `apps/edr/retrieval/embeddings.py` raises `NotImplementedError`.
 
 **Required changes:**
-1. Create `scripts/init_qdrant.py` (currently missing; `scripts/` does not exist yet) or `apps/edr/scripts/init_qdrant.py`.
+1. Maintain `scripts/init_qdrant.py`.
 2. Accept `project_code` as CLI argument or from a future real `project_source_mapping.json`; only `docs/config/project_source_mapping.example.json` exists today.
 3. For each project:
    - Check if collection exists; skip if yes (idempotent).
    - Create collection with vector size matching Voyage-3-large (1024).
    - Use `distance: Cosine`.
    - Set `on_disk_payload: True` for cost efficiency.
-4. Add `make init-qdrant` target to `Makefile`.
-5. Document in `docs/operations/runbook.md`.
+4. `make init-qdrant` target exists in `Makefile`.
+5. `docs/operations/runbook.md` notes that n8n workflows are placeholders.
 
 **Acceptance:** Running the script twice produces no errors and no duplicate collections.
 
@@ -134,10 +135,10 @@
 ## Task 6 — Fix `Caddyfile` ACME email
 
 **Current state:**
-- File: `Caddyfile`, line 2: `email admin@example.com`
+- File: `Caddyfile`, line 3: `email admin@elrace.com`
 
-**Required change:**
-1. Replace `admin@example.com` with a real organization email (e.g., `admin@elrace.com` or infrastructure team email).
+**Required state:**
+1. Keep a non-placeholder ACME contact in deployment config.
 
 **Acceptance:** `caddy validate Caddyfile` passes.
 
@@ -146,7 +147,7 @@
 ## Task 7 — Verify `.dockerignore` exclusions
 
 **Current state:**
-- File: `.dockerignore` exists with 15 entries.
+- File: `.dockerignore` exists with 19 entries.
 - Already excludes: `.git`, `.venv`, `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.env`.
 
 **Required changes:**
@@ -164,10 +165,10 @@
 | Risk | Location | Mitigation |
 |------|----------|------------|
 | `config.py` AttributeError on missing env var | `apps/edr/config.py` | Load all 36 keys with defaults or strict validation |
-| No CI → regressions undetected | `.github/workflows/` missing | Create `ci.yml` before any node logic changes |
+| CI regression coverage | `.github/workflows/ci.yml` | CI file added before node logic changes |
 | No version pins → broken installs | `pyproject.toml` | Convert `>=` to `==` |
-| Qdrant empty → first embedding fails | No init script | Create idempotent `init_qdrant.py` |
-| Caddy ACME rejected | `Caddyfile` line 2 | Replace placeholder email |
+| Qdrant empty → first embedding fails | `scripts/init_qdrant.py` | Idempotent init script added |
+| Caddy ACME rejected | `Caddyfile` | Non-placeholder email configured |
 
 ---
 

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check apps scripts
+
+      - name: Python syntax check
+        run: python -m compileall -q apps scripts
+
+      - name: Config coverage
+        run: |
+          python - <<'PY'
+          from apps.edr.config import settings
+
+          env_keys = [
+              line.split("=", 1)[0]
+              for line in open(".env.example", encoding="utf-8")
+              if line.strip() and not line.startswith("#")
+          ]
+          config_keys = {field.upper() for field in type(settings).model_fields}
+          missing = sorted(set(env_keys) - config_keys)
+          extra = sorted(config_keys - set(env_keys))
+          assert len(env_keys) == 36, len(env_keys)
+          assert not missing, missing
+          assert not extra, extra
+          print("config coverage: 36/36")
+          PY
+
+      - name: Smoke tests
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q apps/edr/tests/smoke
