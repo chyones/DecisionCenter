@@ -111,6 +111,7 @@ ROLE_PERMISSIONS: dict[Role, RolePermissions] = {
         can_access_odoo_actual_cost=True,
         can_approve=False,
         can_access_audit_logs=True,
+        can_generate_report=False,
     ),
     Role.ADMIN: RolePermissions(
         can_access_sharepoint=False,

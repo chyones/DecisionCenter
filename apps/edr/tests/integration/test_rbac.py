@@ -74,8 +74,9 @@ REPORT_CAPABLE_ROLES = [
     Role.DOCUMENT_CONTROL,
     Role.PROCUREMENT,
     Role.LEGAL,
-    Role.AUDITOR,
 ]
+
+READ_ONLY_ROLES = [Role.AUDITOR]
 
 
 @pytest.mark.parametrize("role", REPORT_CAPABLE_ROLES)
@@ -83,6 +84,11 @@ def test_all_report_capable_roles_authorized(role: Role) -> None:
     result = node_01_auth.run(_state(role.value))
     assert result.outputs["rbac_status"] == "authorized"
     assert result.outputs["rbac_role"] == role.value
+
+
+def test_auditor_role_denied_for_report_generation() -> None:
+    with pytest.raises(RbacDeniedError, match="cannot generate business reports"):
+        node_01_auth.run(_state(Role.AUDITOR.value))
 
 
 def test_admin_role_denied() -> None:
