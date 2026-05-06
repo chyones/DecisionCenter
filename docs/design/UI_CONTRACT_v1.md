@@ -1,6 +1,6 @@
 # DecisionCenter — UI Contract v1.0
 
-> **Status:** LOCKED — Official UI specification. Supersedes `docs/design/UI_UX_SCOPE.md`.
+> **Status:** LOCKED — Official UI specification. Supersedes the former UI/UX scope draft.
 > **Date locked:** 2026-05-06
 > **Derived from:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, all section references below are to this file)
 > **Corrections applied:** Six corrections from design review (detailed in Section 0).

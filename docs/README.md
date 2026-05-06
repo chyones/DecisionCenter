@@ -9,9 +9,10 @@ control-plane decisions.
 |---|---|---|
 | 1 | [workflows/EDR-AGENTIC-RAG-v2.1.md](workflows/EDR-AGENTIC-RAG-v2.1.md) | Behavioral source of truth for the EDR system |
 | 2 | [admin/CONTROL_PLANE_LOCK.md](admin/CONTROL_PLANE_LOCK.md) | Phase 0 and Phase 1A control decisions, readiness, and boundaries |
-| 3 | [execution/IMPLEMENTATION_PHASES.md](execution/IMPLEMENTATION_PHASES.md) | Authoritative implementation phase order |
-| 4 | [PRE_START_IMPLEMENTATION_PLAN.md](PRE_START_IMPLEMENTATION_PLAN.md) | Audit-backed pre-start plan, current gaps, risks, and validation gates |
-| 5 | [admin/FEATURE_MATRIX.md](admin/FEATURE_MATRIX.md) | Current feature coverage and known gaps by component |
+| 3 | [design/UI_CONTRACT_v1.md](design/UI_CONTRACT_v1.md) | Locked UI contract; specification only, no frontend implementation |
+| 4 | [execution/IMPLEMENTATION_PHASES.md](execution/IMPLEMENTATION_PHASES.md) | Authoritative implementation phase order |
+| 5 | [PRE_START_IMPLEMENTATION_PLAN.md](PRE_START_IMPLEMENTATION_PLAN.md) | Audit-backed pre-start plan, current gaps, risks, and validation gates |
+| 6 | [admin/FEATURE_MATRIX.md](admin/FEATURE_MATRIX.md) | Current feature coverage and known gaps by component |
 
 ## Current Control State
 
@@ -32,6 +33,7 @@ control-plane decisions.
 | [approvals/](approvals/) | Human review and approval policy documents |
 | [config/](config/) | Example project/source mapping inputs |
 | [contracts/](contracts/) | External API contracts for Graph, Odoo, and ownCloud |
+| [design/](design/) | Locked UI contract and design-source navigation |
 | [evaluation/](evaluation/) | Golden-set format, required cases, and metrics definitions |
 | [execution/](execution/) | Phase sequence and phase-specific implementation scopes |
 | [operations/](operations/) | Hosting, runbook, cost, observability, backup, and restore docs |
@@ -48,4 +50,3 @@ control-plane decisions.
 3. Read [admin/FEATURE_MATRIX.md](admin/FEATURE_MATRIX.md) to see current implementation coverage.
 4. Read the relevant policy, schema, and contract files for the phase being implemented.
 5. Read the relevant sections of [workflows/EDR-AGENTIC-RAG-v2.1.md](workflows/EDR-AGENTIC-RAG-v2.1.md) before changing behavior.
-

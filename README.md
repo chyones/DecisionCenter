@@ -84,6 +84,7 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand the locked behavior | [docs/workflows/EDR-AGENTIC-RAG-v2.1.md](docs/workflows/EDR-AGENTIC-RAG-v2.1.md) |
 | Understand what is safe to implement next | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) and [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
 | Audit current feature coverage | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
+| Understand the locked UI contract | [docs/design/UI_CONTRACT_v1.md](docs/design/UI_CONTRACT_v1.md) |
 | Find documentation by purpose | [docs/README.md](docs/README.md) |
 | Understand the Python app package | [apps/edr/README.md](apps/edr/README.md) |
 | Understand n8n workflow status | [n8n/README.md](n8n/README.md) |
@@ -122,6 +123,7 @@ Use [docs/README.md](docs/README.md) as the full documentation index. Key suppor
 | Policies | [docs/policies/](docs/policies/) |
 | Operations (hosting, cost, runbook) | [docs/operations/](docs/operations/) |
 | Evaluation (test cases, metrics) | [docs/evaluation/](docs/evaluation/) |
+| UI contract | [docs/design/UI_CONTRACT_v1.md](docs/design/UI_CONTRACT_v1.md) |
 | JSON schemas | [docs/schemas/](docs/schemas/) |
 
 ## Deployment profile (locked)
