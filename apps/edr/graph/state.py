@@ -11,6 +11,8 @@ class DecisionState:
     evidence: list[dict[str, Any]] = field(default_factory=list)
     outputs: dict[str, Any] = field(default_factory=dict)
     visited_nodes: list[str] = field(default_factory=list)
+    output_formats: list[str] = field(default_factory=lambda: ["md"])
+    report_json: dict[str, Any] | None = None
 
     def mark(self, node_name: str) -> "DecisionState":
         self.visited_nodes.append(node_name)
