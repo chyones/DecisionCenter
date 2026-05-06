@@ -177,9 +177,197 @@ They are placeholders and are required before retrieval phases can pass validati
 6. Add `make eval` step to CI pipeline.
 7. Load test: 5 concurrent requests per spec deployment profile.
 
-**Validation gate before Production:**
+**Validation gate before 1I:**
 - At least 50 executable golden set cases pass and `make eval` exits 0 in CI.
 - PDF with Arabic content renders correctly.
 - Load test: 5 concurrent requests complete within spec-defined latency bounds.
 - Langfuse monthly cost projection ≤ USD 300.
 - Both `make smoke` and `make eval` required to pass before any production deploy.
+
+---
+
+## Phase 1I — Frontend Foundation & Static Admin Scaffolds
+
+**Goal:** Establish the frontend codebase, build system, design system, and static screens that do not require live backend data. No API wiring.
+
+**Rule:** Static scaffolds only. No API calls. No report content rendering. No data fetching.
+Source of truth: `docs/design/UI_CONTRACT_v1.md` Section 10.
+
+**Scope:**
+1. Initialize frontend project (Vite + React + TypeScript + Tailwind) in `frontend/`.
+2. Implement design tokens from UI_CONTRACT Section 1.4: colors, typography, spacing, status pills.
+3. Build layout shell: Topbar (48px), Sidebar (220px collapsible to 48px), Main Content (max 960px), Detail Panel (380px slide-in).
+4. Build reusable components: StatusPill, Button, Modal, Toast, ConfirmDialog, SlideInPanel.
+5. Implement route structure with role-guarded client-side routing:
+   - `/workspace/*` → User Chat Workspace
+   - `/admin/*` → Admin Visual Control Plane
+   - Role-based redirects per UI_CONTRACT Section 1.5.
+6. **Static scaffolds allowed early** (no API wiring):
+   - Admin System Health screen (static table, no live `/healthz` data).
+   - Permissions & Roles — Tab 1 (Role Matrix read-only, from `docs/security/rbac_matrix.md`).
+   - Source Mapping — read-only view (from `docs/config/project_source_mapping.json`).
+   - Query Composer shell (form layout, no project dropdown data, no submit handler).
+7. Add `frontend/` lint and build steps to CI.
+
+**Validation gate before 2A:**
+- `npm run build` exits 0.
+- `npm run lint` exits 0.
+- All 9 roles route to their correct default landing screens.
+- Status pills render all 13 defined states with correct colors and icons.
+- ConfirmDialog requires typed confirmation string for destructive actions.
+
+**Forbidden in 1I:**
+- No API client implementation.
+- No `fetch` or `axios` calls.
+- No report content rendering.
+- No Processing View wiring.
+- No Evidence Panel with real data.
+- No upload handler.
+
+---
+
+## Phase 2A — User Chat Workspace Implementation
+
+**Goal:** Implement all six user-facing screens with live backend integration.
+
+**Backend dependency:** Phase 1F complete (real reports, evidence packs, MinIO persistence, audit log, cost data).  
+**Additional dependency:** Phase 1G complete for approval/reject actions.
+
+**Scope:**
+1. **Query Composer** (`/workspace/new`)
+   - Populate Project dropdown from `POST /reports/staging` pre-flight or JWT claims (`allowed_projects`).
+   - Contract No. auto-suggest from `project_source_mapping.json`.
+   - Output format toggles: MD (default), DOCX, PDF, XLSX, PPTX.
+   - Submit button disabled until Project + Query set.
+   - All screen states per UI_CONTRACT Section 2.1: idle, draft, submitting, queued, error, no_projects.
+2. **Processing View** (`/workspace/report/{request_id}/processing`)
+   - Subscribe to LangGraph streaming events or poll backend for node progress.
+   - Map 18 internal nodes to user-facing labels per UI_CONTRACT Section 2.2.
+   - Cancel action with confirmation modal → `DELETE` request.
+   - Handle all screen states: running, self_correct_retry, quality_gate_passed, quality_gate_needs_review, quality_gate_failed, awaiting_reviewer, timed_out, rbac_denied, cancelled.
+3. **Report View** (`/workspace/report/{request_id}`)
+   - Render report content with superscript citations linking to Evidence Panel.
+   - Financial Position conditional rendering per role (`can_access_odoo_budget`).
+   - Conflicts Detected and Missing Data sections always rendered if non-empty.
+   - Report state handling: staging, needs_review, approved, rejected, final.
+   - `needs_review` state: requester sees QG flags only; reviewer sees watermarked draft.
+4. **Evidence Panel** (slide-in from Report View)
+   - Render evidence entries with source type, confidence score, truncated hash.
+   - Email excerpts read-only; document excerpts copyable.
+   - Filter by source type and confidence.
+5. **Export Panel** (slide-in from Report View)
+   - Render only when report state is `approved` or `final`.
+   - Block all downloads when `quality_gate = "failed"`.
+   - RBAC-gated evidence-pack.json and audit-log.json downloads.
+6. **My Reports List** (`/workspace/reports`)
+   - Group by state: In progress, Awaiting review, Approved / Final.
+   - Role-scoped: own requests only (except auditor, who sees project-scoped reports).
+   - Filters by project, state, date range.
+
+**Validation gate before 2B:**
+- End-to-end test: submit query → processing → staging → approve → final → download MD.
+- U-01 through U-16 acceptance criteria from UI_CONTRACT Section 9.1 pass in manual QA.
+- `quality_gate = "failed"` blocks Export Panel and all downloads.
+- `needs_review` requester sees flags only; reviewer sees watermarked draft.
+- Financial section hidden with explicit message for unauthorized roles.
+
+---
+
+## Phase 2B — Admin Visual Control Plane Implementation
+
+**Goal:** Implement all seven admin screens with live backend integration.
+
+**Backend dependency:** Phase 1F complete. Phase 1G for Approval Queue.
+
+**Scope:**
+1. **Dashboard** (`/admin/dashboard`)
+   - Live service counts from `/healthz`.
+   - Request counts, approval queue length, daily/monthly cost from PostgreSQL audit log.
+   - External Services grid with per-service status.
+   - Recent System Events (last 10) from audit log.
+   - No business data: no query text, no report content, no evidence.
+2. **Connectors & APIs** (`/admin/connectors`)
+   - Left panel: 10 services with status pills.
+   - Right detail panel: per-service metadata, `.env` key presence indicators only (C-6).
+   - `[Test connection]` sends read-only probe.
+   - n8n workflow status: `empty` vs `deployed`.
+3. **Permissions & Roles** (`/admin/permissions`)
+   - Tab 1: Role Matrix read-only (from `docs/security/rbac_matrix.md`).
+   - Tab 2: Entra Group Mapping editor with inline row editing and audit logging.
+   - Tab 3: Project Role Assignments read-only (from `project_source_mapping.json`).
+4. **Source Mapping** (`/admin/source-mapping`)
+   - Left: project list. Right: project editor.
+   - Client-side JSON schema validation.
+   - Diff preview modal before save.
+   - Confirmation modal for role removal or project deletion.
+   - Audit events: `admin.source_mapping_changed`, `admin.source_mapping_deleted`.
+5. **Approval Queue** (`/admin/approvals`)
+   - Show `staging` and `needs_review` reports only.
+   - Columns: request ID, project, status, submitted at, requester hash.
+   - Admin review panel: QG flags and metadata only. No report content (C-1).
+   - Admin override approve/reject with mandatory comment.
+   - Block admin from approving own requests.
+6. **Audit Log** (`/admin/audit`)
+   - Filterable, paginated system event log.
+   - Search by request_id or user_hash.
+   - Event detail panel with token counts and cost visible to admin only.
+   - CSV export with cost/token columns redacted for non-admin.
+7. **System Health** (`/admin/health`)
+   - Live service status table with latency and sparkline trends.
+   - Cost Monitor with daily/monthly progress bars.
+   - Yellow warning at 80% daily cost; red banner at 100%.
+   - Auto-refresh configurable interval.
+
+**Validation gate before 2C:**
+- A-01 through A-17 acceptance criteria from UI_CONTRACT Section 9.2 pass in manual QA.
+- Non-admin JWT receives HTTP 403 on all `/admin/*` routes.
+- No credential values shown in any form (C-6).
+- Admin review panel never shows report content, query text, or evidence excerpts.
+- Destructive actions require typed confirmation and write audit events before execution.
+
+---
+
+## Phase 2C — UI Hardening & Acceptance Validation
+
+**Goal:** Prove the UI meets the locked UI contract before go-live.
+
+**Scope:**
+1. Accessibility audit: keyboard navigation, focus management, ARIA labels for all interactive elements.
+2. Responsive audit: minimum 768px width, sidebar collapse, detail panel behavior.
+3. Security audit:
+   - Verify no credential values in DOM (C-6).
+   - Verify `quality_gate = "failed"` removes Export Panel from DOM entirely.
+   - Verify `admin` role cannot access `/workspace/report/{id}` content.
+4. Performance audit:
+   - Initial bundle size < 500 KB gzipped.
+   - Report View render < 200 ms for reports with ≤50 evidence items.
+   - Processing View progress updates smooth at 60 fps.
+5. Cross-browser test: Chrome, Firefox, Edge (latest 2 versions).
+6. End-to-end automation: Cypress or Playwright tests for the golden path:
+   - Login → Query Composer → Submit → Processing → Report View → Approve → Final → Download.
+7. Add `make test:ui` target to CI (headless browser run).
+
+**Validation gate before Production:**
+- All U-01..U-16 and A-01..A-17 acceptance criteria pass in automated or manual QA.
+- `make test:ui` passes in CI.
+- No P0 or P1 UI defects remain open.
+- Security audit sign-off: no credential leakage, no admin content bypass.
+
+---
+
+## Complete Phase Dependency Graph
+
+```
+1A → 1B → 1C → 1D → 1E → 1F → 1G → 1H
+                ↓    ↓    ↓    ↓
+                └────┴────┴────┘ → 1I (static scaffolds)
+                                   ↓
+                                  2A (user workspace)
+                                   ↓
+                                  2B (admin control plane)
+                                   ↓
+                                  2C (UI hardening)
+```
+
+**Critical path:** 1A → 1B → 1C → 1D → 1E → 1F → 2A → 2B → 2C → Production  
+**Parallel track:** 1I can start after 1B and run in parallel through 1H, but must not wire to APIs until 1F is complete.

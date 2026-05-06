@@ -177,6 +177,64 @@
 
 ---
 
+## Frontend & UI (Phases 1I–2C)
+
+Source of truth: `docs/design/UI_CONTRACT_v1.md`
+
+### Phase 1I — Frontend Foundation & Static Admin Scaffolds
+
+| Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
+|---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
+| Frontend build system | 1I | `frontend/` (Vite + React + TS + Tailwind) | N/A | N/A | N/A | `npm run build` exits 0 | missing |
+| Design tokens | 1.4 | Color palette, typography, spacing | N/A | CSS variables | N/A | visual regression | missing |
+| Status pills | 1.4 | 13-state pill component | N/A | React component | N/A | render all states | missing |
+| Layout shell | 1.3 | Topbar, Sidebar, Main, Detail Panel | N/A | React layout | N/A | 768px+ viewport | missing |
+| Reusable components | 1I | Button, Modal, Toast, ConfirmDialog, SlideInPanel | N/A | React components | N/A | storybook or manual | missing |
+| Client-side routing | 1.5 | `/workspace/*`, `/admin/*` | All | Route config | N/A | role-guard redirects | missing |
+| Query Composer shell | 2.1 | Static layout, no API wiring | All | N/A | N/A | layout match spec | missing |
+| Admin System Health shell | 3.7 | Static table, no live data | Admin | N/A | N/A | layout match spec | missing |
+| Role Matrix view (read-only) | 3.3 Tab 1 | Render from `docs/security/rbac_matrix.md` | Admin | N/A | N/A | 9 roles visible | missing |
+| Source Mapping read-only view | 3.4 | Render from `project_source_mapping.json` | Admin | N/A | N/A | project list + fields | missing |
+
+### Phase 2A — User Chat Workspace Implementation
+
+| Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
+|---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
+| Query Composer (live) | 2.1 | Project dropdown from JWT claims | All except auditor/admin | `allowed_projects` | N/A | U-01, U-02 | missing |
+| Processing View | 2.2 | 18-node progress with user labels | All | LangGraph stream | `report.cancelled` | U-05, U-16 | missing |
+| Report View (approved/final) | 2.3 | Full report + Evidence Panel | Role-scoped | `ExecutiveDecisionReport` | `report.downloaded` | U-03, U-08, U-09, U-10, U-11, U-15 | missing |
+| Report View (needs_review) | 2.3, 7.2 | Requester: flags only; Reviewer: watermarked draft | Role-scoped | `QualityGateResult` | `quality_gate.needs_review` | U-06, U-07 | missing |
+| Report View (failed) | 2.3, 7.2 | No content; error banner only | Role-scoped | N/A | `quality_gate.failed` | U-06 | missing |
+| Evidence Panel | 2.3 | Source type, confidence, truncated hash | Role-scoped | `EvidenceObject` | N/A | U-10, U-11 | missing |
+| Export Panel | 2.4, 6 | Download report formats + artifacts | Role-scoped | MIME types | `report.downloaded` | U-08 | missing |
+| Upload Zone | 2.5, 5 | Drag-drop, MIME scan, retention notice | All except auditor | `Upload` | `upload.received` | U-12, U-13 | missing |
+| My Reports List | 2.6 | Grouped by state, role-scoped | Own requests (auditor: project-scoped) | `DecisionState` | N/A | U-03, U-14 | missing |
+
+### Phase 2B — Admin Visual Control Plane Implementation
+
+| Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
+|---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
+| Dashboard | 3.1 | Service counts, approvals, cost posture | Admin | `/healthz` + audit log | N/A | A-02 | missing |
+| Connectors & APIs | 3.2 | 10-service grid, detail panel, test probe | Admin | Connector status | `connector.probe_success` | A-03, A-04, A-05 | missing |
+| Permissions & Roles — Entra edit | 3.3 Tab 2 | Group mapping editor with validation | Admin | Entra group list | `admin.role_mapping_changed` | A-17 | missing |
+| Source Mapping editor | 3.4 | CRUD for `project_source_mapping.json` | Admin | Project mapping | `admin.source_mapping_changed` | A-06, A-07, A-08 | missing |
+| Approval Queue | 3.5 | staging + needs_review list; admin override | Admin | Approval record | `report.admin_override_*` | A-09, A-10, A-11 | missing |
+| Audit Log | 3.6 | Filterable, paginated, CSV export | Admin (auditor: scoped) | `AuditLog` | N/A | A-12, A-13 | missing |
+| System Health | 3.7 | Live status, latency sparklines, cost monitor | Admin | `/healthz` + cost data | `cost.daily_cap_warning` | A-14, A-15, A-16 | missing |
+
+### Phase 2C — UI Hardening & Acceptance Validation
+
+| Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
+|---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
+| Accessibility | 2C | Keyboard nav, focus, ARIA | All | N/A | N/A | a11y audit | missing |
+| Responsive (768px+) | 1.3 | Sidebar collapse, panel behavior | All | N/A | N/A | viewport test | missing |
+| Security audit (UI) | 8.3, 8.5 | No credential leakage, no admin content bypass | All | N/A | N/A | security checklist | missing |
+| Performance | 2C | Bundle <500KB, render <200ms | All | N/A | N/A | Lighthouse / profiler | missing |
+| Cross-browser | 2C | Chrome, Firefox, Edge | All | N/A | N/A | manual QA | missing |
+| E2E automation | 2C | Cypress/Playwright golden path | All | N/A | N/A | `make test:ui` passes | missing |
+
+---
+
 ## Identified Gaps
 
 | ID | Gap | Location | Impact | Phase to Fix |
@@ -187,3 +245,5 @@
 | G4 | No `POST /approve` or `POST /reject` endpoints exist | `apps/edr/app.py` | Human review gate has no API surface | 1G |
 | G5 | n8n workflows are present but empty placeholders | `n8n/*.json` | No retrieval possible | 1C |
 | G6 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |
+| G7 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | 1I |
+| G8 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | 2C |
