@@ -1,7 +1,115 @@
 {
   "name": "owncloud_list",
-  "nodes": [],
-  "connections": {},
+  "nodes": [
+    {
+      "id": "cccccccc-0000-0000-0000-000000000001",
+      "name": "Receive Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 200],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "owncloud-list",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "cccccccc-0000-0000-0000-000000000002",
+      "name": "WebDAV PROPFIND",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "parameters": {
+        "method": "CUSTOM",
+        "customMethod": "PROPFIND",
+        "url": "={{ $json.body.base_url + '/remote.php/dav/files/' + encodeURIComponent($json.body.username || '') + '/' + encodeURIComponent($json.body.root_path || '').replace(/^\\/+/, '') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + Buffer.from(($json.body.username || '') + ':' + ($json.body.password || '')).toString('base64') }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/xml"
+            },
+            {
+              "name": "Depth",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/xml",
+        "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:displayname/><d:getcontentlength/><d:getlastmodified/><d:getetag/><d:resourcetype/></d:prop></d:propfind>",
+        "options": {}
+      }
+    },
+    {
+      "id": "cccccccc-0000-0000-0000-000000000003",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200],
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst projectCode = $json.body?.project_code || null;\nconst baseUrl = $json.body?.base_url || '';\n\n// If the HTTP node returns parsed XML, attempt to extract responses.\n// Fallback: treat the response as a single item if no array is found.\nlet responses = [];\nif (body && Array.isArray(body['d:response'])) {\n  responses = body['d:response'];\n} else if (body && body['d:response']) {\n  responses = [body['d:response']];\n} else if (Array.isArray(body)) {\n  responses = body;\n} else if (body) {\n  responses = [body];\n}\n\nconst evidence = responses.map((item, index) => {\n  const href = item['d:href'] || item.href || ('/file-' + index);\n  const props = item['d:propstat']?.['d:prop'] || item.prop || {};\n  const isCollection = props['d:resourcetype']?.['d:collection'] !== undefined;\n  const name = props['d:displayname'] || href.split('/').pop() || 'Untitled';\n  const lastMod = props['d:getlastmodified'] || null;\n  const etag = props['d:getetag'] || null;\n  \n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(href + (lastMod || '')).digest('hex');\n  } catch (e) {\n    hash = 'oc-' + index + '-' + (lastMod || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'oc-' + index,\n    source_type: 'owncloud',\n    source_uri: baseUrl + href,\n    title: name,\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: etag ? etag.replace(/[\"]/g, '') : null,\n    timestamp: lastMod,\n    excerpt: isCollection ? 'Directory: ' + name : name,\n    hash_sha256: hash,\n    confidence: 'medium',\n    tags: ['owncloud', isCollection ? 'directory' : 'file'],\n    metadata: {\n      href: href,\n      is_collection: isCollection,\n      size: props['d:getcontentlength'] || null\n    }\n  };\n}).filter(e => e.title && e.title !== '');\n\nreturn [{ json: { evidence: evidence } }];"
+      }
+    },
+    {
+      "id": "cccccccc-0000-0000-0000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [980, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Request": {
+      "main": [
+        [
+          {
+            "node": "WebDAV PROPFIND",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WebDAV PROPFIND": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
   "settings": {
     "executionOrder": "v1"
   },

@@ -1,7 +1,106 @@
 {
   "name": "sharepoint_search",
-  "nodes": [],
-  "connections": {},
+  "nodes": [
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000001",
+      "name": "Receive Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 200],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sharepoint-search",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000002",
+      "name": "Graph Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/sites/' + $json.body.site_id + '/drives/' + $json.body.drive_id + '/root/search(q=' + encodeURIComponent($json.body.query || '') + ')' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.body.access_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000003",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200],
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst values = Array.isArray(body.value) ? body.value : [];\nconst projectCode = $json.body?.project_code || null;\n\nconst evidence = values.map((item, index) => {\n  const sourceUri = item.webUrl || ('https://graph.microsoft.com/v1.0/drives/' + item.parentReference?.driveId + '/items/' + item.id);\n  const excerpt = (item.description || item.name || '').toString().substring(0, 1000);\n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');\n  } catch (e) {\n    hash = 'sp-' + (item.id || index) + '-' + (item.lastModifiedDateTime || 'unknown');\n  }\n  return {\n    evidence_id: 'sp-' + (item.id || index),\n    source_type: 'sharepoint',\n    source_uri: sourceUri,\n    title: item.name || 'Untitled',\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: item.etag ? item.etag.replace(/[\"]/g, '') : null,\n    timestamp: item.lastModifiedDateTime || null,\n    excerpt: excerpt,\n    hash_sha256: hash,\n    confidence: 'medium',\n    tags: ['sharepoint', 'document'],\n    metadata: {\n      drive_id: item.parentReference?.driveId || null,\n      item_id: item.id || null,\n      created_by: item.createdBy?.user?.displayName || null\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
+      }
+    },
+    {
+      "id": "aaaaaaaa-0000-0000-0000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [980, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Request": {
+      "main": [
+        [
+          {
+            "node": "Graph Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graph Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
   "settings": {
     "executionOrder": "v1"
   },

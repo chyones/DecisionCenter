@@ -1,7 +1,106 @@
 {
   "name": "email_search",
-  "nodes": [],
-  "connections": {},
+  "nodes": [
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000001",
+      "name": "Receive Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 200],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-search",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000002",
+      "name": "Graph Mail Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent($json.body.user_mailbox || '') + '/messages?$search=' + encodeURIComponent('\"' + ($json.body.query || '') + '\"') + '&$top=25' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.body.access_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000003",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200],
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst values = Array.isArray(body.value) ? body.value : [];\nconst projectCode = $json.body?.project_code || null;\nconst allowedMailboxes = $json.body?.allowed_mailboxes || [];\n\nconst evidence = values.map((msg, index) => {\n  const sender = msg.sender?.emailAddress?.address || '';\n  const recipients = (msg.toRecipients || []).map(r => r.emailAddress?.address).filter(Boolean);\n  const mailbox = $json.body?.user_mailbox || '';\n  \n  const excerpt = (msg.bodyPreview || msg.subject || '').toString().substring(0, 500);\n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(msg.id + (msg.internetMessageId || '')).digest('hex');\n  } catch (e) {\n    hash = 'eml-' + (msg.id || index) + '-' + (msg.receivedDateTime || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'eml-' + (msg.id || index),\n    source_type: 'email',\n    source_uri: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(mailbox) + '/messages/' + (msg.id || ''),\n    title: msg.subject || 'No subject',\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: null,\n    timestamp: msg.receivedDateTime || null,\n    excerpt: excerpt,\n    hash_sha256: hash,\n    confidence: 'medium',\n    tags: ['email', 'timeline'],\n    metadata: {\n      sender: sender,\n      recipients: recipients,\n      mailbox: mailbox,\n      has_attachments: msg.hasAttachments || false,\n      message_id: msg.internetMessageId || null\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
+      }
+    },
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [980, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Request": {
+      "main": [
+        [
+          {
+            "node": "Graph Mail Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graph Mail Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
   "settings": {
     "executionOrder": "v1"
   },

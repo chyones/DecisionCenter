@@ -1,7 +1,124 @@
 {
   "name": "odoo_read",
-  "nodes": [],
-  "connections": {},
+  "nodes": [
+    {
+      "id": "dddddddd-0000-0000-0000-000000000001",
+      "name": "Receive Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 200],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "odoo-read",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "dddddddd-0000-0000-0000-000000000002",
+      "name": "Odoo JSON-RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($json.body.odoo_url || '').replace(/\\/$/, '') + '/jsonrpc' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "call",
+          "params": {
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+              "={{ $json.body.database }}",
+              "={{ $json.body.username }}",
+              "={{ $json.body.api_key }}",
+              "={{ $json.body.model }}",
+              "search_read",
+              [
+                "={{ JSON.parse($json.body.domain || '[]') }}",
+                "={{ JSON.parse($json.body.fields || '[]') }}",
+                0,
+                100
+              ]
+            ]
+          },
+          "id": 1
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dddddddd-0000-0000-0000-000000000003",
+      "name": "Normalize Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200],
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst records = Array.isArray(body.result) ? body.result : [];\nconst projectCode = $json.body?.project_code || null;\nconst model = $json.body?.model || 'unknown.model';\nconst odooUrl = $json.body?.odoo_url || '';\n\nconst evidence = records.map((record, index) => {\n  const recordId = record.id !== undefined ? String(record.id) : String(index);\n  const timestamp = record.write_date || record.create_date || record.date || null;\n  \n  // Build a human-readable value string from key fields\n  const valueKeys = Object.keys(record).filter(k => !['id', 'create_date', 'write_date', '__last_update'].includes(k));\n  const valuePreview = valueKeys.slice(0, 5).map(k => k + ': ' + String(record[k] ?? '')).join('; ');\n  \n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(model + '-' + recordId + '-' + (timestamp || '')).digest('hex');\n  } catch (e) {\n    hash = 'odoo-' + model + '-' + recordId + '-' + (timestamp || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'odoo-' + model.replace(/\\./g, '-') + '-' + recordId,\n    source_type: 'odoo',\n    source_uri: odooUrl + '/web#id=' + recordId + '&model=' + encodeURIComponent(model),\n    title: record.name || record.display_name || (model + ' #' + recordId),\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: null,\n    timestamp: timestamp,\n    excerpt: valuePreview.substring(0, 1000),\n    hash_sha256: hash,\n    confidence: 'high',\n    tags: ['odoo', model],\n    metadata: {\n      model: model,\n      record_id: record.id !== undefined ? record.id : null,\n      currency: record.currency_id ? record.currency_id[1] : (record.currency || null)\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
+      }
+    },
+    {
+      "id": "dddddddd-0000-0000-0000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [980, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Request": {
+      "main": [
+        [
+          {
+            "node": "Odoo JSON-RPC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Odoo JSON-RPC": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
   "settings": {
     "executionOrder": "v1"
   },

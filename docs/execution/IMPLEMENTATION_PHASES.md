@@ -10,9 +10,11 @@ workflow spec remains the behavioral source of truth, and its Section 31 now mir
 this infrastructure-first sequence.
 
 Live audit note at commit `9dde3c1cb807a0ab4e0ff2d3353893bfa2b7e92d`:
-Phase 0, Phase 1A, Phase 1B, and Phase 1B.5 are complete. Phase 1C may start.
-The four n8n workflow JSON files still have empty `nodes` arrays. Phase 1F remains
-blocked by missing MinIO bucket initialization until that phase is approved.
+Phase 0, Phase 1A, Phase 1B, Phase 1B.5, and Phase 1C are complete.
+The four n8n workflow JSON files now contain real node definitions.
+Isolated connector validation tests pass in CI.
+Phase 1D may start. Phase 1F remains blocked by missing MinIO bucket
+initialization until that phase is approved.
 
 ---
 
