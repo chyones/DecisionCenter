@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-06
-> **Status:** Phase 0 documentation lock — reflects current skeleton state
+> **Date:** 2026-05-07
+> **Status:** Live repo audit at `9dde3c1cb807a0ab4e0ff2d3353893bfa2b7e92d` — Phase 1C is the safe next phase
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -25,7 +25,7 @@
 | Feature | Spec Section | Graph Node / API | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|------------------|-----------|----------------|-------------|------------------|--------|
 | Workflow begin | 16.0 | `node_00_begin.py` | All | `DecisionState` | `node: begin` | `make smoke` node count = 18 | partial |
-| Auth and RBAC Gate | 16.1, 8, 9 | `node_01_auth.py` | All | `DecisionState` | `node: auth` | integration test ×3 (1B) | partial |
+| Auth and RBAC Gate | 16.1, 8, 9 | `node_01_auth.py` | All | `DecisionState` | `node: auth` | integration tests: valid role/project authorized; admin/auditor/unknown project denied | implemented |
 | Intent Classifier (Light) | 16.2 | `node_02_intent.py` | All | `DecisionState.outputs["intent"]` | `node: intent` | golden set eval (1H) | partial |
 | Scope Resolver (Light) | 16.3 | `node_03_scope.py` | All | `DecisionState.outputs["scope"]` | `node: scope` | golden set eval (1H) | partial |
 | Retrieval Plan (Light) | 16.4 | `node_04_plan.py` | All | `DecisionState.outputs["plan"]` | `node: plan` | golden set eval (1H) | partial |
@@ -50,7 +50,7 @@
 | Feature | Spec Section | Endpoint | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|----------|-----------|----------------|-------------|------------------|--------|
 | Health check | 27 | `GET /healthz` | All (unauthenticated) | Service status JSON | None | health proof + CI smoke | implemented |
-| Stage report | 27 | `POST /reports/staging` | All authenticated | `ReportRequest` → `DecisionState` | `request_id` generated | `make smoke` (1A) | partial |
+| Stage report | 27 | `POST /reports/staging` | Report-capable roles only | `ReportRequest` → `DecisionState` | `request_id` generated | smoke + RBAC integration tests | partial |
 | Download report | 27 | `GET /reports/staging/{id}/download/{fmt}` | Request owner + approver roles | MIME type response | `download` event | integration test (1F) | partial |
 | Approve report | 27, 16.16 | `POST /reports/staging/{id}/approve` | Approval roles per `docs/security/rbac_matrix.md` | Approval record | `approval` event | integration test (1G) | missing |
 | Reject report | 27, 16.16 | `POST /reports/staging/{id}/reject` | Approval roles per `docs/security/rbac_matrix.md` | Rejection record | `rejection` event | integration test (1G) | missing |
@@ -120,6 +120,7 @@
 | Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 36 (1A) | implemented |
 | Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | exact dependency pins (1A) | implemented |
 | CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | push/pull_request workflow file exists (1A) | implemented |
+| Async workflow runtime | 16 | `apps/edr/graph/runner.py`, all graph nodes | N/A | async `DecisionState` pipeline | None | tests invoke async runner/nodes with `asyncio.run()` | implemented |
 | Docker Compose stack | 23 | `docker-compose.yml` | N/A | 7 services | None | `make up` healthy (1A) | partial |
 | Reverse proxy | 23 | `Caddyfile` | N/A | Caddy config | None | cert issuance works (1A) | partial |
 | PostgreSQL persistence | 20.4 | `docker-compose.yml` | N/A | `audit_log` table | N/A | health ping (1A) | partial |
@@ -136,7 +137,7 @@
 
 | Feature | Spec Section | Policy Document | RBAC Role | Enforcement Point | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------------|-----------|-------------------|-------------|------------------|--------|
-| RBAC enforcement | 8, 9 | `docs/security/rbac_matrix.md` | All | Node 01 + every retrieval node | `rbac_denied` | integration test ×3 (1B) | documented-only |
+| RBAC enforcement | 8, 9 | `docs/security/rbac_matrix.md` + `apps/edr/rbac/roles.py` | All | Node 01 before retrieval | `rbac_denied` | integration tests for authorized, denied, and unknown project cases | partial |
 | Evidence priority | 6 | `docs/policies/evidence_priority_policy.md` | All | Node 09 | `priority_assigned` | unit test: 13 levels (1D) | documented-only |
 | Conflict resolution | 7 | `docs/policies/conflict_resolution_policy.md` | All | Node 09 / Node 12 | `conflict_flagged` | golden set eval (1H) | documented-only |
 | Email excerpt limit | 4.3, 10 | `docs/policies/email_retrieval_policy.md` | All | Node 07 / n8n | `email_excerpt` | length ≤500 chars (1C) | documented-only |
@@ -239,11 +240,13 @@ Source of truth: `docs/design/UI_CONTRACT_v1.md`
 
 | ID | Gap | Location | Impact | Phase to Fix |
 |----|-----|----------|--------|--------------|
-| G1 | Entra group-to-role mapping is not present | No mapping file found | Cannot enforce the 9-role model yet | 1B |
-| G2 | `apps/edr/evaluation/promptfoo.config.yaml` has empty providers/tests | `apps/edr/evaluation/promptfoo.config.yaml` | Cannot run automated prompt regression yet | 1H |
-| G3 | `apps/edr/evaluation/run.py` prints "stubbed until Phase 1G" while evaluation is now Phase 1H | `apps/edr/evaluation/run.py` | Stale runtime message; no behavior implemented | 1H |
-| G4 | No `POST /approve` or `POST /reject` endpoints exist | `apps/edr/app.py` | Human review gate has no API surface | 1G |
-| G5 | n8n workflows are present but empty placeholders | `n8n/*.json` | No retrieval possible | 1C |
-| G6 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |
-| G7 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | 1I |
-| G8 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | 2C |
+| G1 | n8n workflows are present but empty placeholders | `n8n/*.json` | No external evidence retrieval possible | 1C |
+| G2 | Python retrieval nodes 05-08 still return stub statuses | `apps/edr/graph/node_05_sharepoint.py` through `node_08_odoo.py` | Workflow cannot retrieve evidence yet | 1D after 1C |
+| G3 | Embedding and reranking clients raise `NotImplementedError` | `apps/edr/retrieval/embeddings.py`, `apps/edr/retrieval/rerank.py` | Vector retrieval cannot run | 1D |
+| G4 | `apps/edr/evaluation/promptfoo.config.yaml` has empty providers/tests | `apps/edr/evaluation/promptfoo.config.yaml` | Cannot run automated prompt regression yet | 1H |
+| G5 | `apps/edr/evaluation/run.py` prints "stubbed until Phase 1G" while evaluation is now Phase 1H | `apps/edr/evaluation/run.py` | Stale runtime message; no behavior implemented | 1H |
+| G6 | No `POST /approve` or `POST /reject` endpoints exist | `apps/edr/app.py` | Human review gate has no API surface | 1G |
+| G7 | MinIO bucket initialization is missing | No init script/startup hook found | First Phase 1F write would fail if bucket is absent | Before 1F |
+| G8 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |
+| G9 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | 1I |
+| G10 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | 2C |

@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase1a_infra_ready-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase1c_ready-blue.svg)](#)
 
 ---
 
@@ -83,6 +83,7 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 |---|---|
 | Understand the locked behavior | [docs/workflows/EDR-AGENTIC-RAG-v2.1.md](docs/workflows/EDR-AGENTIC-RAG-v2.1.md) |
 | Understand what is safe to implement next | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) and [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
+| Understand the live audited state | [docs/execution/CURRENT_PROJECT_STATE.md](docs/execution/CURRENT_PROJECT_STATE.md) |
 | Audit current feature coverage | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | Understand the locked UI contract | [docs/design/UI_CONTRACT_v1.md](docs/design/UI_CONTRACT_v1.md) |
 | Find documentation by purpose | [docs/README.md](docs/README.md) |
@@ -90,8 +91,8 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand n8n workflow status | [n8n/README.md](n8n/README.md) |
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
-Phase 0 and Phase 1A are control locks. Treat the files above as the current authority before
-changing code, workflows, schemas, or operational assumptions.
+Phase 0, Phase 1A, Phase 1B, and Phase 1B.5 are complete. Treat the files above as the
+current authority before changing code, workflows, schemas, or operational assumptions.
 
 ## Repository map
 
@@ -170,16 +171,20 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | Phase | Status |
 |---|---|
 | 0 — Control and documentation lock | Locked |
-| 1A — Infrastructure Foundation | Implemented locally |
-| 1B — RBAC and Identity | Not started |
-| 1C — n8n Connector Workflows | Placeholders only |
-| 1D — Embedding and Vector Retrieval | Not started |
-| 1E — LLM Nodes | Not started |
-| 1F — Persistence and Audit | Not started |
+| 1A — Infrastructure Foundation | Complete |
+| 1B — RBAC and Identity | Complete |
+| 1B.5 — Async Connector Runtime Readiness | Complete |
+| 1C — n8n Connector Workflows | Safe next phase; workflow files are placeholders only |
+| 1D — Embedding and Vector Retrieval | Partial skeleton only |
+| 1E — LLM Nodes | Partial skeleton/export stubs only |
+| 1F — Persistence and Audit | Not started; MinIO bucket initialization blocker remains |
 | 1G — Human Review Gate | Not started |
 | 1H — Evaluation and Hardening | Not started |
+| 1I–2C — Frontend/UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
+
+Current audited state is tracked in [docs/execution/CURRENT_PROJECT_STATE.md](docs/execution/CURRENT_PROJECT_STATE.md).
 
 ## Cost estimate
 

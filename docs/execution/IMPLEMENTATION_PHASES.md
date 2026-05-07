@@ -2,12 +2,17 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
-> **Date:** 2026-05-06
-> **Status:** Planning document — Phase 0 lock
+> **Date:** 2026-05-07
+> **Status:** Planning document with live audit note — Phase 1C is the safe next phase
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
+
+Live audit note at commit `9dde3c1cb807a0ab4e0ff2d3353893bfa2b7e92d`:
+Phase 0, Phase 1A, Phase 1B, and Phase 1B.5 are complete. Phase 1C may start.
+The four n8n workflow JSON files still have empty `nodes` arrays. Phase 1F remains
+blocked by missing MinIO bucket initialization until that phase is approved.
 
 ---
 
@@ -70,7 +75,7 @@ this infrastructure-first sequence.
 
 **Goal:** 4 real n8n workflows that return normalized evidence payloads.
 
-Current Phase 0 status: all four workflow files exist, but each has `"nodes": []`.
+Current live-audit status: all four workflow files exist, but each has `"nodes": []`.
 They are placeholders and are required before retrieval phases can pass validation.
 
 1. `sharepoint_search.json` — Entra token → Graph search → excerpt + `hash_sha256`.

@@ -1,8 +1,40 @@
-# Phase 1B.5 — Connector Runtime Readiness / Phase 1C and 1F Blockers
+# Phase 1C Prerequisites — Live Repo Audit
 
-> **Identified during:** Phase 1B audit (2026-05-06)
-> **B6 resolved:** Phase 1B.5 (2026-05-07)
-> **B10 status:** Open — required before Phase 1F begins.
+> **Audited commit:** `9dde3c1cb807a0ab4e0ff2d3353893bfa2b7e92d`
+> **Audit date:** 2026-05-07
+> **Phase 1C decision:** May start.
+> **B6 status:** Resolved in Phase 1B.5.
+> **B10 status:** Open, but required before Phase 1F, not before Phase 1C.
+
+---
+
+## Phase 1C Readiness Decision
+
+Phase 1C may start because the live repository proves:
+
+- Phase 1A infrastructure foundation is present: 36-key config coverage, pinned Python dependencies,
+  Docker Compose service stack, CI lint/syntax/config/smoke/integration gates, and Qdrant init script.
+- Phase 1B RBAC/identity foundation is present: `node_01_auth.py` validates role and project scope,
+  loads `docs/config/project_source_mapping.json`, populates allowed project/mailbox/Odoo IDs, and
+  denies admin, auditor, invalid role, missing project, and unknown project cases.
+- Phase 1B.5 async runtime readiness is present: `run_workflow()` is async, all 18 node `run()`
+  functions are async, and tests invoke async graph code with `asyncio.run()`.
+
+Phase 1C is still not implemented. All four workflow files in `n8n/*.json` still have empty
+`nodes` arrays and must be treated as placeholders.
+
+---
+
+## Forbidden During Phase 1C
+
+Phase 1C must stay limited to n8n connector workflow implementation and isolated curl/schema
+validation. Do not add:
+
+- Python graph node behavior beyond what is needed to keep existing tests passing.
+- LLM calls, prompt execution, embeddings, vector retrieval, reranking, or retrieval persistence.
+- PostgreSQL/MinIO report persistence, audit trail writes, approval APIs, publish logic, or frontend.
+- New product behavior outside the four read-only connector workflows.
+- Secret values in workflow JSON, docs, code, logs, or tests.
 
 ---
 
