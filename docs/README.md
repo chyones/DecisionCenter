@@ -36,7 +36,7 @@ control-plane decisions.
 | [design/](design/) | Locked UI contract and design-source navigation |
 | [evaluation/](evaluation/) | Golden-set format, required cases, and metrics definitions |
 | [execution/](execution/) | Phase sequence and phase-specific implementation scopes |
-| [operations/](operations/) | Hosting, runbook, cost, observability, backup, and restore docs |
+| [operations/](operations/) | Hosting, runbook, cost, observability, backup, restore, and connector connection guide |
 | [policies/](policies/) | Evidence, RBAC, email, Odoo, data minimization, and security policies |
 | [schemas/](schemas/) | JSON Schemas for report, evidence, audit, and quality-gate artifacts |
 | [security/](security/) | Canonical RBAC matrix |
