@@ -3,15 +3,15 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-07
-> **Status:** Planning document with live audit note — Phase 1C is the safe next phase
+> **Status:** Planning document with live audit note — Phase 1D is the safe next phase
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note at commit `9dde3c1cb807a0ab4e0ff2d3353893bfa2b7e92d`:
+Live audit note at commit `1c5d62806b2339fa972b7a9c8ea884f79971ffe2`:
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, and Phase 1C are complete.
-The four n8n workflow JSON files now contain real node definitions.
+The four n8n workflow JSON files contain real 4-node pipelines.
 Isolated connector validation tests pass in CI.
 Phase 1D may start. Phase 1F remains blocked by missing MinIO bucket
 initialization until that phase is approved.
@@ -77,8 +77,9 @@ initialization until that phase is approved.
 
 **Goal:** 4 real n8n workflows that return normalized evidence payloads.
 
-Current live-audit status: all four workflow files exist, but each has `"nodes": []`.
-They are placeholders and are required before retrieval phases can pass validation.
+Current live-audit status: all four workflow files contain real 4-node pipelines and
+are importable into n8n. Python connector wrappers validate every response against
+the `EvidenceObject` schema. Isolated mock-based integration tests pass in CI.
 
 1. `sharepoint_search.json` — Entra token → Graph search → excerpt + `hash_sha256`.
 2. `email_search.json` — Graph delegated → user mailbox + allowed shared mailboxes → excerpt only (≤500 chars).
