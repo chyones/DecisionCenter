@@ -3,6 +3,6 @@
 from apps.edr.graph.state import DecisionState
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     state.outputs.setdefault("evidence_sufficiency", "needs_real_connectors")
     return state.mark("node_10_sufficiency")

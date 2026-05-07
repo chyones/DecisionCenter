@@ -4,7 +4,7 @@ from apps.edr.rbac.project_mapping import ProjectMapping, ProjectNotFoundError, 
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     role = state.role
     project_code = state.project_code
 

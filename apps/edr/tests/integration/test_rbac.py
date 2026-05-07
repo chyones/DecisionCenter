@@ -9,6 +9,8 @@ Additional coverage:
   4. Missing role → RbacDeniedError
   5. All 9 roles enumerated (8 report-capable + 1 admin that is denied)
 """
+import asyncio
+
 import pytest
 
 from apps.edr.graph import node_01_auth
@@ -30,7 +32,7 @@ def _state(role: str | None, project_code: str | None = "PRJ-001") -> DecisionSt
 # --- Required 3 cases ---
 
 def test_authorized_user() -> None:
-    result = node_01_auth.run(_state("executive"))
+    result = asyncio.run(node_01_auth.run(_state("executive")))
     assert result.outputs["rbac_status"] == "authorized"
     assert result.outputs["rbac_role"] == "executive"
     assert "PRJ-001" in result.allowed_projects
@@ -39,29 +41,29 @@ def test_authorized_user() -> None:
 
 def test_unauthorized_user_admin_role() -> None:
     with pytest.raises(RbacDeniedError, match="cannot generate business reports"):
-        node_01_auth.run(_state("admin"))
+        asyncio.run(node_01_auth.run(_state("admin")))
 
 
 def test_unknown_project_code() -> None:
     with pytest.raises(RbacDeniedError, match="Unknown project_code"):
-        node_01_auth.run(_state("executive", project_code="UNKNOWN-999"))
+        asyncio.run(node_01_auth.run(_state("executive", project_code="UNKNOWN-999")))
 
 
 # --- Additional coverage ---
 
 def test_missing_role_raises() -> None:
     with pytest.raises(RbacDeniedError, match="Missing or invalid role"):
-        node_01_auth.run(_state(None))
+        asyncio.run(node_01_auth.run(_state(None)))
 
 
 def test_invalid_role_string_raises() -> None:
     with pytest.raises(RbacDeniedError, match="Missing or invalid role"):
-        node_01_auth.run(_state("superuser"))
+        asyncio.run(node_01_auth.run(_state("superuser")))
 
 
 def test_missing_project_code_raises() -> None:
     with pytest.raises(RbacDeniedError, match="project_code is required"):
-        node_01_auth.run(_state("executive", project_code=None))
+        asyncio.run(node_01_auth.run(_state("executive", project_code=None)))
 
 
 # --- 9-role coverage ---
@@ -81,19 +83,19 @@ READ_ONLY_ROLES = [Role.AUDITOR]
 
 @pytest.mark.parametrize("role", REPORT_CAPABLE_ROLES)
 def test_all_report_capable_roles_authorized(role: Role) -> None:
-    result = node_01_auth.run(_state(role.value))
+    result = asyncio.run(node_01_auth.run(_state(role.value)))
     assert result.outputs["rbac_status"] == "authorized"
     assert result.outputs["rbac_role"] == role.value
 
 
 def test_auditor_role_denied_for_report_generation() -> None:
     with pytest.raises(RbacDeniedError, match="cannot generate business reports"):
-        node_01_auth.run(_state(Role.AUDITOR.value))
+        asyncio.run(node_01_auth.run(_state(Role.AUDITOR.value)))
 
 
 def test_admin_role_denied() -> None:
     with pytest.raises(RbacDeniedError):
-        node_01_auth.run(_state(Role.ADMIN.value))
+        asyncio.run(node_01_auth.run(_state(Role.ADMIN.value)))
 
 
 def test_9_roles_total() -> None:
@@ -103,11 +105,11 @@ def test_9_roles_total() -> None:
 # --- Populated state fields ---
 
 def test_allowed_mailboxes_populated() -> None:
-    result = node_01_auth.run(_state("executive"))
+    result = asyncio.run(node_01_auth.run(_state("executive")))
     assert "project-prj-001@example.com" in result.allowed_mailboxes
     assert "doc-control@example.com" in result.allowed_mailboxes
 
 
 def test_allowed_odoo_ids_populated() -> None:
-    result = node_01_auth.run(_state("executive"))
+    result = asyncio.run(node_01_auth.run(_state("executive")))
     assert "PRJ-001" in result.allowed_odoo_ids

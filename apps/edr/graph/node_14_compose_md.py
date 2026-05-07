@@ -34,7 +34,7 @@ _STUB_REPORT: dict = {
 }
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     quality_gate = state.outputs.get("quality_gate", "needs_review")
     if quality_gate == "failed":
         state.outputs["markdown_report_status"] = "skipped_quality_gate_failed"

@@ -54,3 +54,8 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m pytest -q apps/edr/tests/smoke
+
+      - name: Integration tests
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q apps/edr/tests/integration

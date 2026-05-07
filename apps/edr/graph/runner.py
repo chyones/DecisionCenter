@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from apps.edr.graph import (
     node_00_begin,
@@ -22,7 +23,7 @@ from apps.edr.graph import (
 )
 from apps.edr.graph.state import DecisionState
 
-Node = Callable[[DecisionState], DecisionState]
+Node = Callable[[DecisionState], Coroutine[Any, Any, DecisionState]]
 
 NODES: tuple[Node, ...] = (
     node_00_begin.run,
@@ -48,7 +49,7 @@ NODES: tuple[Node, ...] = (
 NODE_COUNT = len(NODES)
 
 
-def run_workflow(state: DecisionState) -> DecisionState:
+async def run_workflow(state: DecisionState) -> DecisionState:
     for node in NODES:
-        state = node(state)
+        state = await node(state)
     return state

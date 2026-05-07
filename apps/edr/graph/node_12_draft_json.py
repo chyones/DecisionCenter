@@ -3,6 +3,6 @@
 from apps.edr.graph.state import DecisionState
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     state.outputs.setdefault("draft_report_status", "stubbed")
     return state.mark("node_12_draft_json")

@@ -123,7 +123,7 @@ def _http_ok(url: str) -> None:
 
 
 @app.post("/reports/staging")
-def stage_report(
+async def stage_report(
     request: ReportRequest,
     claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
 ) -> dict[str, object]:
@@ -140,7 +140,7 @@ def stage_report(
         output_formats=list(request.output_formats),
     )
     try:
-        result = run_workflow(state)
+        result = await run_workflow(state)
     except RbacDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
 

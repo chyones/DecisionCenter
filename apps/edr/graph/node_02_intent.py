@@ -3,6 +3,6 @@
 from apps.edr.graph.state import DecisionState
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     state.outputs.setdefault("intent", "decision_report")
     return state.mark("node_02_intent")

@@ -3,6 +3,6 @@
 from apps.edr.graph.state import DecisionState
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     state.outputs.setdefault("odoo_status", "stubbed")
     return state.mark("node_08_odoo")

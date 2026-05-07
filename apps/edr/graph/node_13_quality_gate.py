@@ -3,6 +3,6 @@
 from apps.edr.graph.state import DecisionState
 
 
-def run(state: DecisionState) -> DecisionState:
+async def run(state: DecisionState) -> DecisionState:
     state.outputs.setdefault("quality_gate", "needs_review")
     return state.mark("node_13_quality_gate")
