@@ -2,52 +2,72 @@
 
 ## What Was Done
 
-Phase 1F (Persistence & Audit) is complete.
+Phase 1G (Human Review Gate) is complete.
 
-Node 15 now persists four staging artifacts to MinIO:
-- `executive-decision-report.md` (and other generated formats)
-- `evidence-pack.json`
-- `audit-log.json`
-- `quality-gate-result.json`
+### Review Endpoints
 
-PostgreSQL audit rows store:
-- Hashed user_id (SHA-256, raw user_id never stored)
-- Token counts and cost totals per request
-- Quality gate status and artifact keys
-- Timestamps
+- `POST /reports/staging/{request_id}/approve` — writes approval record.
+  - Normal reviewers: action = `approve`.
+  - Admin override: action = `admin_override`, mandatory comment required.
+  - Auditor blocked. Self-approval blocked.
+- `POST /reports/staging/{request_id}/reject` — writes rejection record with required reason.
+- `POST /reports/staging/{request_id}/request-revision` — writes revision request with required reason.
 
-The download endpoint (`GET /reports/staging/{request_id}/download/{fmt}`):
-- Streams artifacts from MinIO
-- Blocks downloads when quality_gate == "failed"
-- Rejects invalid formats (400), unknown request IDs (404), and unauthorized access (403)
-- Allows admin and auditor roles to access any report
+### Download Endpoints
 
-Token usage tracking was added to `llm.py` (`get_token_usage`, `reset_token_usage`).
+- `GET /reports/staging/{request_id}/download/{fmt}` — blocks approval-required reports before approval.
+- `GET /reports/final/{request_id}/download/{fmt}` — serves immutable final artifacts only when `review_state == "final"`.
+- Quality gate `failed` blocks all download paths.
 
-Graceful degradation: Node 15 catches connection errors so the workflow completes in test environments without MinIO/PostgreSQL running.
+### Node 16 — Human Review
+
+- Reads `review_state` and `review_decisions` from PostgreSQL.
+- Exposes `human_review_status` mapped to `pending`, `approved`, `rejected`, `revision_requested`.
+
+### Node 17 — Publish
+
+- Publishes only when `review_state == "approved"`.
+- Copies artifacts from `/staging/{request_id}/` to `/final/{request_id}/` in MinIO.
+- Final artifacts are write-once (`FileExistsError` on duplicate).
+- Writes `approval-log.json` exactly once.
+- Updates PostgreSQL `review_state` to `final`.
+- Hard-stops for `rejected` and `revision_requested`.
+
+### Database Schema
+
+- `audit_log` extended with `review_state` and `requires_approval`.
+- New `review_decisions` table tracks every approval, rejection, and revision request with hashed reviewer IDs.
+
+### RBAC
+
+- Reviewer roles determined by `RolePermissions.can_approve`.
+- Admin override is metadata-only (no report content exposure) and creates a distinct `admin_override` audit event.
+- Auditor cannot review.
 
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit: `5bb6ed8d3fdec1f80a94aa0d89a65b644ff5a8ef`
-- Status: `PHASE_1F_COMPLETE_NOT_LIVE`
+- Current verified commit: `dac13b045b0d3075c5a6b7a31b058c878eda2957`
+- Status: `PHASE_1G_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 
 ## Files Changed
 
-- `apps/edr/persistence/` — new module (hash, minio_store, postgres_store)
-- `apps/edr/graph/node_15_save_audit.py` — real persistence logic
-- `apps/edr/app.py` — download endpoint with MinIO, auth, quality gate
-- `apps/edr/llm.py` — token usage tracking per request_id
-- `apps/edr/schemas/audit.py` — enriched audit artifact schema
-- `apps/edr/tests/integration/test_phase1f.py` — 12 new tests
-- `pyproject.toml` — added `asyncpg==0.29.0`
+- `apps/edr/persistence/postgres_store.py` — review_decisions table, review state methods
+- `apps/edr/persistence/minio_store.py` — `copy_to_final` with write-once protection
+- `apps/edr/graph/node_15_save_audit.py` — `requires_approval` based on intent
+- `apps/edr/graph/node_16_review.py` — reads review state from PostgreSQL
+- `apps/edr/graph/node_17_publish.py` — publish to final on valid approval
+- `apps/edr/app.py` — approve, reject, request-revision, final-download endpoints
+- `apps/edr/tests/integration/test_phase1g.py` — 22 new tests
+- `apps/edr/tests/integration/test_phase1f.py` — updated for new staging download behavior
+- `docs/execution/PHASE_1G_REPORT.md` — new report
 
 ## What Was NOT Done
 
-- Phase 1G (Human Review Gate) not started.
-- No approval or rejection endpoints added.
-- No publish-to-final logic.
+- Phase 1H (Evaluation & Hardening) not started.
+- No frontend UI added.
+- No automatic re-generation after reject or request-revision.
 - No production deployment performed.
 - No secrets or `.env` files committed.
 
@@ -59,26 +79,25 @@ Graceful degradation: Node 15 catches connection errors so the workflow complete
 
 ## Next Recommended Work
 
-Phase 1G requires explicit user approval. When authorized:
+Phase 1H requires explicit user approval. When authorized:
 
-- Implement approval/rejection endpoints.
-- Update Node 16 to read approval state from PostgreSQL with timeout.
-- Update Node 17 to publish only after valid approval.
-- Move artifacts from `/staging/` to `/final/` in MinIO on publish.
+- Expand executable golden set.
+- Wire evaluation runner and promptfoo config.
+- Fix PDF Arabic RTL rendering.
+- Add cost cap circuit breaker.
+- Add `make eval` to CI.
 
 ## Validation Proof
 
-Latest required validation executed for this Phase 1F session:
+Latest required validation executed for this Phase 1G session:
 
+- `make smoke`: 2 passed.
+- `make test`: 118 passed.
 - `ruff check .`: clean.
 - `python3 -m compileall apps scripts`: clean.
 - `python3 scripts/check_doc_drift.py`: clean.
 - `python3 scripts/check_ai_context.py`: clean.
-- Local pytest (86 passed): 62 existing + 22 Phase 1E + 12 Phase 1F tests.
-
-Docker validation (`make smoke`, `make test`) not run because the asyncpg dependency
-requires a Docker image rebuild.
 
 ## Final Status
 
-`PHASE_1F_COMPLETE_NOT_LIVE`
+`PHASE_1G_COMPLETE_NOT_LIVE`

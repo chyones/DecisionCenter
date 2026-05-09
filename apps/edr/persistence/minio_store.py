@@ -1,4 +1,4 @@
-"""MinIO artifact store for staging reports."""
+"""MinIO artifact store for staging and final reports."""
 from __future__ import annotations
 
 import json
@@ -30,13 +30,13 @@ class MinioStore:
         if not self._client.bucket_exists(self._bucket):
             self._client.make_bucket(self._bucket)
 
-    def _object_name(self, request_id: str, filename: str) -> str:
-        return f"staging/{request_id}/{filename}"
+    def _object_name(self, prefix: str, request_id: str, filename: str) -> str:
+        return f"{prefix}/{request_id}/{filename}"
 
-    def put_json(self, request_id: str, filename: str, data: dict[str, Any]) -> str:
+    def put_json(self, request_id: str, filename: str, data: dict[str, Any], prefix: str = "staging") -> str:
         """Store a JSON artifact and return its object key."""
         self._ensure_bucket()
-        object_name = self._object_name(request_id, filename)
+        object_name = self._object_name(prefix, request_id, filename)
         body = json.dumps(data, indent=2, default=str).encode("utf-8")
         from io import BytesIO
 
@@ -50,11 +50,11 @@ class MinioStore:
         return object_name
 
     def put_bytes(
-        self, request_id: str, filename: str, data: bytes, content_type: str
+        self, request_id: str, filename: str, data: bytes, content_type: str, prefix: str = "staging"
     ) -> str:
         """Store a binary artifact and return its object key."""
         self._ensure_bucket()
-        object_name = self._object_name(request_id, filename)
+        object_name = self._object_name(prefix, request_id, filename)
         from io import BytesIO
 
         self._client.put_object(
@@ -66,15 +66,15 @@ class MinioStore:
         )
         return object_name
 
-    def get_object(self, request_id: str, filename: str) -> bytes:
+    def get_object(self, request_id: str, filename: str, prefix: str = "staging") -> bytes:
         """Retrieve an artifact by request_id and filename."""
-        object_name = self._object_name(request_id, filename)
+        object_name = self._object_name(prefix, request_id, filename)
         response = self._client.get_object(self._bucket, object_name)
         return response.read()
 
-    def object_exists(self, request_id: str, filename: str) -> bool:
+    def object_exists(self, request_id: str, filename: str, prefix: str = "staging") -> bool:
         """Check whether an artifact exists."""
-        object_name = self._object_name(request_id, filename)
+        object_name = self._object_name(prefix, request_id, filename)
         try:
             self._client.stat_object(self._bucket, object_name)
             return True
@@ -82,6 +82,25 @@ class MinioStore:
             if exc.code == "NoSuchKey":
                 return False
             raise
+
+    def copy_to_final(self, request_id: str, filename: str) -> str:
+        """Copy an artifact from staging to final. Write-once: refuses if final already exists.
+
+        Returns the final object key.
+        """
+        self._ensure_bucket()
+        source = self._object_name("staging", request_id, filename)
+        dest = self._object_name("final", request_id, filename)
+
+        if self.object_exists(request_id, filename, prefix="final"):
+            raise FileExistsError(f"Final artifact already exists: {dest}")
+
+        self._client.copy_object(
+            self._bucket,
+            dest,
+            f"{self._bucket}/{source}",
+        )
+        return dest
 
 
 _minio_store: MinioStore | None = None

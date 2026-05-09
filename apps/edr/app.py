@@ -15,7 +15,7 @@ from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.rbac.project_mapping import RbacDeniedError
-from apps.edr.rbac.roles import Role
+from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
 
 app = FastAPI(
     title="Decision Center",
@@ -34,6 +34,19 @@ class ReportRequest(BaseModel):
     document_type: str | None = None
     mailbox_scope: str | None = None
     output_formats: list[Literal["md", "docx", "xlsx", "pdf", "pptx"]] = ["md"]
+
+
+class ApproveRequest(BaseModel):
+    comment: str | None = None
+
+
+class RejectRequest(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class RequestRevisionRequest(BaseModel):
+    reason: str = Field(min_length=1)
+    comment: str | None = None
 
 
 def _extract_claims(
@@ -58,6 +71,45 @@ def _extract_claims(
     if settings.app_env == "production":
         raise HTTPException(status_code=500, detail="ENTRA_CLIENT_ID not configured in production")
     return JWTClaims(user_id="", role=x_user_role)
+
+
+def _require_claims(
+    claims: JWTClaims | None,
+) -> JWTClaims:
+    """Ensure claims are present (production mode only)."""
+    if claims is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return claims
+
+
+def _check_reviewer_rbac(claims: JWTClaims) -> str:
+    """Return the action type for the reviewer's role.
+
+    Normal roles with can_approve=True use 'approve'.
+    Admin uses 'admin_override' (metadata-only).
+    Auditor and roles without can_approve are blocked.
+    """
+    role = claims.role
+    if not role:
+        raise HTTPException(status_code=403, detail="Role is required.")
+
+    try:
+        role_enum = Role(role)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=f"Invalid role: {role}") from exc
+
+    perms = ROLE_PERMISSIONS[role_enum]
+
+    if role_enum == Role.AUDITOR:
+        raise HTTPException(status_code=403, detail="Auditor cannot approve, reject, or request revision.")
+
+    if role_enum == Role.ADMIN:
+        return "admin_override"
+
+    if not perms.can_approve:
+        raise HTTPException(status_code=403, detail="Role is not authorized to review reports.")
+
+    return "approve"
 
 
 @app.get("/healthz")
@@ -174,28 +226,153 @@ async def stage_report(
     }
 
 
-@app.get("/reports/staging/{request_id}/download/{fmt}")
-async def download_report(
+# ---------------------------------------------------------------------------
+# Review endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/reports/staging/{request_id}/approve")
+async def approve_report(
     request_id: str,
-    fmt: str,
+    body: ApproveRequest,
     claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
-) -> Response:
-    """Download a specific format of a staged report from MinIO.
+) -> dict[str, object]:
+    """Approve a staged report.
 
-    Validates format, request existence, quality gate status, and user
-    authorization before streaming the artifact.
+    Normal reviewers with can_approve=True may approve.
+    Admin may use metadata-only override with a mandatory comment.
+    Auditor is blocked. Self-approval is blocked.
     """
-    if fmt not in MIME_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unknown format: {fmt}")
+    claims = _require_claims(claims)
+    action = _check_reviewer_rbac(claims)
 
-    # 1. Load audit row
+    if action == "admin_override" and (not body.comment or not body.comment.strip()):
+        raise HTTPException(status_code=400, detail="Admin override requires a mandatory comment.")
+
     pg = get_postgres_store()
     await pg.init_schema()
     audit = await pg.get_audit(request_id)
     if audit is None:
         raise HTTPException(status_code=404, detail="Report not found.")
 
-    # 2. Quality gate blocking
+    # Block self-approval
+    reviewer_hash = hash_user_id(claims.user_id)
+    if reviewer_hash == audit.get("user_id_hash", ""):
+        raise HTTPException(status_code=403, detail="Self-approval is not allowed.")
+
+    # Block if already finalized or rejected
+    current_state = audit.get("review_state", "staging")
+    if current_state == "final":
+        raise HTTPException(status_code=409, detail="Report is already finalized.")
+    if current_state == "rejected":
+        raise HTTPException(status_code=409, detail="Report has been rejected.")
+
+    await pg.insert_review_decision(
+        request_id=request_id,
+        reviewer_id_hash=reviewer_hash,
+        action=action,
+        comment=body.comment,
+    )
+    await pg.update_review_state(request_id, "approved")
+
+    return {"request_id": request_id, "action": action, "new_state": "approved"}
+
+
+@app.post("/reports/staging/{request_id}/reject")
+async def reject_report(
+    request_id: str,
+    body: RejectRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> dict[str, object]:
+    """Reject a staged report. Requires a reason."""
+    claims = _require_claims(claims)
+    action = _check_reviewer_rbac(claims)
+
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    # Block self-rejection (treat as self-approval blocking)
+    reviewer_hash = hash_user_id(claims.user_id)
+    if reviewer_hash == audit.get("user_id_hash", ""):
+        raise HTTPException(status_code=403, detail="Self-rejection is not allowed.")
+
+    current_state = audit.get("review_state", "staging")
+    if current_state == "final":
+        raise HTTPException(status_code=409, detail="Report is already finalized.")
+
+    await pg.insert_review_decision(
+        request_id=request_id,
+        reviewer_id_hash=reviewer_hash,
+        action=action,
+        reason=body.reason,
+    )
+    await pg.update_review_state(request_id, "rejected")
+
+    return {"request_id": request_id, "action": "reject", "new_state": "rejected"}
+
+
+@app.post("/reports/staging/{request_id}/request-revision")
+async def request_revision(
+    request_id: str,
+    body: RequestRevisionRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> dict[str, object]:
+    """Request revision for a staged report. Requires a reason/comment."""
+    claims = _require_claims(claims)
+    action = _check_reviewer_rbac(claims)
+
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    reviewer_hash = hash_user_id(claims.user_id)
+    if reviewer_hash == audit.get("user_id_hash", ""):
+        raise HTTPException(status_code=403, detail="Self-revision-request is not allowed.")
+
+    current_state = audit.get("review_state", "staging")
+    if current_state == "final":
+        raise HTTPException(status_code=409, detail="Report is already finalized.")
+
+    await pg.insert_review_decision(
+        request_id=request_id,
+        reviewer_id_hash=reviewer_hash,
+        action=action,
+        reason=body.reason,
+        comment=body.comment,
+    )
+    await pg.update_review_state(request_id, "revision_requested")
+
+    return {"request_id": request_id, "action": "request_revision", "new_state": "revision_requested"}
+
+
+# ---------------------------------------------------------------------------
+# Download endpoints
+# ---------------------------------------------------------------------------
+
+
+async def _download_artifact(
+    request_id: str,
+    fmt: str,
+    claims: JWTClaims | None,
+    prefix: str,
+    allow_before_approval: bool = False,
+) -> Response:
+    """Shared download logic for staging and final prefixes."""
+    if fmt not in MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unknown format: {fmt}")
+
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    # Quality gate blocking (all paths)
     quality_gate_status = audit.get("quality_gate_status", "needs_review")
     if quality_gate_status == "failed":
         raise HTTPException(
@@ -203,7 +380,7 @@ async def download_report(
             detail="Download blocked: quality gate failed.",
         )
 
-    # 3. Authorization (skip in bypass mode for local dev)
+    # Authorization (skip in bypass mode)
     if settings.entra_client_id and settings.entra_tenant_id:
         if claims is None or not claims.user_id:
             raise HTTPException(status_code=401, detail="Authentication required.")
@@ -212,6 +389,8 @@ async def download_report(
         stored_hash = audit.get("user_id_hash", "")
         role = claims.role
 
+        # Admin and auditor can access metadata but admin cannot view report content.
+        # For downloads, we allow admin/auditor on staging; on final we also allow.
         allowed = requester_hash == stored_hash or role in (
             Role.ADMIN.value,
             Role.AUDITOR.value,
@@ -222,11 +401,27 @@ async def download_report(
                 detail="Not authorized to access this report.",
             )
 
-    # 4. Stream from MinIO
+    review_state = audit.get("review_state", "staging")
+    requires_approval = audit.get("requires_approval", True)
+
+    # Staging download blocking before approval (for approval-required reports)
+    if prefix == "staging" and requires_approval and review_state not in ("approved", "final"):
+        raise HTTPException(
+            status_code=403,
+            detail="Download blocked: report awaiting approval.",
+        )
+
+    # Final download only after finalization
+    if prefix == "final" and review_state != "final":
+        raise HTTPException(
+            status_code=403,
+            detail="Download blocked: report not yet finalized.",
+        )
+
     minio = get_minio_store()
     filename = f"executive-decision-report.{fmt}"
     try:
-        data = minio.get_object(request_id, filename)
+        data = minio.get_object(request_id, filename, prefix=prefix)
     except Exception as exc:
         raise HTTPException(status_code=404, detail=f"Artifact not found: {exc}")
 
@@ -237,3 +432,23 @@ async def download_report(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+@app.get("/reports/staging/{request_id}/download/{fmt}")
+async def download_report(
+    request_id: str,
+    fmt: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> Response:
+    """Download a specific format of a staged report from MinIO."""
+    return await _download_artifact(request_id, fmt, claims, prefix="staging")
+
+
+@app.get("/reports/final/{request_id}/download/{fmt}")
+async def download_final_report(
+    request_id: str,
+    fmt: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> Response:
+    """Download a specific format of a finalized report from MinIO."""
+    return await _download_artifact(request_id, fmt, claims, prefix="final")

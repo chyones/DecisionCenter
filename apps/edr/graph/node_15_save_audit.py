@@ -13,11 +13,32 @@ from apps.edr.llm import get_token_usage
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.schemas.audit import AuditArtifact
 
+# Intents that do NOT require human approval before download.
+_DRAFT_ONLY_INTENTS: set[str] = {"document_control"}
+
+
+def _requires_approval(state: DecisionState) -> bool:
+    """Determine whether this report requires human approval.
+
+    Approval is required for financial reports, loss analysis, legal/contract
+    risk reports, executive final reports, and claims/disputes reports.
+    Draft-only outputs (document search results, simple summaries) may stay
+    non-final.
+    """
+    intents: list[str] = state.outputs.get("intent", [])
+    if not intents:
+        return True
+    # If ALL intents are draft-only, no approval required.
+    if all(i in _DRAFT_ONLY_INTENTS for i in intents):
+        return False
+    return True
+
 
 async def run(state: DecisionState) -> DecisionState:
     request_id = state.request_id
     user_id_hash = hash_user_id(state.user_id)
     quality_gate_status = state.outputs.get("quality_gate", "needs_review")
+    requires_approval = _requires_approval(state)
 
     # ------------------------------------------------------------------
     # 1. Prepare stores (degrade gracefully if services are unreachable)
@@ -147,6 +168,7 @@ async def run(state: DecisionState) -> DecisionState:
             token_counts=token_counts,
             cost_total_usd=cost_total_usd,
             artifact_keys=artifact_keys,
+            requires_approval=requires_approval,
         )
     except Exception:
         pass
@@ -157,4 +179,5 @@ async def run(state: DecisionState) -> DecisionState:
     state.outputs["audit_status"] = "persisted"
     state.outputs["artifact_keys"] = artifact_keys
     state.outputs["audit_user_id_hash"] = user_id_hash
+    state.outputs["requires_approval"] = requires_approval
     return state.mark("node_15_save_audit")

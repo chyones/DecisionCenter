@@ -252,6 +252,8 @@ async def test_download_md_returns_persisted_markdown() -> None:
             "request_id": "req-1f-001",
             "user_id_hash": hash_user_id("user-42"),
             "quality_gate_status": "passed",
+            "requires_approval": False,
+            "review_state": "staging",
         }
     )
 
@@ -270,7 +272,7 @@ async def test_download_md_returns_persisted_markdown() -> None:
 
     assert response.status_code == 200
     assert response.body == b"# Report\n\nBudget is 1M AED.\n"
-    mock_minio.get_object.assert_called_once_with("req-1f-001", "executive-decision-report.md")
+    mock_minio.get_object.assert_called_once_with("req-1f-001", "executive-decision-report.md", prefix="staging")
 
 
 @pytest.mark.asyncio
@@ -372,6 +374,8 @@ async def test_download_allows_admin_or_auditor() -> None:
             "request_id": "req-1f-001",
             "user_id_hash": hash_user_id("user-42"),
             "quality_gate_status": "passed",
+            "requires_approval": False,
+            "review_state": "staging",
         }
     )
 
