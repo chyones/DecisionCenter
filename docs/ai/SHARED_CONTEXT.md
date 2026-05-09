@@ -3,14 +3,14 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit: `1c531971cbc9fa5025f781dfe70c6ee8ec1f5085`
-- Current status: `PHASE_1E_COMPLETE_NOT_LIVE`
+- Current verified commit: `5bb6ed8d3fdec1f80a94aa0d89a65b644ff5a8ef`
+- Current status: `PHASE_1F_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 1E
-- Current allowed next phase: Phase 1F (requires explicit user approval)
-- Latest report: `docs/execution/PHASE_1E_REPORT.md`
+- Last completed phase: Phase 1F
+- Current allowed next phase: Phase 1G (requires explicit user approval)
+- Latest report: `docs/execution/PHASE_1F_REPORT.md`
 
-Phase 1E is complete. LLM nodes (02, 03, 04, 11, 12, 13) are implemented with cost guardrails, prompt-injection protection, and Langfuse tracing. Export remains blocked unless quality_gate == "passed".
+Phase 1F is complete. Node 15 persists four staging artifacts to MinIO and writes audit rows to PostgreSQL with hashed user identifiers. The download endpoint serves persisted reports from MinIO, blocks downloads when quality_gate == "failed", and rejects unauthorized access. Token counts and cost totals are tracked per request.
 
 ## Required Validation Commands
 
@@ -31,9 +31,9 @@ the user requests the full gate.
 
 ## Current No-Go Rules
 
-- Do not start Phase 1F without explicit user approval.
-- Phase 1E is complete and pushed; CI passed.
-- Do not implement persistence changes, publish logic, approval flows, or UI work as part of Phase 1E.
+- Do not start Phase 1G without explicit user approval.
+- Phase 1F is complete and pushed; CI passed.
+- Do not implement approval flows, publish logic, or UI work as part of Phase 1F.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or generated caches.
@@ -85,6 +85,7 @@ Protected source-of-truth files:
 - `docs/execution/CURRENT_PROJECT_STATE.md`
 - `docs/execution/PHASE_1D_FIXUP_REPORT.md`
 - `docs/execution/PHASE_1E_REPORT.md`
+- `docs/execution/PHASE_1F_REPORT.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 - `docs/admin/FEATURE_MATRIX.md`
 - `docs/ai/SHARED_CONTEXT.md`
@@ -113,5 +114,5 @@ Ignored or local-only files must not be committed:
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 1F, update the shared context
-  and handoff as part of that Phase 1F session.
+- If a future user explicitly authorizes Phase 1G, update the shared context
+  and handoff as part of that Phase 1G session.

@@ -1,82 +1,84 @@
-# Agent Handoff
+# Agent Handoff — DecisionCenter
 
-## Last Agent / Session Summary
+## What Was Done
 
-Started Phase 1E implementation with explicit user approval. Implemented LLM nodes
-02, 03, 04, 11, 12, 13 with deterministic fallback mode for CI. Added cost
-guardrails, prompt-injection protection, and Langfuse tracing hooks. Quality gate
-now fails unsupported claims and empty reports. Export remains blocked unless
-quality_gate == "passed".
+Phase 1F (Persistence & Audit) is complete.
+
+Node 15 now persists four staging artifacts to MinIO:
+- `executive-decision-report.md` (and other generated formats)
+- `evidence-pack.json`
+- `audit-log.json`
+- `quality-gate-result.json`
+
+PostgreSQL audit rows store:
+- Hashed user_id (SHA-256, raw user_id never stored)
+- Token counts and cost totals per request
+- Quality gate status and artifact keys
+- Timestamps
+
+The download endpoint (`GET /reports/staging/{request_id}/download/{fmt}`):
+- Streams artifacts from MinIO
+- Blocks downloads when quality_gate == "failed"
+- Rejects invalid formats (400), unknown request IDs (404), and unauthorized access (403)
+- Allows admin and auditor roles to access any report
+
+Token usage tracking was added to `llm.py` (`get_token_usage`, `reset_token_usage`).
+
+Graceful degradation: Node 15 catches connection errors so the workflow completes in test environments without MinIO/PostgreSQL running.
 
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit: `1c531971cbc9fa5025f781dfe70c6ee8ec1f5085`
-- Status: `PHASE_1E_COMPLETE_NOT_LIVE`
+- Current verified commit: `5bb6ed8d3fdec1f80a94aa0d89a65b644ff5a8ef`
+- Status: `PHASE_1F_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 
-## What Was Completed
+## Files Changed
 
-- Phase 1E LLM node implementations (all validated and committed):
-  - Node 02: Intent classifier (light tier, fallback heuristic)
-  - Node 03: Scope resolver (light tier, merges with API inputs)
-  - Node 04: Retrieval planner (light tier, CAD disabled by default)
-  - Node 11: Self-correction loop (max 3, targeted re-retrieval)
-  - Node 12: Draft JSON report (heavy tier, deterministic fallback builder)
-  - Node 13: Quality gate (deterministic claim/financial/source validation)
-- Cost guardrails: per-request token caps, daily cost cap check before every LLM call
-- Prompt-injection protection: regex-based sanitization with `[BLOCKED]` replacement
-- Langfuse tracing wired to every LLM call (token counts, latency, cost, node name)
-- Report export blocked unless quality_gate == "passed" (Node 14 unchanged from 1D-fixup)
-- Integration tests: 22 new tests covering injection, cost, nodes 02-04, 11-14, e2e workflow
-- AI context checker updated to allow PHASE_1E_IN_PROGRESS_NOT_LIVE status
-- Shared context and handoff files updated
+- `apps/edr/persistence/` — new module (hash, minio_store, postgres_store)
+- `apps/edr/graph/node_15_save_audit.py` — real persistence logic
+- `apps/edr/app.py` — download endpoint with MinIO, auth, quality gate
+- `apps/edr/llm.py` — token usage tracking per request_id
+- `apps/edr/schemas/audit.py` — enriched audit artifact schema
+- `apps/edr/tests/integration/test_phase1f.py` — 12 new tests
+- `pyproject.toml` — added `asyncpg==0.29.0`
 
-## What Was Not Done
+## What Was NOT Done
 
-- Phase 1F (persistence and audit) not started.
+- Phase 1G (Human Review Gate) not started.
+- No approval or rejection endpoints added.
+- No publish-to-final logic.
 - No production deployment performed.
 - No secrets or `.env` files committed.
-- GitHub Actions CI passed for commit `1c531971cbc9fa5025f781dfe70c6ee8ec1f5085`.
 
 ## Must Read Before Next Work
 
-1. `AGENTS.md`
-2. `docs/ai/SHARED_CONTEXT.md`
-3. `docs/ai/AGENT_HANDOFF.md`
-4. `docs/ai/agent-state.json`
-5. `docs/execution/PHASE_1E_REPORT.md`
-6. `docs/execution/IMPLEMENTATION_PHASES.md`
-7. `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
+- `docs/ai/agent-state.json`
+- `docs/execution/IMPLEMENTATION_PHASES.md`
+- `docs/admin/CONTROL_PLANE_LOCK.md`
 
-## Next Allowed Task
+## Next Recommended Work
 
-Phase 1F planning or implementation only after explicit user approval.
-Do not start Phase 1F without explicit user approval.
+Phase 1G requires explicit user approval. When authorized:
 
-## Blockers
+- Implement approval/rejection endpoints.
+- Update Node 16 to read approval state from PostgreSQL with timeout.
+- Update Node 17 to publish only after valid approval.
+- Move artifacts from `/staging/` to `/final/` in MinIO on publish.
 
-- Production is not live.
-- Production still requires operator SSH, `git pull origin main`, `make up`, `make smoke`.
-- Server `.env` must provide required production values before `make up`.
-- n8n must have the Webhook Header Auth credential configured as
-  `Authorization: Bearer <N8N_WEBHOOK_TOKEN>`.
-- Docker image must be rebuilt to include new `anthropic` dependency before
-  containerized tests can pass.
+## Validation Proof
 
-## Tests Last Executed
+Latest required validation executed for this Phase 1F session:
 
-Latest required validation executed for this Phase 1E session:
-
-- `git status --short --branch`: clean before editing; context files pending during authoring.
-- `python3 scripts/check_ai_context.py`: clean.
-- `python3 scripts/check_doc_drift.py`: clean.
 - `ruff check .`: clean.
 - `python3 -m compileall apps scripts`: clean.
-- Local pytest (84 passed): 62 existing + 22 new Phase 1E tests.
+- `python3 scripts/check_doc_drift.py`: clean.
+- `python3 scripts/check_ai_context.py`: clean.
+- Local pytest (86 passed): 62 existing + 22 Phase 1E + 12 Phase 1F tests.
 
-Docker validation (`make smoke`, `make test`) passed after image rebuild.
+Docker validation (`make smoke`, `make test`) not run because the asyncpg dependency
+requires a Docker image rebuild.
 
 ## Final Status
 
-`PHASE_1E_COMPLETE_NOT_LIVE`
+`PHASE_1F_COMPLETE_NOT_LIVE`

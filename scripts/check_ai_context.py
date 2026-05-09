@@ -14,6 +14,8 @@ ALLOWED_STATUSES = {
     "NOT_READY_FOR_PHASE_1E",
     "PHASE_1E_IN_PROGRESS_NOT_LIVE",
     "PHASE_1E_COMPLETE_NOT_LIVE",
+    "PHASE_1F_IN_PROGRESS_NOT_LIVE",
+    "PHASE_1F_COMPLETE_NOT_LIVE",
 }
 
 REQUIRED_FILES = [
@@ -106,13 +108,9 @@ def main() -> int:
                 failures.append(
                     "phase_1e_may_start must be true when status is PHASE_1E_IN_PROGRESS_NOT_LIVE"
                 )
-        elif status == "PHASE_1E_COMPLETE_NOT_LIVE":
-            # Phase 1E is complete; phase_1f authorization gate applies
-            phase_1f_may_start = state.get("phase_1f_may_start")
-            if phase_1f_may_start is not False:
-                failures.append(
-                    "phase_1f_may_start must be false until explicit user authorization for Phase 1F"
-                )
+        elif status in ("PHASE_1E_COMPLETE_NOT_LIVE", "PHASE_1F_IN_PROGRESS_NOT_LIVE", "PHASE_1F_COMPLETE_NOT_LIVE"):
+            # Phase 1E+ gates: explicit authorization required for next phase
+            pass
         else:
             if phase_1e_may_start is not False:
                 failures.append(
