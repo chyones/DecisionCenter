@@ -81,6 +81,7 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 | Need | Start here |
 |---|---|
+| Understand AI agent operating rules | [AGENTS.md](AGENTS.md) and [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md) |
 | Understand the locked behavior | [docs/workflows/EDR-AGENTIC-RAG-v2.1.md](docs/workflows/EDR-AGENTIC-RAG-v2.1.md) |
 | Understand what is safe to implement next | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) and [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
 | Understand the live audited state | [docs/execution/CURRENT_PROJECT_STATE.md](docs/execution/CURRENT_PROJECT_STATE.md) |
@@ -94,6 +95,21 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, and the
 Phase 1D-fixup are complete. Treat the files above as the current authority
 before changing code, workflows, schemas, or operational assumptions.
+
+## AI Agent Operating Context
+
+All AI coding agents must read the shared operating context before editing.
+Read these files in order:
+
+1. [AGENTS.md](AGENTS.md)
+2. [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md)
+3. [docs/ai/AGENT_HANDOFF.md](docs/ai/AGENT_HANDOFF.md)
+4. [docs/ai/agent-state.json](docs/ai/agent-state.json)
+5. [docs/execution/PHASE_1D_FIXUP_REPORT.md](docs/execution/PHASE_1D_FIXUP_REPORT.md)
+
+The AI context is checked by `python3 scripts/check_ai_context.py`. It is a
+guardrail against stale assumptions, duplicated work, and accidental phase or
+deployment drift.
 
 ## Repository map
 

@@ -53,6 +53,9 @@ jobs:
       - name: Documentation drift check
         run: python scripts/check_doc_drift.py
 
+      - name: AI context check
+        run: python scripts/check_ai_context.py
+
       - name: Smoke tests
         env:
           PYTHONPATH: .
