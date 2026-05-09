@@ -4,17 +4,22 @@ services:
     env_file:
       - .env
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - ./staging:/staging
       - ./final:/final
       - ./logs:/logs
     depends_on:
-      - postgres
-      - redis
-      - qdrant
-      - minio
-      - n8n
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      n8n:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
       interval: 30s
@@ -29,19 +34,30 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-decision_center} -d ${POSTGRES_DB:-decision_center}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   qdrant:
     image: qdrant/qdrant:v1.12.4
     volumes:
       - qdrant-data:/qdrant/storage
-    ports:
-      - "6333:6333"
+    # Qdrant is internal-only; do not bind to a public port.
+    expose:
+      - "6333"
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
@@ -51,9 +67,15 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-me}
     volumes:
       - minio-data:/data
+    # MinIO API + console are accessible only from localhost on the host.
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   n8n:
     image: n8nio/n8n:1.91.3
@@ -62,14 +84,24 @@ services:
       N8N_PORT: 5678
       N8N_PROTOCOL: http
       WEBHOOK_URL: ${N8N_BASE_URL:-http://localhost:5678}
+      OWNCLOUD_USERNAME: ${OWNCLOUD_USERNAME:-}
+      OWNCLOUD_PASSWORD: ${OWNCLOUD_PASSWORD:-}
+      ODOO_URL: ${ODOO_URL:-}
+      ODOO_DATABASE: ${ODOO_DATABASE:-}
+      ODOO_USERNAME: ${ODOO_USERNAME:-}
+      ODOO_API_KEY: ${ODOO_API_KEY:-}
     volumes:
       - n8n-data:/home/node/.n8n
       - ./n8n:/workflows:ro
-    ports:
-      - "5678:5678"
+    # n8n editor UI is internal-only; webhook traffic flows app → n8n inside the
+    # compose network. Operators who need the editor can ssh-tunnel to 5678.
+    expose:
+      - "5678"
 
   caddy:
     image: caddy:2-alpine
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

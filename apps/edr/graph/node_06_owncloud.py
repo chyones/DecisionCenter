@@ -20,12 +20,12 @@ async def run(state: DecisionState) -> DecisionState:
     try:
         mapping = ProjectMapping.load().get(state.project_code)
         oc_config = mapping.get("owncloud", {})
+        # Service-account credentials live in n8n's environment ($env.OWNCLOUD_*).
+        # The Python wrapper only carries the request-scoped fields.
         payload = {
             "project_code": state.project_code,
             "root_path": oc_config.get("base_path", ""),
             "base_url": settings.public_base_url,
-            "username": "",
-            "password": "",
         }
         evidence = await list_owncloud(payload)
         state.evidence.extend([e.model_dump() for e in evidence])

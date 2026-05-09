@@ -1,7 +1,7 @@
 """Node 14 - Compose and Export Report. Spec: Sections 16 and 29.
 
 Generates all requested output formats from the validated JSON report.
-- Export runs only when the quality gate has not hard-failed.
+- Export runs only when the quality gate has explicitly passed.
 - All formats derive from state.report_json (canonical JSON).
 - state.output_formats controls which formats are produced (default: ["md"]).
 - Results are stored in state.outputs["exported_reports"] (metadata dict) and
@@ -11,38 +11,22 @@ Generates all requested output formats from the validated JSON report.
 from apps.edr.exporters import export_report
 from apps.edr.graph.state import DecisionState
 
-_STUB_REPORT: dict = {
-    "request_id": "stub",
-    "project_code": None,
-    "query": "Stub — no validated JSON report yet.",
-    "language": "en",
-    "executive_summary": [],
-    "financial_snapshot": {
-        "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
-        "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
-        "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
-    },
-    "key_findings": [],
-    "root_causes": [],
-    "delay_analysis": [],
-    "contractual_implications": [],
-    "recommended_actions": [],
-    "missing_data": ["No evidence retrieved — connectors not yet implemented."],
-    "conflicts": [],
-    "sources": [],
-    "quality_gate_status": "needs_review",
-}
-
 
 async def run(state: DecisionState) -> DecisionState:
     quality_gate = state.outputs.get("quality_gate", "needs_review")
-    if quality_gate == "failed":
-        state.outputs["markdown_report_status"] = "skipped_quality_gate_failed"
+    # Spec Section 17: only an explicit "passed" gate allows export.
+    # "needs_review", "failed", or any other value blocks the export.
+    if quality_gate != "passed":
+        state.outputs["markdown_report_status"] = (
+            f"skipped_quality_gate_{quality_gate}"
+        )
         return state.mark("node_14_compose_md")
 
-    report = state.report_json or _STUB_REPORT
-    if state.report_json:
-        report = dict(state.report_json)
+    if not state.report_json:
+        state.outputs["markdown_report_status"] = "skipped_no_validated_report"
+        return state.mark("node_14_compose_md")
+
+    report = dict(state.report_json)
     report.setdefault("request_id", state.request_id)
 
     formats = state.output_formats or ["md"]

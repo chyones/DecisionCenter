@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = Field(default=8000, ge=1, le=65535)
     public_base_url: str = "http://localhost:8000"
+    public_hostname: str = "localhost"
 
     # Identity
     entra_client_id: str | None = None
@@ -42,7 +43,11 @@ class Settings(BaseSettings):
     email_search_webhook: str = "/webhook/email-search"
     odoo_read_webhook: str = "/webhook/odoo-read"
 
-    # Odoo read-only API
+    # ownCloud service-account credentials (read by n8n only)
+    owncloud_username: str | None = None
+    owncloud_password: str | None = None
+
+    # Odoo read-only API (read by n8n only)
     odoo_url: str | None = None
     odoo_database: str | None = None
     odoo_username: str | None = None

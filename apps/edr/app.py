@@ -1,4 +1,5 @@
 import socket
+import uuid
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -122,6 +123,22 @@ def _http_ok(url: str) -> None:
             raise ConnectionError(f"{url} returned HTTP {response.status}")
 
 
+def _derive_status(outputs: dict[str, object]) -> str:
+    """Compute the response status from the workflow outputs.
+
+    The skeleton workflow still has stubbed downstream nodes for Phase 1E onward,
+    so we report ``in_progress`` while the quality gate is in its default
+    ``needs_review`` state, ``failed`` when the gate hard-fails, and ``ready``
+    only when an export was produced.
+    """
+    gate = outputs.get("quality_gate")
+    if gate == "passed" and outputs.get("markdown_report_status") == "generated":
+        return "ready"
+    if gate == "failed":
+        return "failed"
+    return "in_progress"
+
+
 @app.post("/reports/staging")
 async def stage_report(
     request: ReportRequest,
@@ -131,7 +148,7 @@ async def stage_report(
     role = claims.role if claims else None
 
     state = DecisionState(
-        request_id="local-preview",
+        request_id=str(uuid.uuid4()),
         user_id=user_id,
         role=role,
         project_code=request.project_code,
@@ -147,11 +164,11 @@ async def stage_report(
     exports = result.outputs.get("exported_reports", {})
     return {
         "request_id": result.request_id,
-        "status": "stubbed",
+        "status": _derive_status(result.outputs),
+        "quality_gate": result.outputs.get("quality_gate", "needs_review"),
         "visited_nodes": result.visited_nodes,
         "exported_formats": list(exports.keys()),
         "exports": exports,
-        "message": "Skeleton workflow executed. Connectors and LLM calls are not enabled yet.",
     }
 
 
@@ -159,12 +176,12 @@ async def stage_report(
 def download_report(request_id: str, fmt: str) -> Response:
     """Download a specific format of a staged report.
 
-    In stub mode reports are not persisted; returns 404.
-    Real implementation will fetch from MinIO at /staging/{request_id}/.
+    Phase 1F will fetch from MinIO at /staging/{request_id}/. Until then, the
+    endpoint validates the format and returns a 404 with a clear message.
     """
     if fmt not in MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Unknown format: {fmt}")
     raise HTTPException(
         status_code=404,
-        detail="Report not found. Persistence is not yet implemented in stub mode.",
+        detail="Report not found. MinIO persistence lands in Phase 1F.",
     )

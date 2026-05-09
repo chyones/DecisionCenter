@@ -11,6 +11,7 @@
         "httpMethod": "POST",
         "path": "odoo-read",
         "responseMode": "responseNode",
+        "authentication": "headerAuth",
         "options": {}
       }
     },
@@ -22,7 +23,7 @@
       "position": [500, 200],
       "parameters": {
         "method": "POST",
-        "url": "={{ ($json.body.odoo_url || '').replace(/\\/$/, '') + '/jsonrpc' }}",
+        "url": "={{ ($env.ODOO_URL || '').replace(/\\/$/, '') + '/jsonrpc' }}",
         "sendBody": true,
         "contentType": "json",
         "body": {
@@ -32,9 +33,9 @@
             "service": "object",
             "method": "execute_kw",
             "args": [
-              "={{ $json.body.database }}",
-              "={{ $json.body.username }}",
-              "={{ $json.body.api_key }}",
+              "={{ $env.ODOO_DATABASE }}",
+              "={{ $env.ODOO_USERNAME }}",
+              "={{ $env.ODOO_API_KEY }}",
               "={{ $json.body.model }}",
               "search_read",
               [
@@ -66,7 +67,7 @@
       "typeVersion": 2,
       "position": [740, 200],
       "parameters": {
-        "jsCode": "const body = $input.first().json;\nconst records = Array.isArray(body.result) ? body.result : [];\nconst projectCode = $json.body?.project_code || null;\nconst model = $json.body?.model || 'unknown.model';\nconst odooUrl = $json.body?.odoo_url || '';\n\nconst evidence = records.map((record, index) => {\n  const recordId = record.id !== undefined ? String(record.id) : String(index);\n  const timestamp = record.write_date || record.create_date || record.date || null;\n  \n  // Build a human-readable value string from key fields\n  const valueKeys = Object.keys(record).filter(k => !['id', 'create_date', 'write_date', '__last_update'].includes(k));\n  const valuePreview = valueKeys.slice(0, 5).map(k => k + ': ' + String(record[k] ?? '')).join('; ');\n  \n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(model + '-' + recordId + '-' + (timestamp || '')).digest('hex');\n  } catch (e) {\n    hash = 'odoo-' + model + '-' + recordId + '-' + (timestamp || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'odoo-' + model.replace(/\\./g, '-') + '-' + recordId,\n    source_type: 'odoo',\n    source_uri: odooUrl + '/web#id=' + recordId + '&model=' + encodeURIComponent(model),\n    title: record.name || record.display_name || (model + ' #' + recordId),\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: null,\n    timestamp: timestamp,\n    excerpt: valuePreview.substring(0, 1000),\n    hash_sha256: hash,\n    confidence: 'high',\n    tags: ['odoo', model],\n    metadata: {\n      model: model,\n      record_id: record.id !== undefined ? record.id : null,\n      currency: record.currency_id ? record.currency_id[1] : (record.currency || null)\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
+        "jsCode": "const body = $input.first().json;\nconst records = Array.isArray(body.result) ? body.result : [];\nconst projectCode = $json.body?.project_code || null;\nconst model = $json.body?.model || 'unknown.model';\nconst odooUrl = $env.ODOO_URL || '';\n\nconst evidence = records.map((record, index) => {\n  const recordId = record.id !== undefined ? String(record.id) : String(index);\n  const timestamp = record.write_date || record.create_date || record.date || null;\n  \n  // Build a human-readable value string from key fields\n  const valueKeys = Object.keys(record).filter(k => !['id', 'create_date', 'write_date', '__last_update'].includes(k));\n  const valuePreview = valueKeys.slice(0, 5).map(k => k + ': ' + String(record[k] ?? '')).join('; ');\n  \n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(model + '-' + recordId + '-' + (timestamp || '')).digest('hex');\n  } catch (e) {\n    hash = 'odoo-' + model + '-' + recordId + '-' + (timestamp || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'odoo-' + model.replace(/\\./g, '-') + '-' + recordId,\n    source_type: 'odoo',\n    source_uri: odooUrl + '/web#id=' + recordId + '&model=' + encodeURIComponent(model),\n    title: record.name || record.display_name || (model + ' #' + recordId),\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: null,\n    timestamp: timestamp,\n    excerpt: valuePreview.substring(0, 1000),\n    hash_sha256: hash,\n    confidence: 'high',\n    tags: ['odoo', model],\n    metadata: {\n      model: model,\n      record_id: record.id !== undefined ? record.id : null,\n      currency: record.currency_id ? record.currency_id[1] : (record.currency || null)\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
       }
     },
     {

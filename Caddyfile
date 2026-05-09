@@ -3,6 +3,30 @@
 	email admin@elrace.com
 }
 
+# Production deploys MUST set PUBLIC_HOSTNAME to a real domain so Caddy can issue
+# a TLS cert via ACME. The default ":80" target is kept as a fallback for local
+# `make up` and CI smoke runs only — it does NOT serve TLS.
+{$PUBLIC_HOSTNAME:localhost} {
+	encode zstd gzip
+
+	# Strip the noisy server header and add baseline security headers.
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+
+	reverse_proxy app:8000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+# Plain-HTTP fallback used by local `make up` and healthchecks.
 :80 {
 	reverse_proxy app:8000
 }

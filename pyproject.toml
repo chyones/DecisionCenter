@@ -15,9 +15,9 @@ dependencies = [
   "minio==7.2.0",
   "langfuse==2.50.0",
   "python-dotenv==1.0.0",
-  # Identity / JWT
-  "PyJWT==2.7.0",
-  "cryptography==41.0.7",
+  # Identity / JWT — CVE-driven upgrade from 2.7.0 / 41.0.7
+  "PyJWT==2.10.1",
+  "cryptography==44.0.0",
   # Report exporters (Phase A)
   "python-docx==1.1.0",
   "openpyxl==3.1.0",
@@ -33,6 +33,7 @@ dependencies = [
 dev = [
   "pytest==8.0.0",
   "ruff==0.6.0",
+  "pip-audit==2.7.3",
 ]
 
 [build-system]

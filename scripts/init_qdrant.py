@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 from apps.edr.config import settings
+from apps.edr.retrieval.qdrant_store import EvidenceStore
 
 VECTOR_SIZE = 1024
 
 
 def collection_name(project_code: str) -> str:
-    normalized = re.sub(r"[^a-zA-Z0-9]+", "_", project_code).strip("_").lower()
-    if not normalized:
+    """Derive the Qdrant collection name for a project.
+
+    Delegates to ``EvidenceStore._collection_name`` so the init script and
+    runtime always address the same collection.
+    """
+    if not project_code or not any(c.isalnum() for c in project_code):
         raise ValueError("project_code must contain at least one alphanumeric character")
-    return f"dc_{normalized}"
+    return EvidenceStore._collection_name(project_code)
 
 
 def project_codes_from_mapping(path: Path) -> list[str]:

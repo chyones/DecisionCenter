@@ -1,5 +1,7 @@
 """Node 8 - Odoo Facts Retrieval. Spec: Sections 4.4 and 16."""
 
+import json
+
 from apps.edr.config import settings
 from apps.edr.connectors.odoo import read_odoo
 from apps.edr.graph.state import DecisionState
@@ -20,15 +22,19 @@ async def run(state: DecisionState) -> DecisionState:
     try:
         mapping = ProjectMapping.load().get(state.project_code)
         odoo_config = mapping.get("odoo", {})
+        # Build the Odoo search domain via json.dumps so project_code values
+        # cannot break out of the JSON literal (e.g. quotes, brackets).
+        domain = json.dumps([["project_external_id", "=", state.project_code]])
+        fields = json.dumps(["name", "budget", "actual_cost"])
+        # Service-account credentials (database/username/api_key) live in n8n's
+        # environment ($env.ODOO_*); they are not transmitted via the webhook
+        # body. settings.odoo_url is left here only so callers/tests can audit
+        # what the n8n server is *expected* to use.
         payload = {
             "project_code": state.project_code,
-            "odoo_url": settings.odoo_url or "",
-            "database": settings.odoo_database or "",
-            "username": settings.odoo_username or "",
-            "api_key": settings.odoo_api_key or "",
             "model": odoo_config.get("project_model", "project.project"),
-            "domain": f"[[\"project_external_id\", \"=\", \"{state.project_code}\"]]",
-            "fields": '["name", "budget", "actual_cost"]',
+            "domain": domain,
+            "fields": fields,
             "allowed_odoo_ids": state.allowed_odoo_ids,
         }
         evidence = await read_odoo(payload)

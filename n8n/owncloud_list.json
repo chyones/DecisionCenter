@@ -11,6 +11,7 @@
         "httpMethod": "POST",
         "path": "owncloud-list",
         "responseMode": "responseNode",
+        "authentication": "headerAuth",
         "options": {}
       }
     },
@@ -23,7 +24,7 @@
       "parameters": {
         "method": "CUSTOM",
         "customMethod": "PROPFIND",
-        "url": "={{ $json.body.base_url + '/remote.php/dav/files/' + encodeURIComponent($json.body.username || '') + '/' + encodeURIComponent($json.body.root_path || '').replace(/^\\/+/, '') }}",
+        "url": "={{ $json.body.base_url + '/remote.php/dav/files/' + encodeURIComponent($env.OWNCLOUD_USERNAME || '') + '/' + encodeURIComponent($json.body.root_path || '').replace(/^\\/+/, '') }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -31,7 +32,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "={{ 'Basic ' + Buffer.from(($json.body.username || '') + ':' + ($json.body.password || '')).toString('base64') }}"
+              "value": "={{ 'Basic ' + Buffer.from(($env.OWNCLOUD_USERNAME || '') + ':' + ($env.OWNCLOUD_PASSWORD || '')).toString('base64') }}"
             },
             {
               "name": "Content-Type",

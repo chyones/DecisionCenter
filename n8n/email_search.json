@@ -11,7 +11,18 @@
         "httpMethod": "POST",
         "path": "email-search",
         "responseMode": "responseNode",
+        "authentication": "headerAuth",
         "options": {}
+      }
+    },
+    {
+      "id": "bbbbbbbb-0000-0000-0000-000000000005",
+      "name": "Enforce Mailbox Allowlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 200],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst mailbox = (body.user_mailbox || '').toLowerCase();\nconst allowed = (body.allowed_mailboxes || []).map(m => String(m).toLowerCase());\nif (!mailbox) {\n  throw new Error('user_mailbox is required');\n}\nif (allowed.length === 0 || !allowed.includes(mailbox)) {\n  throw new Error('mailbox_not_in_allowlist: ' + mailbox);\n}\nreturn [{ json: $input.first().json }];"
       }
     },
     {
@@ -68,6 +79,17 @@
   ],
   "connections": {
     "Receive Request": {
+      "main": [
+        [
+          {
+            "node": "Enforce Mailbox Allowlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Mailbox Allowlist": {
       "main": [
         [
           {

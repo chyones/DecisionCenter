@@ -16,6 +16,18 @@ async def run(state: DecisionState) -> DecisionState:
             state.outputs["email_status"] = "rbac_denied"
             return state.mark("node_07_email")
 
+    # Spec Section 10: only mailboxes in the project allowlist may be searched.
+    # Without an allowlist, fall back to denying access — never search a mailbox
+    # that has not been explicitly approved for this project.
+    allowed = [mb.lower() for mb in state.allowed_mailboxes]
+    user_mailbox = (state.user_id or "").lower()
+    if not allowed:
+        state.outputs["email_status"] = "denied_no_allowlist"
+        return state.mark("node_07_email")
+    if user_mailbox not in allowed:
+        state.outputs["email_status"] = "denied_mailbox_not_in_allowlist"
+        return state.mark("node_07_email")
+
     try:
         payload: dict = {
             "query": state.query,

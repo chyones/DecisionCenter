@@ -44,11 +44,14 @@ jobs:
           config_keys = {field.upper() for field in type(settings).model_fields}
           missing = sorted(set(env_keys) - config_keys)
           extra = sorted(config_keys - set(env_keys))
-          assert len(env_keys) == 36, len(env_keys)
+          assert len(env_keys) == 39, len(env_keys)
           assert not missing, missing
           assert not extra, extra
-          print("config coverage: 36/36")
+          print("config coverage: 39/39")
           PY
+
+      - name: Documentation drift check
+        run: python scripts/check_doc_drift.py
 
       - name: Smoke tests
         env:
@@ -59,3 +62,10 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m pytest -q apps/edr/tests/integration
+
+      - name: pip-audit (advisory only)
+        # Surface advisories but do not gate the build — Phase 1H decides on
+        # promotion to a hard gate after the dependency triage. The editable
+        # ``decision-center`` install is skipped (it is not on PyPI).
+        continue-on-error: true
+        run: pip-audit --progress-spinner off

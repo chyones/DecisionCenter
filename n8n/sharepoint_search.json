@@ -11,6 +11,7 @@
         "httpMethod": "POST",
         "path": "sharepoint-search",
         "responseMode": "responseNode",
+        "authentication": "headerAuth",
         "options": {}
       }
     },

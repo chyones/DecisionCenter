@@ -2,19 +2,22 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
-> **Date:** 2026-05-07
-> **Status:** Planning document with live audit note — Phase 1D is the safe next phase
+> **Date:** 2026-05-09
+> **Status:** Phase 1A through Phase 1D + Phase 1D-fixup complete; Phase 1E
+> is the safe next phase.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note at commit `1c5d62806b2339fa972b7a9c8ea884f79971ffe2`:
-Phase 0, Phase 1A, Phase 1B, Phase 1B.5, and Phase 1C are complete.
-The four n8n workflow JSON files contain real 4-node pipelines.
-Isolated connector validation tests pass in CI.
-Phase 1D may start. Phase 1F remains blocked by missing MinIO bucket
-initialization until that phase is approved.
+Live audit note after the Phase 1D-fixup (audit closure):
+Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, and the
+Phase 1D-fixup are complete. The four n8n workflow JSON files contain real
+4-node pipelines, declare `authentication=headerAuth`, and read service-account
+credentials from `$env.*`. Voyage embeddings, Cohere reranking, tiktoken
+chunking, the per-project Qdrant store (`edr_*`), and the Redis-backed
+evidence cache are wired. Phase 1E may start. Phase 1F remains blocked by
+missing MinIO bucket initialization until that phase is approved.
 
 ---
 
@@ -26,6 +29,7 @@ initialization until that phase is approved.
 | **1B** | RBAC & Identity | Real authentication and authorization in Node 01 before retrieval touches data | Entra API only (free under M365) | No retrieval logic, no n8n changes |
 | **1C** | n8n Connector Workflows | 4 real n8n workflows returning normalized evidence payloads | Hetzner compute + Graph API (free under M365) | No Python node logic, no LLM calls |
 | **1D** | Embedding & Vector Retrieval | Evidence retrieval pipeline from document to ranked Evidence Objects | ~USD 5/mo (Voyage-3-large) | No LLM report generation |
+| **1D-fixup** | Audit closure | Close audit findings (correctness, security, drift) before Phase 1E | Zero | No new features |
 | **1E** | LLM Nodes | Nodes 02, 03, 04, 11, 12, 13, 14 produce real structured output | ~USD 220/mo (Anthropic majority) | No persistence changes, no publish logic |
 | **1F** | Persistence & Audit | All 4 output files written to MinIO staging; audit trail in PostgreSQL | ~USD 5/mo (MinIO storage) | No human review UI, no approval logic |
 | **1G** | Human Review Gate | Approval/reject mechanism for Node 16 → Node 17 with immutable final output | Zero new API costs | No eval logic, no load testing |
@@ -37,7 +41,7 @@ initialization until that phase is approved.
 
 **First safe phase.** All subsequent phases depend on it.
 
-1. Expand `apps/edr/config.py` to load all 36 `.env.example` keys with Pydantic field types.
+1. Expand `apps/edr/config.py` to load all `.env.example` keys with Pydantic field types.
 2. Rewrite `GET /healthz` to ping PostgreSQL, Redis, Qdrant, MinIO — return per-service status.
 3. Pin all dependencies in `pyproject.toml` to exact versions.
 4. Create `.github/workflows/ci.yml` — ruff lint, syntax check, config coverage, smoke tests.
@@ -49,7 +53,7 @@ initialization until that phase is approved.
 - Smoke tests pass in CI.
 - `GET /healthz` returns `{"postgres":"ok","redis":"ok","qdrant":"ok","minio":"ok"}`.
 - `ruff check apps scripts` exits 0.
-- All 36 `.env.example` keys have a corresponding `config.py` field.
+- All `.env.example` keys have a corresponding `config.py` field.
 - `pyproject.toml` contains `==` version pins.
 - CI pipeline runs on every push.
 
@@ -77,14 +81,16 @@ initialization until that phase is approved.
 
 **Goal:** 4 real n8n workflows that return normalized evidence payloads.
 
-Current live-audit status: all four workflow files contain real 4-node pipelines and
-are importable into n8n. Python connector wrappers validate every response against
-the `EvidenceObject` schema. Isolated mock-based integration tests pass in CI.
+Current live-audit status: all four workflow files contain real 4-node pipelines,
+declare `authentication=headerAuth`, and read service-account credentials from
+`$env.*`. The email workflow gates on the mailbox allowlist before the Graph
+call. Python connector wrappers validate every response against the
+`EvidenceObject` schema. Isolated mock-based integration tests pass in CI.
 
 1. `sharepoint_search.json` — Entra token → Graph search → excerpt + `hash_sha256`.
 2. `email_search.json` — Graph delegated → user mailbox + allowed shared mailboxes → excerpt only (≤500 chars).
-3. `owncloud_list.json` — WebDAV read → file metadata + excerpt.
-4. `odoo_read.json` — JSON-RPC read-only → `model + id + value + timestamp + hash_sha256`.
+3. `owncloud_list.json` — WebDAV read → file metadata + excerpt; credentials from `$env.OWNCLOUD_*`.
+4. `odoo_read.json` — JSON-RPC read-only → `model + id + value + timestamp + hash_sha256`; credentials from `$env.ODOO_*`.
 5. Each workflow output validates against `docs/schemas/evidence-object.schema.json`.
 6. Test each workflow in isolation via `curl` before wiring to Python.
 
@@ -92,7 +98,7 @@ the `EvidenceObject` schema. Isolated mock-based integration tests pass in CI.
 - Each workflow returns ≥1 payload validating against evidence-object schema.
 - Email workflow confirmed excerpt-only.
 - Odoo workflow returns required fields.
-- n8n workflow JSON files are no longer empty (`"nodes": []`).
+- n8n workflow JSON files declare `authentication=headerAuth`.
 
 ---
 
@@ -101,19 +107,52 @@ the `EvidenceObject` schema. Isolated mock-based integration tests pass in CI.
 **Goal:** Real evidence retrieval pipeline from document to ranked Evidence Objects.
 
 1. Wire `apps/edr/retrieval/embeddings.py` → Voyage-3-large API.
-2. Fix `apps/edr/retrieval/chunking.py` to use token count (500–800 tokens, 100–150 overlap).
+2. Wire `apps/edr/retrieval/chunking.py` to use token count (500–800 tokens, 100–150 overlap).
 3. Wire `apps/edr/retrieval/rerank.py` → Cohere Rerank 3.5 (max 50 inputs → max 10 output).
-4. Wire RBAC-aware `MemoryCache` to Redis — cache key includes `user_id` and `project_code`.
-5. Nodes 05–08: call n8n webhooks → embed results → insert into correct Qdrant collection.
-6. Node 09: real normalization — dedup by `source_uri` + `hash_sha256`, 13-level confidence scoring.
+4. Wire RBAC-aware cache to Redis — cache key includes `user_id` and `project_code`.
+5. Nodes 05–08: call n8n webhooks → embed results → insert into the correct Qdrant collection.
+6. Node 09: real normalization — dedup by `(source_uri, hash_sha256)`, source priority preservation.
 7. Node 10: real sufficiency check — count evidence per source type, flag missing Odoo for financial queries.
 
-**Validation gate before 1E:**
+**Validation gate before 1D-fixup:**
 - `embed()` returns vectors of correct dimension for Voyage-3-large.
 - `chunk_text()` verified via test: 500–800 tokens with 100–150 overlap.
 - Qdrant insert and round-trip retrieval test passes for at least one project collection.
 - RRF fusion produces a ranked list from two result sets.
 - Redis cache key confirmed to include `user_id` and `project_code`.
+
+---
+
+## Phase 1D-Fixup — Audit closure
+
+**Goal:** Close every audit finding raised against the post-1D commit before
+Phase 1E starts. No new product features.
+
+1. **C-1** Align `scripts/init_qdrant.py` with `EvidenceStore._collection_name` (one collection name per project).
+2. **C-2** Build the Odoo search domain in Node 08 via `json.dumps` (no f-string interpolation of `project_code`).
+3. **C-3** Add `authentication=headerAuth` to every n8n webhook; document the operator credential in `n8n/README.md`.
+4. **C-4** Enforce the mailbox allowlist twice — Python in Node 07 and an n8n `Enforce Mailbox Allowlist` code node.
+5. **C-6 / S-1** Move ownCloud and Odoo service-account credentials out of the webhook body and into the n8n container environment.
+6. **C-7 / I-6** Upgrade `PyJWT` to 2.10.1 and `cryptography` to 44.0.0 to clear known CVEs.
+7. **C-8** Tighten Node 14 to require `quality_gate == "passed"` and a populated `report_json` before exporting.
+8. **L-2 / R-4** Cache the `PyJWKClient` on the validator and surface the full `roles` tuple from the JWT claim.
+9. **L-5** Widen `EvidenceObject.metadata` to accept lists of scalars (so n8n's `recipients` field validates).
+10. **O-1** Replace the misleading `"status": "stubbed"` from `POST /reports/staging` with a derived status; assign UUID `request_id`s.
+11. **O-2** Caddy serves a `PUBLIC_HOSTNAME` site with TLS, HSTS, and a `:80` fallback.
+12. **O-3** Compose binds Qdrant/n8n to the internal network only; MinIO/app bind to `127.0.0.1`.
+13. **O-4** Update the evaluation runner's stale Phase 1G message to Phase 1H.
+14. **T-1** Add a CI drift-detector that fails if state docs reference a phase older than the latest implemented phase.
+15. **T-7 / S-4** Run `pip-audit` in CI (non-blocking warning only) and `ruff check`.
+
+**Validation gate before 1E:**
+- All Phase 1D-fixup regression tests in
+  `apps/edr/tests/integration/test_phase1d_fixes.py` and
+  `apps/edr/tests/integration/test_phase1d_security.py` pass in CI.
+- CI's config-coverage assertion matches the live `.env.example` key count.
+- CI's `pip-audit` step runs without producing critical advisories.
+- `docs/admin/CONTROL_PLANE_LOCK.md`, `docs/execution/CURRENT_PROJECT_STATE.md`,
+  `docs/execution/IMPLEMENTATION_PHASES.md`, `docs/admin/FEATURE_MATRIX.md`,
+  and `README.md` all describe the post-1D-fixup state.
 
 ---
 
@@ -238,7 +277,7 @@ Source of truth: `docs/design/UI_CONTRACT_v1.md` Section 10.
 
 **Goal:** Implement all six user-facing screens with live backend integration.
 
-**Backend dependency:** Phase 1F complete (real reports, evidence packs, MinIO persistence, audit log, cost data).  
+**Backend dependency:** Phase 1F complete (real reports, evidence packs, MinIO persistence, audit log, cost data).
 **Additional dependency:** Phase 1G complete for approval/reject actions.
 
 **Scope:**
@@ -366,16 +405,16 @@ Source of truth: `docs/design/UI_CONTRACT_v1.md` Section 10.
 ## Complete Phase Dependency Graph
 
 ```
-1A → 1B → 1C → 1D → 1E → 1F → 1G → 1H
-                ↓    ↓    ↓    ↓
-                └────┴────┴────┘ → 1I (static scaffolds)
-                                   ↓
-                                  2A (user workspace)
-                                   ↓
-                                  2B (admin control plane)
-                                   ↓
-                                  2C (UI hardening)
+1A → 1B → 1C → 1D → 1D-fixup → 1E → 1F → 1G → 1H
+                                ↓    ↓    ↓    ↓
+                                └────┴────┴────┘ → 1I (static scaffolds)
+                                                   ↓
+                                                  2A (user workspace)
+                                                   ↓
+                                                  2B (admin control plane)
+                                                   ↓
+                                                  2C (UI hardening)
 ```
 
-**Critical path:** 1A → 1B → 1C → 1D → 1E → 1F → 2A → 2B → 2C → Production  
+**Critical path:** 1A → 1B → 1C → 1D → 1D-fixup → 1E → 1F → 2A → 2B → 2C → Production
 **Parallel track:** 1I can start after 1B and run in parallel through 1H, but must not wire to APIs until 1F is complete.

@@ -1,18 +1,22 @@
 # DecisionCenter — Current Project State
 
-> **Audited commit:** `1c5d62806b2339fa972b7a9c8ea884f79971ffe2`
-> **Audit date:** 2026-05-07
-> **Audit scope:** Post-Phase 1C documentation alignment. No Phase 1D implementation.
+> **Audited commit:** post `c9ed521` Phase 1D + Phase 1D-fixup
+> **Audit date:** 2026-05-09
+> **Audit scope:** Phase 1D retrieval pipeline plus the closure of all
+> Phase 1D-fixup items (audit findings C-1..C-8, S-1, L-2, L-5, O-1..O-4).
 
 ---
 
 ## Current Project Stage
 
-DecisionCenter has completed Phase 1C. The four n8n connector workflows are implemented,
-Python-side connector validation is wired, and isolated integration tests pass in CI.
-The product is not yet an evidence-backed report generator because retrieval, embedding,
-LLM report generation, persistence, approval, evaluation hardening, and UI remain
-unimplemented.
+DecisionCenter has completed Phase 1D and applied the post-1D fixup. The four
+n8n connector workflows are real, header-authenticated, and read service-account
+credentials from the n8n container environment. Voyage embeddings, Cohere
+reranking, tiktoken-based chunking, the per-project Qdrant store, and the
+Redis-backed evidence cache are wired. RBAC is enforced in Node 01 and the
+mailbox allowlist is enforced twice in the Node 07 / email path. The product
+is not yet an evidence-backed report generator because Phase 1E (LLM nodes),
+Phase 1F (persistence), and Phase 1G (human review) are still ahead.
 
 ---
 
@@ -21,10 +25,12 @@ unimplemented.
 | Phase | Status | Evidence |
 |---|---|---|
 | Phase 0 — Control and documentation lock | Complete | Locked spec, control-plane docs, policies, contracts, schemas, operations docs, and phase plan exist under `docs/`. |
-| Phase 1A — Infrastructure Foundation | Complete | `.env.example` has 36 keys; `apps/edr/config.py` maps 36 settings; `.github/workflows/ci.yml` runs ruff, compileall, config coverage, smoke tests, and integration tests; `pyproject.toml` uses pinned dependencies; `docker-compose.yml` defines app, PostgreSQL, Redis, Qdrant, MinIO, n8n, and Caddy; `scripts/init_qdrant.py` exists. |
-| Phase 1B — RBAC and Identity | Complete | `apps/edr/auth/validator.py` validates Entra JWTs when configured; `apps/edr/graph/node_01_auth.py` enforces canonical roles, valid `project_code`, and project source mapping; `apps/edr/rbac/roles.py` defines 9 roles; `apps/edr/rbac/project_mapping.py` loads `docs/config/project_source_mapping.json`; `apps/edr/tests/integration/test_rbac.py` covers authorized, denied, unknown project, invalid role, and all-role cases. |
+| Phase 1A — Infrastructure Foundation | Complete | `.env.example` has 39 keys; `apps/edr/config.py` maps 39 settings; `.github/workflows/ci.yml` runs ruff, compileall, config coverage, smoke tests, integration tests, and `pip-audit`; `pyproject.toml` uses pinned dependencies (PyJWT 2.10.1, cryptography 44.0.0); `docker-compose.yml` defines app, PostgreSQL, Redis, Qdrant, MinIO, n8n, Caddy with healthchecks; internal services bind only to localhost or the compose network; `scripts/init_qdrant.py` agrees with the runtime collection naming. |
+| Phase 1B — RBAC and Identity | Complete | `apps/edr/auth/validator.py` validates Entra JWTs with a cached `PyJWKClient` and surfaces all roles; `apps/edr/graph/node_01_auth.py` enforces canonical roles and known `project_code`; `apps/edr/rbac/roles.py` defines 9 roles; `apps/edr/rbac/project_mapping.py` loads `docs/config/project_source_mapping.json`; `apps/edr/tests/integration/test_rbac.py` covers authorized, denied, unknown project, invalid role, and all-role cases. |
 | Phase 1B.5 — Async Connector Runtime Readiness | Complete | `apps/edr/graph/runner.py` is async and awaits each node; every `apps/edr/graph/node_00_begin.py` through `node_17_publish.py` exposes `async def run`; smoke and RBAC tests use `asyncio.run()`. |
-| Phase 1C — n8n Connector Workflows | Complete | All four `n8n/*.json` workflows contain real 4-node pipelines (Webhook → HTTP Request → Code normalization → Respond to Webhook). `apps/edr/connectors/validation.py` enforces `EvidenceObject` schema. All four connector wrappers validate responses. `apps/edr/tests/integration/test_connectors.py` has 10 isolated mock-based tests passing in CI. |
+| Phase 1C — n8n Connector Workflows | Complete | All four `n8n/*.json` workflows contain real 4-node pipelines, declare `authentication=headerAuth`, and read service-account credentials from `$env.*`. The email workflow gates on the mailbox allowlist before any Graph call. `apps/edr/connectors/validation.py` enforces `EvidenceObject` schema. `apps/edr/tests/integration/test_connectors.py` covers all four sources with mocked responses. |
+| Phase 1D — Embedding & Vector Retrieval | Complete | `apps/edr/retrieval/embeddings.py` calls Voyage-3-large; `apps/edr/retrieval/rerank.py` calls Cohere Rerank 3.5; `apps/edr/retrieval/chunking.py` uses tiktoken (500–800 tokens, 100–150 overlap, char fallback); `apps/edr/retrieval/qdrant_store.py` manages per-project collections with `edr_*` naming; `apps/edr/retrieval/cache.py` is Redis-backed with in-memory fallback; reciprocal rank fusion in `hybrid_search.py`; nodes 05–08 run real connector calls and embed/insert results into Qdrant; node 09 dedups by `(source_uri, hash_sha256)` with priority preservation; node 10 runs the sufficiency check. |
+| Phase 1D-Fixup — Audit closure | Complete | All audit findings (C-1..C-8, S-1, L-2, L-5, O-1..O-4) closed; see `docs/admin/CONTROL_PLANE_LOCK.md` for the table. Regression tests in `apps/edr/tests/integration/test_phase1d_fixes.py` and `apps/edr/tests/integration/test_phase1d_security.py` lock the invariants. |
 
 ---
 
@@ -32,10 +38,10 @@ unimplemented.
 
 | Area | Current state | Remaining gap |
 |---|---|---|
-| Graph workflow shell | All 18 nodes exist and are visited by smoke tests. | Nodes 02–17 are mostly stubs. Nodes 05–08 return `*_status = "stubbed"`; Nodes 12, 13, 14, 15, 16 are stubbed. |
-| Phase 1D retrieval helpers | Chunking, memory cache, and reciprocal rank fusion exist; embedding and rerank classes exist. | `embeddings.py` and `rerank.py` raise `NotImplementedError`; chunking is character-based, not token-based; no Redis cache wiring or Qdrant round trip. |
-| Phase 1E report/export shell | Node 14 can export a stub report through exporter helpers. | No LLM calls, no real JSON report generation, no deterministic claim checker over real evidence, and no Langfuse traces. |
-| Phase 1H evaluation shell | Evaluation docs, metrics helpers, promptfoo placeholder, and one JSONL example exist. | Evaluation runner is stubbed until Phase 1G/1H; promptfoo has empty providers/tests; golden set is far below the 50-case go-live target. |
+| Graph workflow shell | All 18 nodes exist; nodes 00–10 are functional. | Nodes 11–17 are stubs awaiting Phase 1E (11–14) and Phase 1F–1G (15–17). |
+| Phase 1E LLM nodes | Prompt templates and exporters exist; node 14 exports only when the quality gate is `passed`. | No LLM calls, no real JSON report, no deterministic claim checker, no Langfuse traces. |
+| Phase 1F persistence | MinIO container runs; `MINIO_BUCKET=decision-center` is configured. | No bucket initialization script; `node_15_save_audit.py` returns `audit_status = "stubbed"`; `GET /reports/staging/{id}/download/{fmt}` returns 404 by design. |
+| Phase 1H evaluation | One JSONL example, metrics docs, and a promptfoo placeholder. | Evaluation runner prints a stubbed message; promptfoo has empty providers/tests; golden set far below 50 cases. |
 
 ---
 
@@ -43,10 +49,10 @@ unimplemented.
 
 | Phase | Evidence |
 |---|---|
-| Phase 1D — Embedding & Vector Retrieval | Nodes 05–08 return `"stubbed"`. `embeddings.py` and `rerank.py` raise `NotImplementedError`. No Redis-backed cache. No Qdrant round-trip test. |
-| Phase 1F — Persistence and Audit | `node_15_save_audit.py` returns `audit_status = "stubbed"`. `GET /reports/staging/{request_id}/download/{fmt}` does not exist. No MinIO bucket initialization script. |
-| Phase 1G — Human Review Gate | `node_16_review.py` returns pending only; `node_17_publish.py` blocks until approval; no approve/reject API endpoints exist in `apps/edr/app.py`. |
-| Phase 1I, 2A, 2B, 2C — UI phases | No `frontend/` directory exists and no `make test:ui` target exists. |
+| Phase 1E — LLM Nodes | Nodes 02, 03, 04, 11, 12, 13 have no LLM calls. Node 14 exports only when `quality_gate == "passed"`. |
+| Phase 1F — Persistence and Audit | `node_15_save_audit.py` returns `audit_status = "stubbed"`. `GET /reports/staging/{request_id}/download/{fmt}` returns 404 deliberately until Phase 1F. No MinIO bucket initialization script. |
+| Phase 1G — Human Review Gate | `node_16_review.py` returns pending only; `node_17_publish.py` blocks until approval; no approve/reject API endpoints. |
+| Phase 1I, 2A, 2B, 2C — UI phases | No `frontend/` directory; no `make test:ui` target. |
 
 ---
 
@@ -58,43 +64,49 @@ unimplemented.
 |---|---|
 | B6 — Async/sync connector bridge | `run_workflow()` and all 18 graph nodes are async. |
 | Phase 1B validation gate | RBAC tests cover authorized user, unauthorized roles, unknown project, missing/invalid role, populated allowed mailboxes, populated Odoo IDs, and 9-role enumeration. |
-| Empty n8n workflows | All four `n8n/*.json` files contain real node definitions with 4 nodes each. Isolated connector validation tests pass in CI. |
+| Empty n8n workflows | All four `n8n/*.json` files contain real node definitions. |
+| n8n unauthenticated webhooks | All four workflows declare `authentication=headerAuth`. |
+| Plaintext service-account credentials in webhook body | ownCloud and Odoo workflows read credentials from `$env.*`. |
+| Qdrant naming mismatch between init and runtime | Init script delegates to `EvidenceStore._collection_name`. |
+| Odoo domain f-string injection vector | Node 08 builds the domain via `json.dumps`. |
+| Quality gate accepted `needs_review` for export | Node 14 requires `quality_gate == "passed"` and a populated `report_json`. |
+| PyJWT and cryptography CVEs | Upgraded to PyJWT 2.10.1 and cryptography 44.0.0. |
 
 ### Remaining
 
 | Blocker | Blocks | Evidence |
 |---|---|---|
-| Missing MinIO bucket initialization | Phase 1F | `MINIO_BUCKET=decision-center` is configured, but no bucket init script or startup hook exists. |
-| Stubbed evaluation runner message | Phase 1H polish | `apps/edr/evaluation/run.py` still says evaluation is stubbed until Phase 1G, while the plan places evaluation in Phase 1H. |
+| Missing MinIO bucket initialization | Phase 1F | `MINIO_BUCKET=decision-center` is configured but no init script or startup hook exists. |
+| Stubbed evaluation runner | Phase 1H polish | `apps/edr/evaluation/run.py` prints a stubbed message; runner has no behaviour. |
 
 ---
 
 ## Safe Next Phase
 
-Phase 1D may start.
+Phase 1E may start.
 
-Allowed Phase 1D work is limited to the retrieval pipeline and vector store wiring:
+Allowed Phase 1E work is limited to:
 
-- Wire `apps/edr/retrieval/embeddings.py` → Voyage-3-large API
-- Fix `apps/edr/retrieval/chunking.py` to token-based 500–800 tokens with 100–150 overlap
-- Wire `apps/edr/retrieval/rerank.py` → Cohere Rerank 3.5
-- Wire RBAC-aware `MemoryCache` to Redis
-- Real Node 05–08: call n8n webhooks → embed results → insert into Qdrant
-- Node 09: real normalization and dedup
-- Node 10: real sufficiency check
+- Node 02/03/04: Haiku 4.5 calls for intent classification, scope extraction, retrieval planning.
+- Node 11: self-correct loop (max 3 iterations) — re-query targeted sources on gaps.
+- Node 12: Sonnet 4.6 structured JSON output bound to `evidence_id`s.
+- Node 13: deterministic claim checker over the evidence pack.
+- Node 14: end-to-end export verified against the canonical JSON.
+- Wire Langfuse tracing to every LLM call.
 
-## Forbidden Work In Phase 1D
+## Forbidden Work In Phase 1E
 
-Do not add LLM calls, report generation, persistence, audit writes, approval/reject APIs,
-publish logic, frontend/UI work, or unrelated product behavior. Do not commit secrets into
+Do not add MinIO persistence, audit writes, approval/reject APIs, publish logic,
+frontend/UI work, or unrelated product behavior. Do not commit secrets into
 workflows, docs, code, logs, or tests.
 
 ---
 
 ## README And Truth Doc Freshness
 
-This audit refreshed `CURRENT_PROJECT_STATE.md` and `IMPLEMENTATION_PHASES.md` to reflect
-the live repo state at commit `1c5d628`. Phase 1C is now recorded as complete.
+This audit refreshed `CURRENT_PROJECT_STATE.md`, `IMPLEMENTATION_PHASES.md`,
+`FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`, and `README.md` to reflect the
+live repo state after Phase 1D and the Phase 1D-fixup.
 
 ---
 
@@ -102,8 +114,8 @@ the live repo state at commit `1c5d628`. Phase 1C is now recorded as complete.
 
 | Rating | Score | Reason |
 |---|---:|---|
-| Architecture quality | 8/10 | Clear phase plan, fixed 18-node graph, separated docs/contracts/policies, and explicit service boundaries. |
-| Code foundation | 7/10 | Good Python package shape, pinned dependencies, CI, smoke/RBAC/connector tests, and async runtime; many business nodes remain stubs. |
-| Pre-1D readiness | 9/10 | Phase 1D prerequisites are satisfied; connector workflows and validation exist. B10 blocker is for Phase 1F, not 1D. |
-| Product readiness | 2/10 | No embeddings, no vector retrieval, no LLM, no persistence, no approval APIs, and no UI. |
-| Overall maturity | 4/10 | Strong controlled foundation, but still early in functional implementation. |
+| Architecture quality | 8/10 | Clear phase plan, fixed 18-node graph, separated docs/contracts/policies, explicit service boundaries. |
+| Code foundation | 8/10 | Pinned dependencies (CVE-current), CI with config coverage + integration tests + drift detector, async runtime, retrieval pipeline working. |
+| Pre-1E readiness | 9/10 | Retrieval pipeline complete; n8n workflows authenticated; secrets out of webhook bodies; mailbox allowlist enforced twice. |
+| Product readiness | 3/10 | Real retrieval lands, but no LLM analysis, no persistence, no approval, and no UI. |
+| Overall maturity | 5/10 | Strong controlled foundation; first half of functional implementation done; second half ahead. |

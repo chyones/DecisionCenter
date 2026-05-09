@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase1c_ready-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase1d_complete-blue.svg)](#)
 
 ---
 
@@ -91,18 +91,19 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand n8n workflow status | [n8n/README.md](n8n/README.md) |
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
-Phase 0, Phase 1A, Phase 1B, and Phase 1B.5 are complete. Treat the files above as the
-current authority before changing code, workflows, schemas, or operational assumptions.
+Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, and the
+Phase 1D-fixup are complete. Treat the files above as the current authority
+before changing code, workflows, schemas, or operational assumptions.
 
 ## Repository map
 
 | Path | Purpose |
 |---|---|
-| `apps/edr/` | FastAPI app, workflow skeleton, schemas, retrieval helpers, exporters, prompts, and tests |
+| `apps/edr/` | FastAPI app, workflow nodes, schemas, retrieval pipeline, exporters, prompts, and tests |
 | `docs/` | Locked workflow spec, control docs, execution plans, policies, contracts, schemas, operations, and evaluation docs |
-| `n8n/` | Placeholder workflow JSON files; real connector workflows are Phase 1C |
+| `n8n/` | Real Phase 1C connector workflows (Header Auth, `$env`-sourced credentials) |
 | `scripts/` | Infrastructure/operations utilities, currently Qdrant collection initialization |
-| `.github/workflows/` | CI validation for lint, syntax, config coverage, and smoke tests |
+| `.github/workflows/` | CI validation for lint, syntax, config coverage, smoke tests, integration tests, and pip-audit |
 | Root config files | Docker Compose, Caddy, Python packaging, Makefile, env template, and ignore rules |
 
 ## Documentation
@@ -157,7 +158,7 @@ Prerequisites: a Hetzner CCX23 server (or equivalent), a domain pointing to it, 
 git clone https://github.com/chyones/DecisionCenter.git
 cd DecisionCenter
 cp .env.example .env
-# Edit .env with your credentials and domain
+# Edit .env with your credentials and PUBLIC_HOSTNAME
 make up
 make smoke
 ```
@@ -174,9 +175,10 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1A — Infrastructure Foundation | Complete |
 | 1B — RBAC and Identity | Complete |
 | 1B.5 — Async Connector Runtime Readiness | Complete |
-| 1C — n8n Connector Workflows | Safe next phase; workflow files are placeholders only |
-| 1D — Embedding and Vector Retrieval | Partial skeleton only |
-| 1E — LLM Nodes | Partial skeleton/export stubs only |
+| 1C — n8n Connector Workflows | Complete (Header Auth + `$env` credentials) |
+| 1D — Embedding and Vector Retrieval | Complete |
+| 1D-fixup — Audit closure | Complete |
+| 1E — LLM Nodes | Safe next phase |
 | 1F — Persistence and Audit | Not started; MinIO bucket initialization blocker remains |
 | 1G — Human Review Gate | Not started |
 | 1H — Evaluation and Hardening | Not started |
