@@ -9,10 +9,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md .env.example ./
 COPY apps ./apps
-COPY docs/config ./docs/config
+COPY docs ./docs
 COPY scripts ./scripts
+COPY n8n ./n8n
+COPY .github ./.github
 
 RUN pip install --no-cache-dir -e ".[dev]"
 

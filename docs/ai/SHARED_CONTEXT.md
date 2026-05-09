@@ -3,16 +3,14 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit: `368f086a665c9403dd27713fbfa17970863c2b9d`
-- Current status: `READY_FOR_PHASE_1E_NOT_LIVE`
+- Current verified commit: `dd7e5b832b18be55e675f2424cc7a7863b9f6b58`
+- Current status: `PHASE_1E_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 1D-fixup
-- Current allowed next phase: Phase 1E only after explicit approval
-- Latest report: `docs/execution/PHASE_1D_FIXUP_REPORT.md`
+- Last completed phase: Phase 1E
+- Current allowed next phase: Phase 1F (requires explicit user approval)
+- Latest report: `docs/execution/PHASE_1E_REPORT.md`
 
-This repository is ready for Phase 1E planning or implementation only after
-the user explicitly approves Phase 1E in the current session. Until then,
-agents may perform verification, documentation, and coordination work only.
+Phase 1E is complete. LLM nodes (02, 03, 04, 11, 12, 13) are implemented with cost guardrails, prompt-injection protection, and Langfuse tracing. Export remains blocked unless quality_gate == "passed".
 
 ## Required Validation Commands
 
@@ -33,13 +31,12 @@ the user requests the full gate.
 
 ## Current No-Go Rules
 
-- Do not start Phase 1E without explicit user approval.
-- Do not implement LLM nodes, prompt execution, Langfuse tracing, persistence,
-  approval flows, publish logic, or UI work as part of context maintenance.
+- Do not start Phase 1F without explicit user approval.
+- Do not claim Phase 1E is complete until the new commit is pushed and CI passes.
+- Do not implement persistence changes, publish logic, approval flows, or UI work as part of Phase 1E.
 - Do not deploy.
 - Do not claim production is live.
-- Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or
-  generated caches.
+- Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or generated caches.
 - Do not rely on previous chat memory over current repo files.
 - Do not claim a check passed unless it was run and produced passing output.
 
@@ -87,6 +84,7 @@ Protected source-of-truth files:
 - `docs/execution/IMPLEMENTATION_PHASES.md`
 - `docs/execution/CURRENT_PROJECT_STATE.md`
 - `docs/execution/PHASE_1D_FIXUP_REPORT.md`
+- `docs/execution/PHASE_1E_REPORT.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 - `docs/admin/FEATURE_MATRIX.md`
 - `docs/ai/SHARED_CONTEXT.md`
@@ -101,7 +99,7 @@ Ignored or local-only files must not be committed:
 - `.venv/`
 - `.pytest_cache/`
 - `.ruff_cache/`
-- `__pycache__/`
+- `__pycache__/`'
 - `staging/`
 - `final/`
 - `logs/`
@@ -115,5 +113,5 @@ Ignored or local-only files must not be committed:
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 1E, update the shared context
-  and handoff as part of that Phase 1E session.
+- If a future user explicitly authorizes Phase 1F, update the shared context
+  and handoff as part of that Phase 1F session.

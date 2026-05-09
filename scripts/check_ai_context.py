@@ -12,6 +12,8 @@ ALLOWED_STATUSES = {
     "READY_FOR_PHASE_1E_NOT_LIVE",
     "READY_FOR_PHASE_1E_AND_LIVE",
     "NOT_READY_FOR_PHASE_1E",
+    "PHASE_1E_IN_PROGRESS_NOT_LIVE",
+    "PHASE_1E_COMPLETE_NOT_LIVE",
 }
 
 REQUIRED_FILES = [
@@ -98,10 +100,24 @@ def main() -> int:
             allowed = ", ".join(sorted(ALLOWED_STATUSES))
             failures.append(f"status must be one of: {allowed}")
 
-        if state.get("phase_1e_may_start") is not False:
-            failures.append(
-                "phase_1e_may_start must remain false until explicit user authorization"
-            )
+        phase_1e_may_start = state.get("phase_1e_may_start")
+        if status == "PHASE_1E_IN_PROGRESS_NOT_LIVE":
+            if phase_1e_may_start is not True:
+                failures.append(
+                    "phase_1e_may_start must be true when status is PHASE_1E_IN_PROGRESS_NOT_LIVE"
+                )
+        elif status == "PHASE_1E_COMPLETE_NOT_LIVE":
+            # Phase 1E is complete; phase_1f authorization gate applies
+            phase_1f_may_start = state.get("phase_1f_may_start")
+            if phase_1f_may_start is not False:
+                failures.append(
+                    "phase_1f_may_start must be false until explicit user authorization for Phase 1F"
+                )
+        else:
+            if phase_1e_may_start is not False:
+                failures.append(
+                    "phase_1e_may_start must remain false until explicit user authorization"
+                )
 
     if failures:
         for failure in failures:

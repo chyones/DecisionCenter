@@ -1,13 +1,13 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "368f086a665c9403dd27713fbfa17970863c2b9d",
-  "status": "READY_FOR_PHASE_1E_NOT_LIVE",
+  "current_commit": "dd7e5b832b18be55e675f2424cc7a7863b9f6b58",
+  "status": "PHASE_1E_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
-  "last_completed_phase": "Phase 1D-fixup",
-  "next_allowed_phase": "Phase 1E",
-  "phase_1e_may_start": false,
-  "requires_explicit_user_approval_for_phase_1e": true,
-  "latest_report": "docs/execution/PHASE_1D_FIXUP_REPORT.md",
+  "last_completed_phase": "Phase 1E",
+  "next_allowed_phase": "Phase 1F",
+  "phase_1f_may_start": false,
+  "requires_explicit_user_approval_for_phase_1f": true,
+  "latest_report": "docs/execution/PHASE_1E_REPORT.md",
   "must_not_deploy": true,
   "must_not_commit_env": true,
   "required_validation": [
@@ -15,6 +15,7 @@
     "make test",
     "ruff check .",
     "python3 -m compileall apps scripts",
-    "python3 scripts/check_doc_drift.py"
+    "python3 scripts/check_doc_drift.py",
+    "python3 scripts/check_ai_context.py"
   ]
 }

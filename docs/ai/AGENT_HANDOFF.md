@@ -2,33 +2,42 @@
 
 ## Last Agent / Session Summary
 
-Created shared AI operating context before Phase 1E. This session added
-repo-level coordination rules, human-readable shared context, a machine-readable
-agent state file, and a checker to keep the context present and valid.
+Started Phase 1E implementation with explicit user approval. Implemented LLM nodes
+02, 03, 04, 11, 12, 13 with deterministic fallback mode for CI. Added cost
+guardrails, prompt-injection protection, and Langfuse tracing hooks. Quality gate
+now fails unsupported claims and empty reports. Export remains blocked unless
+quality_gate == "passed".
 
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit: `368f086a665c9403dd27713fbfa17970863c2b9d`
-- Status: `READY_FOR_PHASE_1E_NOT_LIVE`
+- Current verified commit: `dd7e5b832b18be55e675f2424cc7a7863b9f6b58`
+- Status: `PHASE_1E_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 
 ## What Was Completed
 
-- Phase 1D-fixup was previously completed and verified.
-- `docs/execution/PHASE_1D_FIXUP_REPORT.md` exists and records
-  `READY_FOR_PHASE_1E_NOT_LIVE`.
-- Shared AI context files were prepared for all future coding agents.
-- A context checker was added at `scripts/check_ai_context.py`.
-- CI was prepared to run the AI context checker.
+- Phase 1E LLM node implementations (all validated and committed):
+  - Node 02: Intent classifier (light tier, fallback heuristic)
+  - Node 03: Scope resolver (light tier, merges with API inputs)
+  - Node 04: Retrieval planner (light tier, CAD disabled by default)
+  - Node 11: Self-correction loop (max 3, targeted re-retrieval)
+  - Node 12: Draft JSON report (heavy tier, deterministic fallback builder)
+  - Node 13: Quality gate (deterministic claim/financial/source validation)
+- Cost guardrails: per-request token caps, daily cost cap check before every LLM call
+- Prompt-injection protection: regex-based sanitization with `[BLOCKED]` replacement
+- Langfuse tracing wired to every LLM call (token counts, latency, cost, node name)
+- Report export blocked unless quality_gate == "passed" (Node 14 unchanged from 1D-fixup)
+- Integration tests: 22 new tests covering injection, cost, nodes 02-04, 11-14, e2e workflow
+- AI context checker updated to allow PHASE_1E_IN_PROGRESS_NOT_LIVE status
+- Shared context and handoff files updated
 
 ## What Was Not Done
 
-- Phase 1E was not started.
-- No LLM node implementation was changed.
-- No application behavior was changed.
-- No production deployment was performed.
-- No secrets or `.env` files were committed.
+- Phase 1F (persistence and audit) not started.
+- No production deployment performed.
+- No secrets or `.env` files committed.
+- GitHub Actions CI status for the new commit is pending verification.
 
 ## Must Read Before Next Work
 
@@ -36,43 +45,39 @@ agent state file, and a checker to keep the context present and valid.
 2. `docs/ai/SHARED_CONTEXT.md`
 3. `docs/ai/AGENT_HANDOFF.md`
 4. `docs/ai/agent-state.json`
-5. `docs/execution/PHASE_1D_FIXUP_REPORT.md`
+5. `docs/execution/PHASE_1E_REPORT.md`
 6. `docs/execution/IMPLEMENTATION_PHASES.md`
 7. `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 
 ## Next Allowed Task
 
-Phase 1E may be started only after explicit user approval in the current
-session. Until that approval exists, the allowed work is verification,
-documentation, context maintenance, and other non-implementation cleanup that
-does not change application behavior.
+Phase 1F planning or implementation only after explicit user approval.
+Do not start Phase 1F without explicit user approval.
 
 ## Blockers
 
 - Production is not live.
-- Production still requires operator SSH, `git pull origin main`, `make up`,
-  and `make smoke`.
+- Production still requires operator SSH, `git pull origin main`, `make up`, `make smoke`.
 - Server `.env` must provide required production values before `make up`.
-- n8n must have the Webhook Header Auth credential:
+- n8n must have the Webhook Header Auth credential configured as
   `Authorization: Bearer <N8N_WEBHOOK_TOKEN>`.
+- Docker image must be rebuilt to include new `anthropic` dependency before
+  containerized tests can pass.
 
 ## Tests Last Executed
 
-Latest required validation executed for this context change:
+Latest required validation executed for this Phase 1E session:
 
 - `git status --short --branch`: clean before editing; context files pending during authoring.
 - `python3 scripts/check_ai_context.py`: clean.
 - `python3 scripts/check_doc_drift.py`: clean.
 - `ruff check .`: clean.
 - `python3 -m compileall apps scripts`: clean.
-- `make smoke`: 2 passed.
-- `make test`: 62 passed.
+- Local pytest (84 passed): 62 existing + 22 new Phase 1E tests.
 
-Local Docker validation used an ignored `.env` copied from `.env.example` and a
-temporary Compose override that binds DecisionCenter MinIO to localhost ports
-`9002` and `9003`, because `vt360_minio` already owns `9000` and `9001` on this
-shared host.
+Docker validation (`make smoke`, `make test`) is pending because the app image
+must be rebuilt with `anthropic==0.42.0`.
 
 ## Final Status
 
-`READY_FOR_PHASE_1E_NOT_LIVE`
+`PHASE_1E_IN_PROGRESS_NOT_LIVE`
