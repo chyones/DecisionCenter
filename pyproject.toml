@@ -29,6 +29,8 @@ dependencies = [
   "tiktoken==0.7.0",
   # Phase 1E — LLM Nodes
   "anthropic==0.42.0",
+  # Phase 1F — Persistence & Audit
+  "asyncpg==0.29.0",
 ]
 
 [project.optional-dependencies]

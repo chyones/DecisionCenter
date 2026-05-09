@@ -3,9 +3,9 @@
 ## Scope
 
 - Branch: `main`
-- Starting commit: `dd7e5b832b18be55e675f2424cc7a7863b9f6b58`
+- Ending commit: `1c531971cbc9fa5025f781dfe70c6ee8ec1f5085`
 - Production status: `NOT_LIVE`
-- Final readiness decision: `PHASE_1E_IN_PROGRESS_NOT_LIVE`
+- Final readiness decision: `PHASE_1E_COMPLETE_NOT_LIVE`
 
 This report verifies Phase 1E implementation according to the locked spec.
 It does not deploy the service and does not start Phase 1F.
@@ -85,8 +85,7 @@ Phase 1E changed the following tracked files:
 - `python3 scripts/check_doc_drift.py`: clean
 - `python3 scripts/check_ai_context.py`: clean
 
-Docker validation (`make smoke`, `make test`) is pending because the app image
-must be rebuilt with the new `anthropic` dependency.
+Docker validation (`make smoke`, `make test`) passed after image rebuild with `anthropic==0.42.0`.
 
 ## Test Results
 
@@ -130,6 +129,6 @@ must be rebuilt with the new `anthropic` dependency.
 
 ## Readiness
 
-`PHASE_1E_IN_PROGRESS_NOT_LIVE`
+`PHASE_1E_COMPLETE_NOT_LIVE`
 
-All local validation passes. Containerized validation requires a Docker rebuild.
+All validation passes, including containerized tests.

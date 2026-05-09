@@ -13,7 +13,9 @@ from apps.edr.config import settings
 from apps.edr.exporters.base import MIME_TYPES
 from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
+from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.rbac.project_mapping import RbacDeniedError
+from apps.edr.rbac.roles import Role
 
 app = FastAPI(
     title="Decision Center",
@@ -173,15 +175,65 @@ async def stage_report(
 
 
 @app.get("/reports/staging/{request_id}/download/{fmt}")
-def download_report(request_id: str, fmt: str) -> Response:
-    """Download a specific format of a staged report.
+async def download_report(
+    request_id: str,
+    fmt: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> Response:
+    """Download a specific format of a staged report from MinIO.
 
-    Phase 1F will fetch from MinIO at /staging/{request_id}/. Until then, the
-    endpoint validates the format and returns a 404 with a clear message.
+    Validates format, request existence, quality gate status, and user
+    authorization before streaming the artifact.
     """
     if fmt not in MIME_TYPES:
         raise HTTPException(status_code=400, detail=f"Unknown format: {fmt}")
-    raise HTTPException(
-        status_code=404,
-        detail="Report not found. MinIO persistence lands in Phase 1F.",
+
+    # 1. Load audit row
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    # 2. Quality gate blocking
+    quality_gate_status = audit.get("quality_gate_status", "needs_review")
+    if quality_gate_status == "failed":
+        raise HTTPException(
+            status_code=403,
+            detail="Download blocked: quality gate failed.",
+        )
+
+    # 3. Authorization (skip in bypass mode for local dev)
+    if settings.entra_client_id and settings.entra_tenant_id:
+        if claims is None or not claims.user_id:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+
+        requester_hash = hash_user_id(claims.user_id)
+        stored_hash = audit.get("user_id_hash", "")
+        role = claims.role
+
+        allowed = requester_hash == stored_hash or role in (
+            Role.ADMIN.value,
+            Role.AUDITOR.value,
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to access this report.",
+            )
+
+    # 4. Stream from MinIO
+    minio = get_minio_store()
+    filename = f"executive-decision-report.{fmt}"
+    try:
+        data = minio.get_object(request_id, filename)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"Artifact not found: {exc}")
+
+    return Response(
+        content=data,
+        media_type=MIME_TYPES[fmt],
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )

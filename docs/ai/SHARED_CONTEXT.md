@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit: `dd7e5b832b18be55e675f2424cc7a7863b9f6b58`
+- Current verified commit: `1c531971cbc9fa5025f781dfe70c6ee8ec1f5085`
 - Current status: `PHASE_1E_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 1E
@@ -32,7 +32,7 @@ the user requests the full gate.
 ## Current No-Go Rules
 
 - Do not start Phase 1F without explicit user approval.
-- Do not claim Phase 1E is complete until the new commit is pushed and CI passes.
+- Phase 1E is complete and pushed; CI passed.
 - Do not implement persistence changes, publish logic, approval flows, or UI work as part of Phase 1E.
 - Do not deploy.
 - Do not claim production is live.

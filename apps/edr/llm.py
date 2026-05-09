@@ -125,6 +125,7 @@ class _CostTracker:
     def __init__(self) -> None:
         self._daily_cost: float = 0.0
         self._last_reset: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        self._token_usage: dict[str, dict[str, int]] = {}
 
     def _check_reset(self) -> None:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -145,6 +146,15 @@ class _CostTracker:
     def record_cost(self, cost: float) -> None:
         self._check_reset()
         self._daily_cost += cost
+
+    def record_tokens(self, request_id: str, input_tokens: int, output_tokens: int) -> None:
+        if request_id not in self._token_usage:
+            self._token_usage[request_id] = {"input": 0, "output": 0}
+        self._token_usage[request_id]["input"] += input_tokens
+        self._token_usage[request_id]["output"] += output_tokens
+
+    def get_tokens(self, request_id: str) -> dict[str, int]:
+        return dict(self._token_usage.get(request_id, {"input": 0, "output": 0}))
 
     @property
     def daily_cost(self) -> float:
@@ -259,6 +269,7 @@ async def call_llm(
             model=model,
             expect_json=expect_json,
             node_name=node_name,
+            request_id=request_id,
         )
 
     # 5. Real Anthropic call
@@ -276,8 +287,9 @@ async def call_llm(
     output_tokens = response.usage.output_tokens if response.usage else 0
     cost = _estimate_cost(model, input_tokens, output_tokens)
 
-    # Record actual cost
+    # Record actual cost and tokens
     _cost_tracker.record_cost(cost)
+    _cost_tracker.record_tokens(request_id, input_tokens, output_tokens)
 
     content = response.content[0].text if response.content else ""
 
@@ -311,6 +323,7 @@ def _fallback_result(
     model: str,
     expect_json: bool,
     node_name: str,
+    request_id: str,
 ) -> LLMResult:
     """Deterministic fallback when no API key is available.
 
@@ -321,6 +334,7 @@ def _fallback_result(
     output_tokens = _estimate_tokens_from_text(content)
     cost = _estimate_cost(model, input_tokens, output_tokens)
     _cost_tracker.record_cost(cost)
+    _cost_tracker.record_tokens(request_id, input_tokens, output_tokens)
     return LLMResult(
         content=content,
         input_tokens=input_tokens,
@@ -445,6 +459,15 @@ def get_daily_cost() -> float:
     return _cost_tracker.daily_cost
 
 
+def get_token_usage(request_id: str) -> dict[str, int]:
+    return _cost_tracker.get_tokens(request_id)
+
+
 def reset_daily_cost() -> None:
     """Test helper."""
     _cost_tracker._daily_cost = 0.0  # noqa: SLF001
+
+
+def reset_token_usage(request_id: str) -> None:
+    """Test helper."""
+    _cost_tracker._token_usage.pop(request_id, None)  # noqa: SLF001
