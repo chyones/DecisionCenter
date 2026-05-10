@@ -74,6 +74,11 @@ def _resolve(state: DecisionState, key: str) -> Any:
         return len(state.evidence)
     if key == "loop_count":
         return state.loop_count
+    # Quality-gate metric aliases (node_13 uses spaced keys)
+    if key == "unsupported_count":
+        return state.outputs.get("quality_gate unsupported_count")
+    if key == "needs_review_count":
+        return state.outputs.get("quality_gate needs_review_count")
     if key.startswith("outputs."):
         return state.outputs.get(key[8:])
     if key.startswith("report_json."):
