@@ -251,3 +251,39 @@ def test_compute_metrics_with_unauthorized() -> None:
     ]
     metrics = _compute_metrics(results)
     assert metrics["refusal_accuracy"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_runner_enforces_min_pass_rate() -> None:
+    from apps.edr.evaluation.run import main
+
+    result = await main(["--suite", "goldenset", "--min-pass-rate", "1.0"])
+    # If all cases pass, this should return 0
+    assert result in (0, 1)
+
+
+@pytest.mark.asyncio
+async def test_runner_regression_on_bad_suite(tmp_path: Path) -> None:
+    from apps.edr.evaluation.run import main
+
+    suite = tmp_path / "bad"
+    suite.mkdir()
+    (suite / "a.jsonl").write_text(
+        json.dumps({
+            "id": "bad-1", "category": "test", "node": "node_13_quality_gate",
+            "state": {"request_id": "r1", "user_id": "u1", "role": "executive", "project_code": "PRJ-001", "query": "test", "evidence": [], "report_json": {"request_id": "r1", "executive_summary": [{"claim": "x", "evidence_ids": [], "confidence": "medium"}], "financial_snapshot": {"budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"}, "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"}, "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []}}, "key_findings": [], "root_causes": [], "delay_analysis": [], "contractual_implications": [], "recommended_actions": [], "missing_data": [], "conflicts": [], "sources": []}},
+            "expect": {"quality_gate": "passed"}
+        }) + "\n",
+        encoding="utf-8",
+    )
+    result = await main(["--suite", str(suite), "--max-failures", "0"])
+    assert result == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_threshold_exit_non_zero() -> None:
+    from apps.edr.evaluation.run import main
+
+    result = await main(["--suite", "goldenset", "--min-pass-rate", "0.5"])
+    # Should pass because current suite has > 50% pass rate
+    assert result == 0

@@ -249,6 +249,8 @@ async def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suite", default="goldenset", help="Suite subdirectory name")
     parser.add_argument("--output", default=None, help="Optional JSON report path")
     parser.add_argument("--max-failures", type=int, default=0, help="Max allowed failures before non-zero exit")
+    parser.add_argument("--min-pass-rate", type=float, default=0.0, help="Minimum required pass rate (0.0–1.0)")
+    parser.add_argument("--min-precision", type=float, default=0.0, help="Minimum required evidence precision (0.0–1.0)")
     args = parser.parse_args(argv)
 
     suite_dir = _suite_path(args.suite)
@@ -274,8 +276,20 @@ async def main(argv: list[str] | None = None) -> int:
         Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     failed_count = metrics["failed"]
+    pass_rate = metrics["pass_rate"]
+    precision = metrics["evidence_precision"]
+
+    regressions: list[str] = []
     if failed_count > args.max_failures:
-        print(f"\nREGRESSION: {failed_count} failure(s) > max {args.max_failures}", file=sys.stderr)
+        regressions.append(f"{failed_count} failure(s) > max {args.max_failures}")
+    if pass_rate < args.min_pass_rate:
+        regressions.append(f"pass rate {pass_rate:.2%} < minimum {args.min_pass_rate:.2%}")
+    if precision < args.min_precision:
+        regressions.append(f"precision {precision:.2%} < minimum {args.min_precision:.2%}")
+
+    if regressions:
+        for msg in regressions:
+            print(f"\nREGRESSION: {msg}", file=sys.stderr)
         return 1
 
     print("\nEvaluation passed.")
