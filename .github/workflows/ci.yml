@@ -46,7 +46,7 @@ jobs:
           config_keys = {field.upper() for field in type(settings).model_fields}
           missing = sorted(set(env_keys) - config_keys)
           extra = sorted(config_keys - set(env_keys))
-          assert len(env_keys) == 39, len(env_keys)
+          assert len(env_keys) == 40, len(env_keys)
           assert not missing, missing
           assert not extra, extra
           print("config coverage: 39/39")
@@ -71,6 +71,7 @@ jobs:
       - name: Evaluation suite
         env:
           PYTHONPATH: .
+          N8N_TIMEOUT: 5
         run: python -m apps.edr.evaluation.run --suite goldenset --min-pass-rate 0.95 --min-precision 0.90
 
       - name: pip-audit (advisory only)

@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Connector layer
     n8n_base_url: str = "http://n8n:5678"
     n8n_webhook_token: str | None = None
+    n8n_timeout: int = Field(default=60, ge=1, le=300)
     sharepoint_search_webhook: str = "/webhook/sharepoint-search"
     owncloud_list_webhook: str = "/webhook/owncloud-list"
     email_search_webhook: str = "/webhook/email-search"

@@ -65,7 +65,7 @@ still used the internal Compose endpoint `minio:9000`.
 - `ruff check .`: clean.
 - `python3 -m compileall apps scripts`: clean.
 - `python3 scripts/check_doc_drift.py`: clean.
-- Config coverage: 39/39.
+- Config coverage: 40/40.
 - GitHub Actions: CI for `cda49987c8f728f8586d8025f421cf7dc7ca30b5` passed.
 
 ## Security Checks Executed
