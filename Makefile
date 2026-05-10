@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format init-qdrant init-minio
+.PHONY: up down logs ps smoke test eval format init-qdrant init-minio load-test
 
 up:
 	docker compose up -d --build
@@ -29,3 +29,6 @@ init-qdrant:
 
 init-minio:
 	docker compose exec app python scripts/init_minio.py
+
+load-test:
+	docker compose exec app python -m apps.edr.evaluation.load_test --requests 10 --concurrency 5
