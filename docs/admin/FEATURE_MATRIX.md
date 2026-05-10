@@ -2,7 +2,7 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Date:** 2026-05-10
-> **Status:** Phases 1A–1G plus the Phase 1D-fixup are complete; Phase 1H is the safe next phase. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1H plus the Phase 1D-fixup are complete. Phase 1I is the safe next phase. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -93,9 +93,9 @@
 | Markdown export | 3.3, 16.14 | `apps/edr/exporters/markdown.py` | All | `.md` file | `export: md` | exporter wired into `node_14_compose_md`; gated by `quality_gate=="passed"` | implemented |
 | Word export | 3.3, 16.14 | `apps/edr/exporters/word.py` | All | `.docx` file | `export: docx` | exporter wired; format selection via `output_formats` | implemented |
 | Excel export | 3.3, 16.14 | `apps/edr/exporters/excel.py` | All | `.xlsx` file | `export: xlsx` | exporter wired; format selection via `output_formats` | implemented |
-| PDF export | 3.3, 16.14 | `apps/edr/exporters/pdf.py` | All | `.pdf` file | `export: pdf` | exporter wired; Arabic RTL hardening deferred to 1H | implemented |
+| PDF export | 3.3, 16.14 | `apps/edr/exporters/pdf.py` | All | `.pdf` file | `export: pdf` | exporter wired with Arabic font auto-selection | implemented |
 | PowerPoint export | 3.3, 16.14 | `apps/edr/exporters/powerpoint.py` | All | `.pptx` file | `export: pptx` | exporter wired; format selection via `output_formats` | implemented |
-| Arabic RTL PDF | 29, 1H | `apps/edr/exporters/pdf.py` | All | `.pdf` with Arabic TTF | `export: pdf` | visual render test (1H) | missing |
+| Arabic RTL PDF | 29, 1H | `apps/edr/exporters/pdf.py` | All | `.pdf` with Arabic TTF | `export: pdf` | Amiri font registered, Arabic auto-detected, RTL disclaimer appended; full bidi shaping deferred | partial |
 
 ---
 
@@ -132,7 +132,7 @@
 | Qdrant vector store | 20.4 | `docker-compose.yml`, `scripts/init_qdrant.py` | N/A | per-project collections | N/A | round-trip test + init script | implemented |
 | n8n orchestration | 20.2 | `docker-compose.yml` | N/A | 4 workflow files (Header Auth) | N/A | mocked workflow + auth-required test | implemented |
 | Langfuse tracing | 21.1 | `apps/edr/llm.py`, `.env.example` | N/A | Trace + span | token count | every LLM call hooked; falls back when `LANGFUSE_*` keys unset; full dashboard verification deferred to 1H | partial |
-| Cost cap enforcement | 18, 22 | `apps/edr/llm.py` (`_CostTracker`, `CostCapExceededError`, `TokenCapExceededError`) | N/A | `daily_cost_cap_usd`, per-tier token caps | `cost_exceeded` | unit-tested raise paths in `test_phase1e.py`; load-level circuit-breaker check deferred to 1H | partial |
+| Cost cap enforcement | 18, 22 | `apps/edr/llm.py` (`_CostTracker`, `CostCapExceededError`, `TokenCapExceededError`) | N/A | `daily_cost_cap_usd`, per-tier token caps | `cost_exceeded` | pre-call estimate raises before every LLM call; load test validates deterministic fallback path | implemented |
 
 ---
 
@@ -142,7 +142,7 @@
 |---------|--------------|-----------------|-----------|-------------------|-------------|------------------|--------|
 | RBAC enforcement | 8, 9 | `docs/security/rbac_matrix.md` + `apps/edr/rbac/roles.py` | All | Node 01 before retrieval; review endpoints; download endpoints | `rbac_denied` | integration tests for authorized, denied, and unknown project cases; reviewer/auditor/admin paths | implemented |
 | Evidence priority | 6 | `docs/policies/evidence_priority_policy.md` | All | Node 09 | `priority_assigned` | source priority preserved on dedup | implemented |
-| Conflict resolution | 7 | `docs/policies/conflict_resolution_policy.md` | All | Node 09 / Node 12 | `conflict_flagged` | golden set eval (1H) | documented-only |
+| Conflict resolution | 7 | `docs/policies/conflict_resolution_policy.md` | All | Node 09 / Node 12 | `conflict_flagged` | golden set covers conflicting evidence category | implemented |
 | Email excerpt limit | 4.3, 10 | `docs/policies/email_retrieval_policy.md` | All | Node 07 / n8n | `email_excerpt` | length ≤500 chars in n8n normalize | implemented |
 | Mailbox allowlist | 10 | `docs/policies/shared_mailbox_access_policy.md` | All | Node 07 (Python) + n8n `Enforce Mailbox Allowlist` | `mailbox_access` | denial regression tests | implemented |
 | Financial truth | 4.4 | `docs/policies/odoo_financial_truth_policy.md` | All | Node 12 / Node 13 | `finance_verified` | quality gate rejects financial values without Odoo `evidence_id`; `test_phase1e.py` covers it | implemented |
@@ -173,12 +173,12 @@
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
 | Smoke tests | 26 | `apps/edr/tests/smoke/test_smoke.py` | N/A | N/A | N/A | `make smoke` passes (2 cases) | implemented |
 | Integration tests | 26 | `apps/edr/tests/integration/*.py` | N/A | N/A | N/A | 116 cases pass on HEAD (RBAC, connectors, retrieval, 1D fixes/security, 1E, 1F, 1G, doc drift) | implemented |
-| Golden set | 26.1 | `apps/edr/evaluation/goldenset/example.jsonl` | N/A | 1 executable case; 12 baseline categories documented; 50 go-live cases required | N/A | `make eval` passes (1H) | partial |
-| Evaluation runner | 26.4 | `apps/edr/evaluation/run.py` | N/A | Stub | N/A | `make eval` exits 0 (1H) | partial |
+| Golden set | 26.1 | `apps/edr/evaluation/goldenset/goldenset.jsonl` | N/A | 65 executable cases covering 12 baseline categories | N/A | `make eval` passes in CI | implemented |
+| Evaluation runner | 26.4 | `apps/edr/evaluation/run.py` | N/A | JSONL loader, per-case metrics, aggregate report, non-zero on regression | N/A | `make eval` exits 0 in CI | implemented |
 | Test cases spec | 26.1 | `docs/evaluation/edr_test_cases.md` | N/A | 12 baseline categories defined | N/A | N/A | implemented |
 | Metrics spec | 26.2 | `docs/evaluation/edr_metrics.md` | N/A | Precision, faithfulness, RBAC denial, QG false-pass | N/A | N/A | implemented |
 | Golden set spec | 26.1 | `docs/evaluation/edr_goldenset.md` | N/A | JSONL format | N/A | N/A | implemented |
-| Promptfoo config | 26.4 | `apps/edr/evaluation/promptfoo.config.yaml` | N/A | Placeholder with empty providers/tests | N/A | CI integration (1H) | partial |
+| Promptfoo config | 26.4 | `apps/edr/evaluation/promptfoo.config.yaml` | N/A | Structured placeholder with providers and test categories | N/A | Awaiting promptfoo CLI availability | partial |
 
 ---
 

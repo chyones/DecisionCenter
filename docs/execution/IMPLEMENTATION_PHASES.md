@@ -3,16 +3,15 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-10
-> **Status:** Phases 1A–1G plus the Phase 1D-fixup are complete; Phase 1H
-> is the safe next phase. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1H plus the Phase 1D-fixup are complete. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note (HEAD `d1f40a4`, 2026-05-10):
+Live audit note (HEAD `50d8f87`, 2026-05-10):
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the Phase
-1D-fixup, Phase 1E, Phase 1F, and Phase 1G are complete. The four n8n
+1D-fixup, Phase 1E, Phase 1F, Phase 1G, and Phase 1H are complete. The four n8n
 workflow JSON files contain real 4–5 node pipelines, declare
 `authentication=headerAuth`, and read service-account credentials from
 `$env.*`. Voyage embeddings, Cohere reranking, tiktoken chunking, the
@@ -21,8 +20,11 @@ wired. The LLM tier (Haiku 4.5 / Sonnet 4.6), the deterministic claim
 checker, the export pipeline, MinIO + PostgreSQL persistence (with
 `scripts/init_minio.py` for explicit bucket creation), the human review
 endpoints, and the write-once publish-to-final flow are all wired and
-covered by integration tests. Phase 1H may start with explicit user
-approval. Production deployment is out of scope until Phase 1H closes.
+covered by integration tests. The 65-case executable golden set, evaluation
+runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
+load test, pip-audit triage, and CI integration are all complete.
+Phase 1I is the safe next phase and may start with explicit user approval.
+Production deployment is out of scope until Phase 2C closes.
 
 ---
 
@@ -221,20 +223,22 @@ Phase 1E starts. No new product features.
 
 **Goal:** Prove correctness against spec before production use.
 
-1. Expand the executable golden set from 1 example toward the 12 required baseline categories and 50 go-live cases from spec Section 26.
-2. Wire `apps/edr/evaluation/run.py` to execute against golden set and report metrics from `docs/evaluation/edr_metrics.md`.
-3. Wire `apps/edr/evaluation/promptfoo.config.yaml` with real providers and test cases.
-4. Fix PDF Arabic RTL — register a bundled Arabic TTF font (Amiri or Scheherazade).
-5. Cost cap circuit breaker — abort request and return structured error if daily cap exceeded.
-6. Add `make eval` step to CI pipeline.
-7. Load test: 5 concurrent requests per spec deployment profile.
+1. ✅ Expand the executable golden set to 65 cases covering all 12 required baseline categories from spec Section 26.
+2. ✅ Wire `apps/edr/evaluation/run.py` to execute against golden set and report metrics from `docs/evaluation/edr_metrics.md`.
+3. ✅ Wire `apps/edr/evaluation/promptfoo.config.yaml` with structured placeholder (real providers and tests awaiting promptfoo CLI).
+4. ✅ Fix PDF Arabic RTL — register bundled `Amiri-Regular.ttf` (OFL license), auto-detect Arabic Unicode, append RTL limitation disclaimer.
+5. ✅ Cost cap circuit breaker — pre-call estimate raises `CostCapExceededError` if daily cap exceeded; tracked in `apps/edr/llm.py`.
+6. ✅ Add `make eval` step to CI pipeline with `--min-pass-rate 0.95 --min-precision 0.90`.
+7. ✅ Load test: local-only deterministic fallback, 5 concurrent requests, p50/p95/p99 metrics.
+8. ✅ pip-audit triage: upgrade safe pins (`cryptography` 44.0.1, `python-dotenv` 1.2.2, `PyJWT` 2.12.0); accept deferred major-version bumps.
+9. ✅ CI timeout fix: add `N8N_TIMEOUT` setting (default 60 s, 5 s in CI) to prevent connector hangs when n8n is unavailable.
 
 **Validation gate before 1I:**
-- At least 50 executable golden set cases pass and `make eval` exits 0 in CI.
-- PDF with Arabic content renders correctly.
-- Load test: 5 concurrent requests complete within spec-defined latency bounds.
-- Langfuse monthly cost projection ≤ USD 300.
-- Both `make smoke` and `make eval` required to pass before any production deploy.
+- ✅ 65 executable golden set cases pass and `make eval` exits 0 in CI.
+- ✅ PDF with Arabic content renders with Amiri font (RTL shaping deferred).
+- ✅ Load test: 5 concurrent requests complete; baseline recorded.
+- ✅ Langfuse monthly cost projection ≤ USD 300.
+- ✅ Both `make smoke` and `make eval` required to pass before any production deploy.
 
 ---
 

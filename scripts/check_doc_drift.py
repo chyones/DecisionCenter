@@ -25,7 +25,7 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "1H"
+EXPECTED_NEXT_PHASE = "1I"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 
 

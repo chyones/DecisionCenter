@@ -94,7 +94,7 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, and Phase 1G are complete. Production
-is `NOT_LIVE`. Phase 1H (Evaluation & Hardening) is the next safe phase
+is `NOT_LIVE`. Phase 1I (Frontend Foundation) is the next safe phase
 and requires explicit user approval before it starts. Treat the files
 above as the current authority before changing code, workflows, schemas,
 or operational assumptions.
