@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format init-qdrant
+.PHONY: up down logs ps smoke test eval format init-qdrant init-minio
 
 up:
 	docker compose up -d --build
@@ -25,4 +25,7 @@ format:
 	docker compose exec app ruff format apps
 
 init-qdrant:
-	docker compose exec app python scripts/init_qdrant.py --mapping docs/config/project_source_mapping.example.json
+	docker compose exec app python scripts/init_qdrant.py --mapping docs/config/project_source_mapping.json
+
+init-minio:
+	docker compose exec app python scripts/init_minio.py

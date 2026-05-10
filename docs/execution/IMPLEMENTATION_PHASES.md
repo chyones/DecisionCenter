@@ -2,22 +2,27 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
-> **Date:** 2026-05-09
-> **Status:** Phase 1A through Phase 1D + Phase 1D-fixup complete; Phase 1E
-> is the safe next phase.
+> **Date:** 2026-05-10
+> **Status:** Phases 1A–1G plus the Phase 1D-fixup are complete; Phase 1H
+> is the safe next phase. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note after the Phase 1D-fixup (audit closure):
-Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, and the
-Phase 1D-fixup are complete. The four n8n workflow JSON files contain real
-4-node pipelines, declare `authentication=headerAuth`, and read service-account
-credentials from `$env.*`. Voyage embeddings, Cohere reranking, tiktoken
-chunking, the per-project Qdrant store (`edr_*`), and the Redis-backed
-evidence cache are wired. Phase 1E may start. Phase 1F remains blocked by
-missing MinIO bucket initialization until that phase is approved.
+Live audit note (HEAD `d1f40a4`, 2026-05-10):
+Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the Phase
+1D-fixup, Phase 1E, Phase 1F, and Phase 1G are complete. The four n8n
+workflow JSON files contain real 4–5 node pipelines, declare
+`authentication=headerAuth`, and read service-account credentials from
+`$env.*`. Voyage embeddings, Cohere reranking, tiktoken chunking, the
+per-project Qdrant store (`edr_*`), and the Redis-backed evidence cache are
+wired. The LLM tier (Haiku 4.5 / Sonnet 4.6), the deterministic claim
+checker, the export pipeline, MinIO + PostgreSQL persistence (with
+`scripts/init_minio.py` for explicit bucket creation), the human review
+endpoints, and the write-once publish-to-final flow are all wired and
+covered by integration tests. Phase 1H may start with explicit user
+approval. Production deployment is out of scope until Phase 1H closes.
 
 ---
 

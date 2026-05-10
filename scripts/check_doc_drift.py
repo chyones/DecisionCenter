@@ -25,7 +25,7 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "1E"
+EXPECTED_NEXT_PHASE = "1H"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 
 
@@ -82,11 +82,13 @@ def _control_plane_count(docs: dict[str, Path]) -> int:
 def _doc_mentions_next_phase(docs: dict[str, Path], name: str) -> bool:
     raw = _read(docs[name])
     candidates = [
-        f"Phase {EXPECTED_NEXT_PHASE} may start",
-        f"Phase {EXPECTED_NEXT_PHASE} is the safe next phase",
-        f"safe next phase.*Phase {EXPECTED_NEXT_PHASE}",
-        f"READY FOR PHASE {EXPECTED_NEXT_PHASE}",
-        rf"\| {EXPECTED_NEXT_PHASE} — LLM Nodes \| Safe next phase",
+        rf"Phase {EXPECTED_NEXT_PHASE} may start",
+        rf"Phase {EXPECTED_NEXT_PHASE} is the safe next phase",
+        rf"safe next phase.*Phase {EXPECTED_NEXT_PHASE}",
+        rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}",
+        rf"\| {EXPECTED_NEXT_PHASE} — Evaluation and Hardening \| Safe next phase",
+        r"\| 1H — Evaluation and Hardening \| Safe next phase",
+        rf"Phases?\s+1A[–-]1G[^.]*Phase {EXPECTED_NEXT_PHASE}\s+is the safe next phase",
     ]
     return any(re.search(pattern, raw) for pattern in candidates)
 

@@ -6,6 +6,9 @@ outside product workflow behavior unless a later phase explicitly authorizes tha
 | Script | Purpose |
 |---|---|
 | `init_qdrant.py` | Idempotently creates per-project Qdrant collections using the configured `QDRANT_URL` |
+| `init_minio.py` | Idempotently creates the configured MinIO bucket (`MINIO_BUCKET`) |
+| `check_doc_drift.py` | Cross-doc invariants: env-key count, "safe next phase" agreement, Phase 1D-fixup marker |
+| `check_ai_context.py` | Validates `docs/ai/agent-state.json` shape, status enum, and that `current_commit` is HEAD or an ancestor |
 
 ## Usage
 
@@ -13,12 +16,15 @@ outside product workflow behavior unless a later phase explicitly authorizes tha
 make init-qdrant
 ```
 
-or, inside a configured app environment:
+Direct invocation inside a configured app environment:
 
 ```bash
-python scripts/init_qdrant.py --mapping docs/config/project_source_mapping.example.json
+python3 scripts/init_qdrant.py --mapping docs/config/project_source_mapping.json
+python3 scripts/init_minio.py            # uses MINIO_BUCKET from .env
+python3 scripts/check_doc_drift.py
+python3 scripts/check_ai_context.py
 ```
 
-The current script creates collection structure only. It does not embed content, insert vectors,
+These scripts create infrastructure structure only. They do not embed content, insert vectors,
 perform retrieval, or implement product logic.
 

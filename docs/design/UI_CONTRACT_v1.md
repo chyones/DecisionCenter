@@ -1,10 +1,12 @@
-# DecisionCenter — UI Contract v1.0
+# DecisionCenter — UI Contract v1.2
 
 > **Status:** LOCKED — Official UI specification. Supersedes the former UI/UX scope draft.
 > **Date locked:** 2026-05-06
 > **Derived from:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, all section references below are to this file)
 > **Corrections applied:** Six corrections from design review (detailed in Section 0).
-> **Revision:** v1.1 — 2026-05-06: Applied verification finding CF-2 (PDF/XLSX export format restriction corrected to spec-accurate content-section restriction); added N-1, N-2 footnotes.
+> **Revisions:**
+> - v1.1 — 2026-05-06: Applied verification finding CF-2 (PDF/XLSX export format restriction corrected to spec-accurate content-section restriction); added N-1, N-2 footnotes.
+> - v1.2 — 2026-05-10: Renamed Section 3.4 from "Source Mapping" to "Project Source Mapping"; clarified screen purpose, status badges (complete/incomplete/disabled), validation action, and field-level layout. No new product behavior; spec section references unchanged.
 > **Scope:** Specification only. No frontend code. No product logic.
 > **Constraint:** Every element in this document maps to a named spec requirement. Nothing is decorative.
 
@@ -652,61 +654,135 @@ Shows `allowed_roles` from `project_source_mapping.json` per project:
 PRJ-001  →  executive, project_manager, finance, commercial
 PRJ-002  →  executive, project_manager, legal
 ```
-Editing is performed via Source Mapping screen, not here.
+Editing is performed via the Project Source Mapping screen, not here.
 
 ---
 
-### 3.4 Screen: Source Mapping
+### 3.4 Screen: Project Source Mapping
 
 **Route:** `/admin/source-mapping`
-**Purpose:** View and edit `docs/config/project_source_mapping.json`.
+**Purpose:** Define where DecisionCenter searches for each project. This screen is
+for admin/configuration users to maintain approved project-source mappings. AI
+must never invent project-source mappings. Missing, disabled, or incomplete
+mapping blocks report generation for that project.
 
 **Layout — left/right:**
 ```
-Left: Project list          Right: Project editor
-─────────────────           ──────────────────────
-PRJ-001  ● active           ┌───────────────────────────────┐
-PRJ-002  ● active           │ PRJ-001              [Save][✕]│
-[+ Add project]             │ ──────────────────────────── │
-                            │ SharePoint                    │
-                            │   Site ID:  [site-id-001    ] │
-                            │   Drive ID: [drive-id-001   ] │
-                            │   Root:     [/Projects/PRJ-1] │
-                            │                               │
-                            │ ownCloud                      │
-                            │   Base path: [/Projects/PRJ-1]│
-                            │                               │
-                            │ Email                         │
-                            │   Shared mailboxes:           │
-                            │   project@example.com    [✕]  │
-                            │   [+ Add mailbox]             │
-                            │   Doc control mailbox:        │
-                            │   [docctrl@example.com     ]  │
-                            │                               │
-                            │ Odoo                          │
-                            │   Project model: [proj.proj ] │
-                            │   Cost model:    [acct.anal ] │
-                            │   Ext. ID:       [PRJ-001   ] │
-                            │                               │
-                            │ Contracts: CON-001 [✕] [+Add] │
-                            │                               │
-                            │ Allowed roles:                │
-                            │ [✓]exec [✓]pm [✓]fin [✓]comm │
-                            │ [ ]doc  [ ]proc [ ]leg [ ]aud │
-                            └───────────────────────────────┘
+Left: Mapping list                 Right: Project mapping editor
+────────────────────               ─────────────────────────────────────
+PRJ-001  complete                  ┌────────────────────────────────────┐
+PRJ-002  incomplete                │ PRJ-001         [Validate] [Save] │
+PRJ-003  disabled                  │ Status: complete                  │
+[+ Add mapping]                    │ Last validation: all sources ok   │
+                                   │                                    │
+                                   │ Project                            │
+                                   │   Code: PRJ-001                   │
+                                   │   Name: Downtown Tower             │
+                                   │   Contracts: CON-001, CON-001A    │
+                                   │                                    │
+                                   │ Odoo                               │
+                                   │   External ID: odoo.project.123   │
+                                   │   Project Name: Downtown Tower     │
+                                   │                                    │
+                                   │ SharePoint                         │
+                                   │   Site ID, Drive ID, Folder Path   │
+                                   │                                    │
+                                   │ ownCloud                           │
+                                   │   Folder Path                      │
+                                   │                                    │
+                                   │ Email                              │
+                                   │   Allowed mailboxes                │
+                                   │   Client / Consultant / Contractor │
+                                   │   domains                          │
+                                   │                                    │
+                                   │ Related Project People             │
+                                   │   Project Manager                  │
+                                   │   Commercial Manager               │
+                                   │   Finance Owner                    │
+                                   │   Document Controller              │
+                                   │   Other mapped users               │
+                                   │                                    │
+                                   │ Enabled sources                    │
+                                   │   [✓] SharePoint [✓] ownCloud      │
+                                   │   [✓] Email      [✓] Odoo          │
+                                   │                                    │
+                                   │ Allowed roles / access rules       │
+                                   │ Audit: created/updated metadata    │
+                                   └────────────────────────────────────┘
 ```
 
-**Save behavior:**
-1. Client-side JSON schema validation. Fails show inline per-field errors.
-2. Diff preview modal: lists every field being added, changed, or removed.
-3. Any change that removes an allowed role requires typing the project code to confirm.
-4. On confirm: file written. Audit event `admin.source_mapping_changed` written first.
-5. Toast: "Saved. Changes take effect on next report request."
+**Required mapping fields:**
+- Project Code
+- Project Name
+- Contract Number(s)
+- Odoo Project External ID
+- Odoo Project Name
+- SharePoint Site ID
+- SharePoint Drive ID
+- SharePoint Folder Path
+- ownCloud Folder Path
+- Allowed Project Mailboxes
+- Client Domains
+- Consultant Domains
+- Contractor Domains
+- Related Project People:
+  - Project Manager
+  - Commercial Manager
+  - Finance Owner
+  - Document Controller
+  - Other mapped users
+- Enabled Sources:
+  - SharePoint
+  - ownCloud
+  - Email
+  - Odoo
+- Allowed Roles / Access Rules
+- Mapping Status: `complete`, `incomplete`, `disabled`, or `needs_review`
 
-**Delete project:**
-1. Confirmation modal: "Remove PRJ-001? All source mappings for this project will be deleted. Existing reports are not affected."
-2. User must type project code.
-3. Audit event `admin.source_mapping_deleted` written.
+**Audit fields shown in the editor:**
+- Created by
+- Created at
+- Last updated by
+- Last updated at
+- Mapping status
+- Last validation result
+
+**Validation behavior:**
+- Required fields show inline errors next to the field.
+- Missing required mapping blocks report generation for that project.
+- The UI shows configured sources and missing sources before save.
+- SharePoint validation requires `site_id`, `drive_id`, and `folder_path`.
+- ownCloud validation requires `folder_path`.
+- Email validation requires at least one allowed mailbox or mapped domain.
+- Odoo validation requires `project_external_id` or Odoo project name.
+- Mapping status is computed from validation results:
+  - `complete` when all enabled sources have valid references and access rules.
+  - `incomplete` when required fields or enabled source references are missing.
+  - `disabled` when the mapping is archived and unavailable for report generation.
+  - `needs_review` when validation passes structurally but an admin flagged the mapping for manual review.
+
+**Security behavior:**
+- Admins never enter or view passwords, tokens, API keys, client secrets, or credentials.
+- Credentials remain in n8n credentials or the approved secret manager.
+- Credential values are never displayed, not even masked.
+- The UI stores only metadata and source references.
+- The admin role does not gain business-content visibility from this screen.
+- AI retrieval uses only approved mapping records with `complete` status.
+- Missing, incomplete, disabled, or unapproved mappings return a blocking error before retrieval.
+- Every mapping change writes an audit event before the change is saved.
+
+**Save behavior:**
+1. Validate the full mapping first. Saves are blocked until validation completes.
+2. Diff preview modal lists every field being added, changed, disabled, or removed.
+3. Risky changes require typing the project code. Risky changes include disabling a mapping, removing an enabled source, removing an allowed role, changing an Odoo project reference, or changing a root folder path.
+4. Audit event `admin.source_mapping_changed` is written before the save executes.
+5. Toast: "Saved. Changes affect the next report request."
+
+**Disable / Archive mapping:**
+1. Hard delete is not available through the UI.
+2. Confirmation modal: "Disable PRJ-001? New report generation for this project will be blocked until the mapping is re-enabled. Existing reports are not affected."
+3. User must type the project code.
+4. Audit event `admin.source_mapping_disabled` is written before the mapping status changes to `disabled`.
 
 ---
 
@@ -805,7 +881,7 @@ Admin review panel shows ONLY system-level information. No business content.
 | Connector | `connector.error` · `connector.latency_spike` · `connector.probe_success` |
 | Upload | `upload.received` · `upload.rejected` · `upload.deleted` |
 | Cost | `cost.daily_cap_warning` · `cost.daily_cap_exceeded` |
-| Admin | `admin.source_mapping_changed` · `admin.source_mapping_deleted` · `admin.role_mapping_changed` |
+| Admin | `admin.source_mapping_changed` · `admin.source_mapping_disabled` · `admin.role_mapping_changed` |
 
 **Event detail (slide-in panel):**
 ```
@@ -913,7 +989,7 @@ Notes:
 | Dashboard | ✓ (system metadata only) | ✗ HTTP 403 |
 | Connectors & APIs | ✓ | ✗ |
 | Permissions & Roles | ✓ | ✗ |
-| Source Mapping | ✓ | ✗ |
+| Project Source Mapping | ✓ | ✗ |
 | Approval Queue | ✓ (metadata + flags only; no report content) | ✗ |
 | Audit Log | ✓ (full system log) | Auditor: project-scoped subset via workspace |
 | System Health | ✓ | ✗ |
@@ -926,7 +1002,7 @@ Notes:
 | Approve report | ✓ | Review only | Finance rev | Comm rev | Review only | Review only | Legal rev | ✗ | Admin override |
 | Reject report | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | Admin override |
 | Request revision | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
-| Edit source mapping | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Add/edit/disable project mapping | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Edit role mapping | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Test connector | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
 | View audit log (full) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | Scoped | ✓ |
@@ -1149,7 +1225,7 @@ Credentials are defined as: passwords, tokens, API keys, client secrets, connect
 | `audit-log.json` (per-req) | RBAC-gated download (Section 4.2). Admin reads via Audit Log UI only. |
 | Financial data | Hidden section with explicit "not available for your role" statement for roles without `can_access_odoo_budget`. Not silently omitted. |
 | Token counts and API costs | Visible to `admin` in Audit Log detail view only. Never in user workspace. |
-| Source mapping field values | Site IDs, drive IDs, and paths visible in admin Source Mapping editor. No credentials embedded in these fields. |
+| Source mapping field values | Site IDs, drive IDs, folder paths, domains, mailbox references, project people, and access rules visible in the Project Source Mapping editor. No credentials embedded in these fields. |
 
 ### 8.5 Admin Scope Isolation
 
@@ -1164,7 +1240,7 @@ Admin is permitted to:
 - Read system event metadata in the Audit Log (timestamps, event types, request IDs, hashed user IDs, token counts, costs).
 - Read quality gate flags and operational metadata in the Approval Queue.
 - Perform admin override approvals (logged with distinct event type).
-- Read and edit source mapping and role mapping configuration.
+- Read and edit project source mapping and role mapping configuration.
 - View connector status and presence indicators.
 
 ### 8.6 Destructive Action Protocol
@@ -1222,9 +1298,9 @@ All destructive or approval actions follow this protocol without exception:
 | A-03 | Connector detail panel shows `✓ set` or `✗ missing` for all `.env` keys. No credential value is shown, even partially masked. | Sections 3.2, 8.3 (C-6) |
 | A-04 | `[Test connection]` sends a read-only probe. No system state changes. Result shown inline with pass/fail and latency. | Section 3.2 |
 | A-05 | n8n workflow status shows `empty` when `"nodes": []` and `deployed` when the array is non-empty. | Section 3.2 |
-| A-06 | Source Mapping save fails and shows per-field errors when the submitted JSON fails schema validation. | Section 3.4 |
-| A-07 | Source Mapping save shows a diff of all field changes and requires explicit confirmation before writing. | Section 3.4 |
-| A-08 | Removing an allowed role from a project requires the admin to type the project code in a confirmation modal. | Section 3.4 |
+| A-06 | Project Source Mapping save fails and shows inline per-field errors when required mapping fields or source-specific validation rules fail. | Section 3.4 |
+| A-07 | Project Source Mapping save shows a diff of all field changes and requires explicit confirmation before writing. | Section 3.4 |
+| A-08 | Removing an allowed role, removing an enabled source, changing an Odoo project reference, changing a root folder path, or disabling a mapping requires the admin to type the project code in a confirmation modal. | Section 3.4 |
 | A-09 | Approval Queue shows only `staging` and `needs_review` reports. `final`, `failed`, and `rejected` reports are excluded. | Section 3.5 |
 | A-10 | Approve action is blocked when the acting admin's hash matches the requester's hash. | Section 3.5 |
 | A-11 | Admin Approval Queue panel shows quality gate flags and metadata only. Report content, evidence excerpts, query text, and evidence-pack data are not rendered. | Sections 3.5, 8.5 (C-1) |
@@ -1234,6 +1310,12 @@ All destructive or approval actions follow this protocol without exception:
 | A-15 | When `DAILY_COST_CAP_USD` is reached, new report submissions are blocked system-wide. A red banner appears in both Admin Health and User Workspace. | Section 3.7 |
 | A-16 | An `ownCloud` degraded state simultaneously updates the Dashboard service grid, Connectors list, and System Health screen. All three reflect the same status. | Sections 3.1, 3.2, 3.7 |
 | A-17 | Entra group mapping edits require a confirmation modal and write `admin.role_mapping_changed` to the audit log before the save executes. | Sections 3.3, 8.6 |
+| A-18 | Admin can add, edit, disable, and archive project mappings, but hard delete is not available through the UI. | Section 3.4 |
+| A-19 | Admin never sees or enters secrets in Project Source Mapping; credentials are not displayed, not even masked. | Sections 3.4, 8.3 |
+| A-20 | Incomplete, disabled, missing, or unapproved mappings block report generation for that project. | Section 3.4 |
+| A-21 | Every project mapping change writes an audit event before the save or disable action executes. | Sections 3.4, 8.6 |
+| A-22 | AI retrieval cannot use unmapped sources or source references outside an approved `complete` mapping record. | Section 3.4 |
+| A-23 | Admin cannot view report content, query text, evidence excerpts, or business-data artifacts from the Project Source Mapping screen. | Sections 3.4, 8.5 |
 
 ---
 
@@ -1256,7 +1338,7 @@ This section maps UI screens to backend phases. No frontend code should be writt
 | Connectors & APIs | Phase 1C | n8n workflows must exist to show deployed status |
 | Permissions & Roles (view) | Phase 1B ✓ complete | RBAC matrix and role data available |
 | Permissions & Roles (Entra edit) | Phase 1B ✓ complete | Entra validation available |
-| Source Mapping editor | Phase 1B ✓ complete | Mapping file exists and is loaded |
+| Project Source Mapping editor | Phase 2B | Future Admin Visual Control Plane UI; keep API-backed when mapping management backend exists |
 | Approval Queue | Phase 1G | Approval/reject API endpoints required |
 | Audit Log | Phase 1F | PostgreSQL audit log rows required |
 | System Health | Phase 1A ✓ complete | `/healthz` endpoint exists |
@@ -1268,7 +1350,7 @@ This section maps UI screens to backend phases. No frontend code should be writt
 
 At that point, all backend data — RBAC-filtered projects, real reports, real evidence packs, MinIO persistence, audit log, and cost data — is available. Building the frontend earlier produces screens that require stubs and must be rewritten.
 
-**Exception:** The Admin System Health screen (depends only on Phase 1A), the Permissions & Roles view tab, the Source Mapping read-only view, and the Query Composer shell (without RBAC-filtered project data from a running server) can be scaffolded earlier as static screens. Do not wire these to the API until the corresponding backend phase is complete.
+**Exception:** The Admin System Health screen (depends only on Phase 1A), the Permissions & Roles view tab, the Project Source Mapping read-only view, and the Query Composer shell (without RBAC-filtered project data from a running server) can be scaffolded earlier as static screens. Do not wire these to the API until the corresponding backend phase is complete.
 
 ---
 

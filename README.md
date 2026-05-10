@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase1d_complete-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase1g_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -39,7 +39,7 @@ Generic RAG fails for executive decision questions because they:
 - Require disclosing missing data instead of guessing.
 - Require an audit trail because the answers feed real decisions.
 
-Decision Center uses an **agentic workflow** — Plan → Retrieve → Normalize → Verify → Self-correct → Compose → Quality-gate → Approve — bounded by tool budgets, RBAC, and a claim checker.
+Decision Center uses an **agentic workflow** — Plan → Retrieve → Normalize → Verify → Self-correct → Compose → Quality-gate → Approve → Publish — bounded by tool budgets, RBAC, a deterministic claim checker, and a human review gate.
 
 ## Architecture at a glance
 
@@ -92,9 +92,12 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand n8n workflow status | [n8n/README.md](n8n/README.md) |
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
-Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, and the
-Phase 1D-fixup are complete. Treat the files above as the current authority
-before changing code, workflows, schemas, or operational assumptions.
+Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
+Phase 1D-fixup, Phase 1E, Phase 1F, and Phase 1G are complete. Production
+is `NOT_LIVE`. Phase 1H (Evaluation & Hardening) is the next safe phase
+and requires explicit user approval before it starts. Treat the files
+above as the current authority before changing code, workflows, schemas,
+or operational assumptions.
 
 ## AI Agent Operating Context
 
@@ -105,7 +108,7 @@ Read these files in order:
 2. [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md)
 3. [docs/ai/AGENT_HANDOFF.md](docs/ai/AGENT_HANDOFF.md)
 4. [docs/ai/agent-state.json](docs/ai/agent-state.json)
-5. [docs/execution/PHASE_1D_FIXUP_REPORT.md](docs/execution/PHASE_1D_FIXUP_REPORT.md)
+5. [docs/execution/PHASE_1G_REPORT.md](docs/execution/PHASE_1G_REPORT.md)
 
 The AI context is checked by `python3 scripts/check_ai_context.py`. It is a
 guardrail against stale assumptions, duplicated work, and accidental phase or
@@ -115,10 +118,10 @@ deployment drift.
 
 | Path | Purpose |
 |---|---|
-| `apps/edr/` | FastAPI app, workflow nodes, schemas, retrieval pipeline, exporters, prompts, and tests |
+| `apps/edr/` | FastAPI app, workflow nodes, schemas, retrieval pipeline, exporters, prompts, persistence, and tests |
 | `docs/` | Locked workflow spec, control docs, execution plans, policies, contracts, schemas, operations, and evaluation docs |
 | `n8n/` | Real Phase 1C connector workflows (Header Auth, `$env`-sourced credentials) |
-| `scripts/` | Infrastructure/operations utilities, currently Qdrant collection initialization |
+| `scripts/` | Infrastructure/operations utilities: Qdrant collection init, MinIO bucket init, doc-drift and AI-context checkers |
 | `.github/workflows/` | CI validation for lint, syntax, config coverage, smoke tests, integration tests, and pip-audit |
 | Root config files | Docker Compose, Caddy, Python packaging, Makefile, env template, and ignore rules |
 
@@ -194,10 +197,10 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1C — n8n Connector Workflows | Complete (Header Auth + `$env` credentials) |
 | 1D — Embedding and Vector Retrieval | Complete |
 | 1D-fixup — Audit closure | Complete |
-| 1E — LLM Nodes | Safe next phase |
-| 1F — Persistence and Audit | Not started; MinIO bucket initialization blocker remains |
-| 1G — Human Review Gate | Not started |
-| 1H — Evaluation and Hardening | Not started |
+| 1E — LLM Nodes | Complete |
+| 1F — Persistence and Audit | Complete |
+| 1G — Human Review Gate | Complete |
+| 1H — Evaluation and Hardening | Safe next phase (requires explicit user approval) |
 | 1I–2C — Frontend/UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.

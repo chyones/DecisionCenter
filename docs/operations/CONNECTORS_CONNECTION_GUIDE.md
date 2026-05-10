@@ -668,8 +668,7 @@ After human approval (Phase 1G), files are moved to `/final/{request_id}/` and m
 
 **Related phase:** Phase 1A (health ping); Phase 1F (bucket init + writes)
 
-**When configured:** Phase 1A (Docker Compose). Bucket `decision-center` must be initialized
-before Phase 1F — this is **open blocker B10** (no bucket init script exists yet).
+**When configured:** Phase 1A (Docker Compose). The configured bucket (`MINIO_BUCKET`, default `decision-center`) is created idempotently by `scripts/init_minio.py`. The runtime `MinioStore._ensure_bucket()` covers any missed init by lazily creating the bucket on first write.
 
 **When active:** Phase 1F, when `node_15_save_audit.py` writes staging files.
 
@@ -692,9 +691,7 @@ MINIO_BUCKET=decision-center
 **Access rule:** The application user has read/write access to the `decision-center` bucket only.
 Final report objects must be set immutable after approval (Phase 1G).
 
-**Open blocker (B10):** No bucket initialization script or startup hook exists. The first Phase 1F
-write will fail with `S3Error: NoSuchBucket`. Before Phase 1F: create `scripts/init_minio.py`
-that creates the bucket idempotently, or add bucket creation to the FastAPI startup event.
+**Bucket initialization:** Closed. `scripts/init_minio.py` creates the bucket idempotently (safe to re-run); `MinioStore._ensure_bucket()` runs on every write as defense-in-depth, so a missed init does not block writes.
 
 **Test readiness condition:** `GET /healthz` returns `"minio": "ok"`. Bucket creation script
 runs twice without error.
@@ -704,7 +701,7 @@ console port not publicly accessible. Volume backed up.
 
 **Common failure risks:**
 - Default `MINIO_SECRET_KEY=change-me` in production → credential trivially guessable.
-- Bucket not created (B10) → Phase 1F write fails immediately.
+- Bucket not created → unlikely (init script + lazy `_ensure_bucket()`); still fails fast with `S3Error: NoSuchBucket` if MinIO credentials lack `s3:CreateBucket`.
 - MinIO volume not persisted → all staging and final files lost on container restart.
 - Console port 9001 exposed → unauthenticated object browser access in older MinIO versions.
 
