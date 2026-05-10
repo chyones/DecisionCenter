@@ -68,9 +68,14 @@ jobs:
           PYTHONPATH: .
         run: python -m pytest -q apps/edr/tests/integration
 
+      - name: Evaluation suite
+        env:
+          PYTHONPATH: .
+        run: python -m apps.edr.evaluation.run --suite goldenset --min-pass-rate 0.95 --min-precision 0.90
+
       - name: pip-audit (advisory only)
-        # Surface advisories but do not gate the build — Phase 1H decides on
-        # promotion to a hard gate after the dependency triage. The editable
+        # Surface advisories but do not gate the build — Phase 1H triaged safe
+        # pins and accepted-risk major-version bumps remain. The editable
         # ``decision-center`` install is skipped (it is not on PyPI).
         continue-on-error: true
         run: pip-audit --progress-spinner off
