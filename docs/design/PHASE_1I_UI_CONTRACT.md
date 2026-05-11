@@ -3,7 +3,7 @@
 > **Status:** Planning/design contract only. Phase 1I is not started.
 > **Date:** 2026-05-11
 > **Applies to:** Phase 1I - Frontend Foundation & Static Admin Scaffolds.
-> **Primary sources:** `docs/execution/PHASE_1I_PLAN.md`, `docs/design/UI_CONTRACT_v1.md`, `docs/execution/IMPLEMENTATION_PHASES.md`, `docs/security/rbac_matrix.md`, `docs/config/project_source_mapping.json`.
+> **Primary sources:** `docs/execution/PHASE_1I_PLAN.md`, `docs/design/UI_CONTRACT_v1.md`, `docs/execution/IMPLEMENTATION_PHASES.md`, `docs/security/rbac_matrix.md`, `docs/config/project_source_mapping.example.json`.
 > **Implementation gate:** This document does not authorize implementation. Phase 1I still requires explicit user approval. Authenticated GitHub Actions status for the latest planning/documentation HEAD must be green before Phase 1I implementation approval.
 
 ## A. Visual direction
@@ -58,8 +58,10 @@ Status pills:
 | `final` | accent | `lock` |
 | `connected` | success | `plug` |
 | `degraded` | warning | `plug-zap` |
-| `disconnected` | error | `plug-x` |
+| `disconnected` | error | `unplug` (alias of the spec's `plug-x` — see icon-set resolution) |
 | `unknown` | text-muted | `circle-dashed` |
+
+Icon-set resolution: `UI_CONTRACT_v1.md` Section 1.4 names `plug-x` for `disconnected`, but the current Lucide icon set does not ship a `plug-x` glyph (it ships `plug`, `plug-2`, `plug-zap`, `unplug`). Phase 1I must render `disconnected` with `unplug` and record this as a deliberate, documented deviation from the locked spec's icon *name* (the `error` color token and the semantics are unchanged). Before implementation, the chosen icon library and version must be pinned, and every other named glyph in this table (`shield-check`, `loader`, `circle-check`, `triangle-alert`, `x-circle`, `clock`, `stamp`, `ban`, `lock`, `plug`, `plug-zap`, `circle-dashed`) verified to exist in that version; any further substitution must be documented the same way and must not change the status color or meaning.
 
 Spacing and sizing:
 
@@ -83,13 +85,15 @@ Layout state rules:
 - No unmarked spinners are allowed.
 - Placeholder routes must clearly indicate later-phase availability without adding feature descriptions that operate like in-app documentation.
 
+> **New vocabulary note.** The named layout/route states above (`static_scaffold`, `phase_2a_placeholder`, `phase_2b_placeholder`, `forbidden`) are introduced by this Phase 1I contract; they do not appear in `UI_CONTRACT_v1.md` or `docs/execution/PHASE_1I_PLAN.md`. They are a Phase 1I refinement, not a restatement of the locked spec. The implementation must define them once in the central state/token registry (alongside the status-pill definitions) so screens cannot fork the names, and must not retroactively treat them as locked-spec terms. The locked status pills in Section B and these screen-level states are distinct registries and must not be conflated.
+
 ## D. Component contract
 
 Phase 1I reusable components are foundation pieces only.
 
 | Component | Phase 1I contract |
 |---|---|
-| `StatusPill` | Must render all 13 locked statuses with the exact color token and named icon. `processing` must pulse. Labels must fit without resizing the layout. |
+| `StatusPill` | Must render all 13 locked statuses with the exact color token and named icon (using the `unplug` alias for `disconnected` per Section B). `processing` must pulse. Labels must fit without resizing the layout. |
 | `Button` | Variants: primary (`accent`), secondary (neutral/raised), danger (`error`). Buttons must support disabled and loading states without layout shift. |
 | `Modal` | Uses `surface-overlay`, visible focus state, title, body, primary/secondary actions, dismiss behavior. |
 | `ConfirmDialog` | Must require a typed confirmation string for destructive actions. In Phase 1I this is a component behavior contract only; no destructive backend action exists. |
@@ -112,11 +116,11 @@ Dev-only helper constraints:
 | `/` | Role-based redirect entrypoint | All roles | Redirect to the role's default landing using static/client role context only. No auth implementation. |
 | `/workspace/new` | Query Composer shell | `executive`, `project_manager`, `finance`, `commercial`, `document_control`, `procurement`, `legal` | Render the form shell: disabled/empty project selector, query textarea with character counter, optional filters, upload-files placeholder, output-format checkboxes, disabled/non-submitting generate button. No project data, no submit handler, no upload handler. |
 | `/workspace/reports` | Phase 2A placeholder | Business roles plus `auditor`; not `admin` | Static placeholder only. No report list, no MinIO/audit data, no API calls. Auditor default landing may point here as a placeholder until Phase 2A. |
-| `/workspace/*` other | Phase 2A placeholder or forbidden | Business roles; not `admin` | Static later-phase placeholder only. No Processing View, Report View, Evidence Panel, Export Panel, or report content. |
+| `/workspace/*` other | Phase 2A placeholder or forbidden | Business roles plus `auditor`; not `admin` | Static later-phase placeholder only; routes not otherwise enumerated fall through to the placeholder or `forbidden` state. No Processing View, Report View, Evidence Panel, Export Panel, or report content. |
 | `/admin` | Admin Dashboard placeholder | `admin` only | Static Phase 2B placeholder. No live service counts, no recent events, no costs, no business data. |
 | `/admin/health` | Static System Health scaffold | `admin` only | Render a static table shaped like the System Health screen. No `/healthz` call, no latency probes, no cost monitor wiring, no auto-refresh. |
 | `/admin/permissions` | Permissions & Roles, Role Matrix tab only | `admin` only | Render the canonical role matrix from `docs/security/rbac_matrix.md` as baked static data. No Entra edit tab, no project assignments editor, no save actions. |
-| `/admin/source-mapping` | Source Mapping read-only scaffold | `admin` only | Render the shape of `docs/config/project_source_mapping.json` as static read-only source references. No editor, no validate/save/disable actions, no credential fields. |
+| `/admin/source-mapping` | Source Mapping read-only scaffold | `admin` only | Render the *shape* of `docs/config/project_source_mapping.example.json` (the sanitized example file — never the live `docs/config/project_source_mapping.json`) as static read-only source references. No editor, no validate/save/disable actions, no credential fields. |
 | `/admin/*` other | Phase 2B placeholder or forbidden | `admin` only | Static later-phase placeholder only. No Connectors, Approval Queue, Audit Log, Cost Monitor, live Dashboard, or editable Source Mapping. |
 | Forbidden route | `forbidden` | All roles | Render a static 403/forbidden state for guard violations. Server-side 403 remains authoritative and unchanged. |
 
@@ -170,18 +174,18 @@ Approved foundation:
 - Vite + React + TypeScript + Tailwind in `frontend/`.
 - Central token module or Tailwind theme mapping the exact values in Section B.
 - Route definitions for workspace/admin/forbidden paths.
-- Static fixtures copied from approved docs where needed for Phase 1I scaffolds.
+- Static fixtures copied from approved docs where needed for Phase 1I scaffolds. The Source Mapping scaffold fixture must be derived from `docs/config/project_source_mapping.example.json` (the sanitized example), never from the live `docs/config/project_source_mapping.json`, and must contain no credential or secret values.
 - No runtime dependency on backend services.
 
 Suggested internal structure for the future implementation:
 
 | Area | Responsibility |
 |---|---|
-| `tokens` | Color, typography, fixed layout dimensions, status definitions. |
+| `tokens` | Color, typography, fixed layout dimensions, the 13 status-pill definitions, and the named screen-level states (`static_scaffold`, `phase_2a_placeholder`, `phase_2b_placeholder`, `forbidden`). |
 | `components` | `StatusPill`, `Button`, `Modal`, `Toast`, `ConfirmDialog`, `SlideInPanel`. |
 | `layout` | Topbar, Sidebar, Main content wrapper, optional Detail Panel primitive. |
 | `routes` | Client-side route table and role guards. |
-| `fixtures` | Static role matrix and source-mapping shape derived from docs. |
+| `fixtures` | Static role matrix (from `rbac_matrix.md`) and source-mapping shape (from `project_source_mapping.example.json`) derived from docs. |
 | `screens` | Static Phase 1I scaffolds and later-phase placeholders only. |
 
 Architecture prohibitions:
@@ -202,12 +206,12 @@ The Phase 1I implementation cannot close unless these checks pass:
 - `npm run lint` exits 0 in `frontend/`.
 - All 9 canonical roles land on their correct default route.
 - Forbidden route attempts are denied by client UX without claiming to replace server authorization.
-- `StatusPill` renders all 13 states with correct colors and icons.
+- `StatusPill` renders all 13 states with correct colors and icons (`disconnected` using the `unplug` alias per Section B).
 - `ConfirmDialog` requires a typed confirmation string for destructive actions.
 - No `fetch`, `axios`, `XMLHttpRequest`, websocket, event stream, or network abstraction exists in `frontend/`.
 - Static System Health does not call `/healthz`.
 - Query Composer has no submit handler and no project-dropdown data.
-- Source Mapping is read-only and contains no credential values.
+- Source Mapping is read-only, is built from `project_source_mapping.example.json`, and contains no credential values.
 - Permissions & Roles includes only the read-only Role Matrix tab.
 - Admin cannot see workspace/report/evidence/query surfaces.
 - Business roles and auditor cannot see admin routes.
@@ -222,10 +226,10 @@ Recommended supporting checks:
 
 ## I. Implementation slices refinement
 
-The implementation plan in `docs/execution/PHASE_1I_PLAN.md` is valid. Refine the eventual Phase 1I sequence as follows:
+The implementation plan in `docs/execution/PHASE_1I_PLAN.md` is valid. This section *refines* — does not replace — its slice sequence:
 
 1. **Bootstrap only:** Create `frontend/`, install the approved Vite/React/TypeScript/Tailwind toolchain, and prove empty-app build/lint. Do not add API/client/auth code.
-2. **Tokens and status registry:** Implement locked colors, typography, fixed layout dimensions, and all 13 status definitions before building screens.
+2. **Tokens and status registry:** Implement locked colors, typography, fixed layout dimensions, all 13 status definitions, and the named screen-level states before building screens.
 3. **Foundation components:** Build the reusable components with stable dimensions and disabled/loading/error states; keep any sandbox local/dev-only and absent from production navigation.
 4. **Layout shell:** Implement topbar, role badge, sidebar, main content wrapper, and slide-in panel primitive with the 768px minimum width rule.
 5. **Role route matrix:** Implement static/client route guards for the 9 roles and a forbidden screen; keep any role switcher local/dev-only and production-disabled.
