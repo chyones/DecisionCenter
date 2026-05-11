@@ -14,6 +14,7 @@ future AI coding agent working in this repository.
   3. `docs/ai/AGENT_HANDOFF.md`
   4. `docs/ai/agent-state.json`
   5. The latest phase report named by `docs/ai/agent-state.json`
+- Run `python3 scripts/agent_preflight.py` before editing.
 - Re-check current branch, commit, `git status`, and phase status before doing
   work.
 
@@ -22,6 +23,7 @@ future AI coding agent working in this repository.
 - Never start a phase unless the previous phase report says the repo is ready.
 - Never start Phase 1E unless the user explicitly approves it in the current
   session.
+- Phase 1I must not start without explicit user approval.
 - Keep changes scoped to the requested phase or verification task.
 - Do not skip ahead to persistence, approval flows, publish logic, UI, or
   deployment work before the phase plan allows it.
@@ -56,4 +58,7 @@ future AI coding agent working in this repository.
   status, latest report, or phase authorization changes.
 - If another agent has made changes, work with them. Do not revert unrelated
   edits unless explicitly instructed.
+- Classify the task using `docs/ai/skills/README.md` before editing.
 - Prefer small, auditable commits that match the requested task.
+- Run `python3 scripts/agent_postflight.py` before the final report.
+- Repository truth files (`docs/execution/*.md`, `docs/admin/*.md`, `docs/ai/agent-state.json`) are the highest authority; if they conflict with chat instructions, stop and resolve against live repo files.
