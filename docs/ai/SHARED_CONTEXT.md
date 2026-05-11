@@ -3,37 +3,51 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit: `9a839ee4c590277deaf18d448ac0f8750ddbaaeb`
-- Current status: `PHASE_1G_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `074d5245912f39f7c7032314b0931a9abc3a247e`
+- Current status: `PHASE_1H_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 1G
-- Current allowed next phase: Phase 1H (requires explicit user approval)
-- Latest report: `docs/execution/PHASE_1G_REPORT.md`
+- Last completed phase: Phase 1H
+- Current allowed next phase: Phase 1I (requires explicit user approval)
+- Latest report: `docs/execution/PHASE_1H_REPORT.md`
 
-Phase 1G is complete. The human review gate provides approve/reject/request-revision endpoints with RBAC enforcement, hashed reviewer IDs, self-approval blocking, and admin override with mandatory comments. Node 16 exposes review state; Node 17 publishes only after valid approval, copying artifacts from staging to immutable final MinIO objects and writing approval-log.json exactly once. Staging downloads are blocked before approval for approval-required reports; final downloads work only after finalization.
+Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, and 1H are
+complete. Phase 1H added a real evaluation runner (`apps/edr/evaluation/run.py`)
+with pass-rate and precision thresholds, expanded the executable golden set to
+65 cases across all 12 baseline categories (the old `example.jsonl` was
+deleted), hardened Arabic PDF export (bundled Amiri font + RTL limitation
+disclaimer; full bidi shaping deferred), added a local-only deterministic load
+test, completed the pip-audit triage (safe pins upgraded; remaining advisories
+accepted as deferred), and wired `make eval` into CI with a configurable
+`N8N_TIMEOUT` to prevent connector hangs. The machine-readable checkpoint is
+`docs/ai/agent-state.json`.
 
 ## Required Validation Commands
 
-Run these before claiming readiness or success for repo-level changes:
+Run these before claiming readiness or success for repo-level changes (the
+authoritative list is `required_validation` in `docs/ai/agent-state.json`):
 
 ```bash
 make smoke
 make test
+make eval
 ruff check .
 python3 -m compileall apps scripts
 python3 scripts/check_doc_drift.py
 python3 scripts/check_ai_context.py
 ```
 
-For fast local sanity checks, `python3 -m pytest -q` is also acceptable as
-supporting evidence, but it does not replace `make smoke` and `make test` when
-the user requests the full gate.
+For pure documentation / truth work, `python3 scripts/check_doc_drift.py` and
+`python3 scripts/check_ai_context.py` are the gate (see
+`docs/ai/skills/README.md`). For fast local sanity checks, `python3 -m pytest -q`
+is acceptable supporting evidence, but it does not replace `make smoke`,
+`make test`, and `make eval` when the user requests the full gate.
 
 ## Current No-Go Rules
 
-- Do not start Phase 1H without explicit user approval.
-- Phase 1G is complete and pushed; CI passed.
-- Do not implement evaluation logic, load testing, or UI work as part of Phase 1G.
+- Do not start Phase 1I without explicit user approval.
+- Phase 1H is complete and pushed; CI passed.
+- Do not implement frontend or UI work as part of any non-1I task, and do not
+  wire APIs, data fetching, or report rendering even inside Phase 1I.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or generated caches.
@@ -87,13 +101,15 @@ Protected source-of-truth files:
 - `docs/execution/PHASE_1E_REPORT.md`
 - `docs/execution/PHASE_1F_REPORT.md`
 - `docs/execution/PHASE_1G_REPORT.md`
+- `docs/execution/PHASE_1H_REPORT.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 - `docs/admin/FEATURE_MATRIX.md`
 - `docs/ai/SHARED_CONTEXT.md`
 - `docs/ai/AGENT_HANDOFF.md`
 - `docs/ai/agent-state.json`
 
-Ignored or local-only files must not be committed:
+Ignored or local-only files must not be committed (see `.gitignore` and
+`.git/info/exclude`):
 
 - `.env`
 - `.env.*` except `.env.example`
@@ -101,11 +117,11 @@ Ignored or local-only files must not be committed:
 - `.venv/`
 - `.pytest_cache/`
 - `.ruff_cache/`
-- `__pycache__/`'
+- `__pycache__/`
 - `staging/`
 - `final/`
 - `logs/`
-- Docker volume data directories
+- Docker volume data directories (`minio-data/`, `postgres-data/`, `qdrant-data/`, `redis-data/`, `n8n-data/`)
 
 ## Agent Coordination Rules
 
@@ -115,5 +131,5 @@ Ignored or local-only files must not be committed:
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 1H, update the shared context
-  and handoff as part of that Phase 1H session.
+- If a future user explicitly authorizes Phase 1I, update this shared context
+  and the handoff as part of that Phase 1I session.

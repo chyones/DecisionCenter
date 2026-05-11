@@ -21,11 +21,11 @@ future AI coding agent working in this repository.
 ## Phase Rules
 
 - Never start a phase unless the previous phase report says the repo is ready.
-- Never start Phase 1E unless the user explicitly approves it in the current
+- Never start the next allowed phase named in `docs/ai/agent-state.json`
+  (currently Phase 1I) unless the user explicitly approves it in the current
   session.
-- Phase 1I must not start without explicit user approval.
 - Keep changes scoped to the requested phase or verification task.
-- Do not skip ahead to persistence, approval flows, publish logic, UI, or
+- Do not skip ahead to frontend API wiring, publish logic, UI data fetching, or
   deployment work before the phase plan allows it.
 - If repo docs and chat instructions conflict, stop and resolve against live
   repo files plus the user's latest explicit instruction.

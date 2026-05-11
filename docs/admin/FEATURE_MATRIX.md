@@ -68,7 +68,7 @@
 | Vector store (Qdrant) | 19.3 | `apps/edr/retrieval/qdrant_store.py` | N/A | Collection per `project_code` (`edr_*`) | None | init script delegates to runtime naming; round-trip test passes | implemented |
 | Hybrid search (RRF) | 19.4 | `apps/edr/retrieval/hybrid_search.py` | N/A | Ranked `EvidenceObject` list | None | unit test: fusion rank | implemented |
 | Reranking | 19.5 | `apps/edr/retrieval/rerank.py` | N/A | Ranked `EvidenceObject` list (top 10) | None | Cohere Rerank 3.5 async client; truncate-to-10 test | implemented |
-| Query expansion | 19.6 | Not yet created | N/A | Expanded query strings | None | eval test (1H) | missing |
+| Query expansion | 19.6 | Not yet created | N/A | Expanded query strings | None | future phase | missing |
 | RBAC-aware caching | 19.7 | `apps/edr/retrieval/cache.py` | N/A | Cache key includes `user_id` and `project_code` | None | unit test: key format with RBAC fingerprint | implemented |
 | Qdrant collection init | 19.3 | `scripts/init_qdrant.py` | Admin | Collection config | `init_qdrant` | idempotent run + alignment test with runtime naming | implemented |
 | MinIO bucket init | 20.4 | `scripts/init_minio.py` | Admin | Bucket | `init_minio` | idempotent create; runtime `_ensure_bucket()` covers any missed init | implemented |
@@ -95,7 +95,7 @@
 | Excel export | 3.3, 16.14 | `apps/edr/exporters/excel.py` | All | `.xlsx` file | `export: xlsx` | exporter wired; format selection via `output_formats` | implemented |
 | PDF export | 3.3, 16.14 | `apps/edr/exporters/pdf.py` | All | `.pdf` file | `export: pdf` | exporter wired with Arabic font auto-selection | implemented |
 | PowerPoint export | 3.3, 16.14 | `apps/edr/exporters/powerpoint.py` | All | `.pptx` file | `export: pptx` | exporter wired; format selection via `output_formats` | implemented |
-| Arabic RTL PDF | 29, 1H | `apps/edr/exporters/pdf.py` | All | `.pdf` with Arabic TTF | `export: pdf` | Amiri font registered, Arabic auto-detected, RTL disclaimer appended; full bidi shaping deferred | partial |
+| Arabic RTL PDF | 29 | `apps/edr/exporters/pdf.py` | All | `.pdf` with Arabic TTF | `export: pdf` | Amiri font registered, Arabic auto-detected, RTL disclaimer appended; `test_pdf_arabic.py` (7 cases); full bidi shaping/reshaping deferred | partial |
 
 ---
 
@@ -120,9 +120,9 @@
 
 | Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
-| Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 39 (CI) | implemented |
-| Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | exact pins; PyJWT 2.10.1, cryptography 44.0.0, anthropic 0.42.0, asyncpg 0.29.0 | implemented |
-| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | ruff + compileall + config coverage + doc-drift + AI-context + smoke + integration + pip-audit | implemented |
+| Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 40 (CI asserts) | implemented |
+| Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | exact pins; PyJWT 2.12.0, cryptography 44.0.1, python-dotenv 1.2.2, anthropic 0.42.0, asyncpg 0.29.0 | implemented |
+| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | ruff + compileall + config coverage + doc-drift + AI-context + smoke + integration + evaluation suite + pip-audit | implemented |
 | Async workflow runtime | 16 | `apps/edr/graph/runner.py`, all graph nodes | N/A | async `DecisionState` pipeline | None | tests invoke async runner/nodes with `asyncio.run()` | implemented |
 | Docker Compose stack | 23 | `docker-compose.yml` | N/A | 7 services with healthchecks | None | internal services on compose network only; public ports on 127.0.0.1 | implemented |
 | Reverse proxy | 23 | `Caddyfile` | N/A | Caddy config with HSTS | None | TLS via `PUBLIC_HOSTNAME`; `:80` fallback for local | implemented |
@@ -130,9 +130,9 @@
 | Redis caching | 20.4 | `docker-compose.yml` | N/A | Redis key-value | N/A | `redis-cli ping` healthcheck; cache wired in 1D | implemented |
 | MinIO object storage | 20.4 | `apps/edr/persistence/minio_store.py` + `scripts/init_minio.py` + `docker-compose.yml` | N/A | `/staging`, `/final` prefixes; configured bucket | N/A | health endpoint healthcheck; idempotent init script; runtime `_ensure_bucket()` | implemented |
 | Qdrant vector store | 20.4 | `docker-compose.yml`, `scripts/init_qdrant.py` | N/A | per-project collections | N/A | round-trip test + init script | implemented |
-| n8n orchestration | 20.2 | `docker-compose.yml` | N/A | 4 workflow files (Header Auth) | N/A | mocked workflow + auth-required test | implemented |
-| Langfuse tracing | 21.1 | `apps/edr/llm.py`, `.env.example` | N/A | Trace + span | token count | every LLM call hooked; falls back when `LANGFUSE_*` keys unset; full dashboard verification deferred to 1H | partial |
-| Cost cap enforcement | 18, 22 | `apps/edr/llm.py` (`_CostTracker`, `CostCapExceededError`, `TokenCapExceededError`) | N/A | `daily_cost_cap_usd`, per-tier token caps | `cost_exceeded` | pre-call estimate raises before every LLM call; load test validates deterministic fallback path | implemented |
+| n8n orchestration | 20.2 | `docker-compose.yml` | N/A | 4 workflow files (Header Auth); `N8N_TIMEOUT` bounds connector calls | N/A | mocked workflow + auth-required test; CI uses `N8N_TIMEOUT: 5` | implemented |
+| Langfuse tracing | 21.1 | `apps/edr/llm.py`, `.env.example` | N/A | Trace + span | token count | every LLM call hooked; falls back when `LANGFUSE_*` keys unset; live dashboard verification deferred (see gap G9) | partial |
+| Cost cap enforcement | 18, 22 | `apps/edr/llm.py` (`_CostTracker`, `CostCapExceededError`, `TokenCapExceededError`) | N/A | `daily_cost_cap_usd`, per-tier token caps | `cost_exceeded` | pre-call estimate raises before every LLM call; load test exercises the deterministic fallback path | implemented |
 
 ---
 
@@ -156,10 +156,10 @@
 
 | Feature | Spec Section | Document / Code | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------------|-----------|---------------|-------------|------------------|--------|
-| Tracing | 21.1 | `docs/operations/observability.md` + `apps/edr/llm.py` | N/A | Langfuse traces | `trace` | LLM-call hook present; live dashboard check deferred to 1H | partial |
-| Metrics | 21.2 | `docs/operations/observability.md` | N/A | Prometheus-style | `metric` | endpoint check (1H) | documented-only |
-| Alerts | 21.3 | `docs/operations/observability.md` | N/A | Alert rules | `alert_fired` | simulated failure (1H) | documented-only |
-| Logs | 21.4 | `docs/operations/observability.md` | N/A | Structured JSON | `log` | grep `request_id` (1H) | documented-only |
+| Tracing | 21.1 | `docs/operations/observability.md` + `apps/edr/llm.py` | N/A | Langfuse traces | `trace` | LLM-call hook present; live dashboard check deferred (gap G9) | partial |
+| Metrics | 21.2 | `docs/operations/observability.md` | N/A | Prometheus-style | `metric` | endpoint check deferred | documented-only |
+| Alerts | 21.3 | `docs/operations/observability.md` | N/A | Alert rules | `alert_fired` | simulated failure deferred | documented-only |
+| Logs | 21.4 | `docs/operations/observability.md` | N/A | Structured JSON | `log` | `request_id` correlation check deferred | documented-only |
 | Runbook | 21 | `docs/operations/runbook.md` | Admin | N/A | N/A | manual review | implemented |
 | Hosting guide | 23 | `docs/operations/hosting.md` | Admin | N/A | N/A | manual review | implemented |
 | Cost model | 22 | `docs/operations/cost_model.md` | Admin | N/A | N/A | manual review | implemented |
@@ -172,13 +172,14 @@
 | Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
 | Smoke tests | 26 | `apps/edr/tests/smoke/test_smoke.py` | N/A | N/A | N/A | `make smoke` passes (2 cases) | implemented |
-| Integration tests | 26 | `apps/edr/tests/integration/*.py` | N/A | N/A | N/A | 116 cases pass on HEAD (RBAC, connectors, retrieval, 1D fixes/security, 1E, 1F, 1G, doc drift) | implemented |
-| Golden set | 26.1 | `apps/edr/evaluation/goldenset/goldenset.jsonl` | N/A | 65 executable cases covering 12 baseline categories | N/A | `make eval` passes in CI | implemented |
+| Integration tests | 26 | `apps/edr/tests/integration/*.py` | N/A | N/A | N/A | 141 integration cases pass on HEAD (`make test`: 143 with smoke) — RBAC, connectors, retrieval, 1D fixes/security, 1E, 1F, 1G, 1H (evaluation, load test, Arabic PDF), doc drift | implemented |
+| Golden set | 26.1 | `apps/edr/evaluation/goldenset/goldenset.jsonl` | N/A | 65 executable cases covering 12 baseline categories | N/A | `make eval` passes in CI (`--min-pass-rate 0.95 --min-precision 0.90`) | implemented |
 | Evaluation runner | 26.4 | `apps/edr/evaluation/run.py` | N/A | JSONL loader, per-case metrics, aggregate report, non-zero on regression | N/A | `make eval` exits 0 in CI | implemented |
+| Load test | 26 | `apps/edr/evaluation/load_test.py` | N/A | Local-only deterministic fallback; latency percentiles | N/A | `test_load_test.py` (5 cases); `make load-test` baseline; no permanent thresholds | implemented |
 | Test cases spec | 26.1 | `docs/evaluation/edr_test_cases.md` | N/A | 12 baseline categories defined | N/A | N/A | implemented |
 | Metrics spec | 26.2 | `docs/evaluation/edr_metrics.md` | N/A | Precision, faithfulness, RBAC denial, QG false-pass | N/A | N/A | implemented |
 | Golden set spec | 26.1 | `docs/evaluation/edr_goldenset.md` | N/A | JSONL format | N/A | N/A | implemented |
-| Promptfoo config | 26.4 | `apps/edr/evaluation/promptfoo.config.yaml` | N/A | Structured placeholder with providers and test categories | N/A | Awaiting promptfoo CLI availability | partial |
+| Promptfoo config | 26.4 | `apps/edr/evaluation/promptfoo.config.yaml` | N/A | Structured placeholder with providers and test categories | N/A | Awaiting promptfoo CLI availability; CI does not gate on it | partial |
 
 ---
 
@@ -190,14 +191,21 @@ full phase scope.
 
 ---
 
-## Pip-audit Triage (Phase 1H Decision)
+## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
-`pip-audit` runs in CI as `continue-on-error: true`. The advisories below are
-recorded so Phase 1H can pick upgrade vs accept-risk before promoting `pip-audit`
-to a hard gate. No upgrade is performed before 1H to avoid regressing tested
-1E/1F/1G behavior.
+`pip-audit` runs in CI as `continue-on-error: true`. Phase 1H triaged the
+advisories present against the pinned dependency set: the safe pins were
+upgraded — `cryptography` 44.0.0 → 44.0.1, `python-dotenv` 1.0.0 → 1.2.2,
+`PyJWT` 2.10.1 → 2.12.0 — and the remaining advisories (major-version bumps on
+the LangChain/LangGraph stack, Starlette, and pytest) were accepted as deferred
+to avoid regressing tested behavior. Promotion of `pip-audit` from advisory to a
+hard CI gate remains deferred to a later phase. See
+`docs/execution/PHASE_1H_REPORT.md` for the closeout decision.
 
-| Package | Pinned | Advisory IDs | Suggested fix |
+The table below is the **pre-triage advisory snapshot**; the "Pinned" column
+reflects the versions in effect when the triage was performed.
+
+| Package | Pinned (pre-triage) | Advisory IDs | Suggested fix |
 |---|---|---|---|
 | cryptography | 44.0.0 | GHSA-79v4-65xg-pq4g, GHSA-r6ph-v2qm-q3c2, GHSA-m959-cc7f-wv43 | 44.0.1 / 46.0.5 / 46.0.6 |
 | langchain-core | 0.2.43 | GHSA-6qv9-48xg-fc7f, GHSA-c67j-w6g6-q2cm, GHSA-2g6r-c272-w58r, GHSA-926x-3r5x-gfhw, GHSA-pjwx-r37v-7724 | 0.3.x / 1.x line |
@@ -215,15 +223,17 @@ to a hard gate. No upgrade is performed before 1H to avoid regressing tested
 
 | ID | Gap | Location | Impact | Phase to Fix |
 |----|-----|----------|--------|--------------|
-| G3 | Only 1 executable golden example exists | `apps/edr/evaluation/goldenset/example.jsonl` | Evaluation is not meaningful yet | 1H |
 | G4 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | 1I |
 | G5 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | 2C |
-| G7 | Cost cap circuit breaker unit-tested but not load-tested | `apps/edr/llm.py` | Caps proven by raise paths; not yet exercised under concurrent load | 1H |
-| G8 | Pip-audit advisories untriaged | `pyproject.toml` pins | `pip-audit` cannot be promoted to a hard gate yet | 1H |
-| G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | 1H |
-| G10 | Arabic RTL PDF render not validated | `apps/edr/exporters/pdf.py` | Bidi text correctness unknown | 1H |
+| G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
+| G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |
+| G11 | `pip-audit` not promoted to a hard CI gate | `.github/workflows/ci.yml` | 19 advisories on 9 packages accepted as deferred; gate stays `continue-on-error` | Later phase (2+) |
 
-Closed gaps: G1 (nodes 11–17 stubs) — closed by Phase 1E/1F/1G. G2 (MinIO bucket
-init) — closed by `scripts/init_minio.py` and runtime `_ensure_bucket()`.
-G6 (Langfuse unwired) — closed in Phase 1E (tracing hook present); live
-dashboard validation tracked as G9 above.
+Closed gaps:
+- G1 (nodes 11–17 stubs) — closed by Phase 1E/1F/1G.
+- G2 (MinIO bucket init) — closed by `scripts/init_minio.py` and runtime `_ensure_bucket()`.
+- G3 (only one executable golden example) — closed in Phase 1H: 65-case `goldenset.jsonl`; stale `example.jsonl` deleted.
+- G6 (Langfuse unwired) — closed in Phase 1E (tracing hook present); live dashboard validation tracked as G9 above.
+- G7 (cost cap not load-tested) — closed in Phase 1H: `load_test.py` exercises the deterministic path; baseline recorded.
+- G8 (pip-audit advisories untriaged) — closed in Phase 1H: triage completed, safe pins upgraded; hard-gate promotion tracked as G11 above.
+- G10 (Arabic RTL PDF render not validated) — closed in Phase 1H: Amiri font, Arabic auto-detection, RTL disclaimer, `test_pdf_arabic.py`; remaining bidi-shaping work tracked as G10b above.

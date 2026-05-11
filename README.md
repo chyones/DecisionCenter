@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase1g_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase1h_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -93,9 +93,9 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
-Phase 1D-fixup, Phase 1E, Phase 1F, and Phase 1G are complete. Production
-is `NOT_LIVE`. Phase 1I (Frontend Foundation) is the next safe phase
-and requires explicit user approval before it starts. Treat the files
+Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, and Phase 1H are complete.
+Production is `NOT_LIVE`. Phase 1I (Frontend Foundation) is the safe next
+phase and requires explicit user approval before it starts. Treat the files
 above as the current authority before changing code, workflows, schemas,
 or operational assumptions.
 
@@ -108,21 +108,24 @@ Read these files in order:
 2. [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md)
 3. [docs/ai/AGENT_HANDOFF.md](docs/ai/AGENT_HANDOFF.md)
 4. [docs/ai/agent-state.json](docs/ai/agent-state.json)
-5. [docs/execution/PHASE_1G_REPORT.md](docs/execution/PHASE_1G_REPORT.md)
+5. [docs/execution/PHASE_1H_REPORT.md](docs/execution/PHASE_1H_REPORT.md) (the latest phase report named by `agent-state.json`)
 
-The AI context is checked by `python3 scripts/check_ai_context.py`. It is a
-guardrail against stale assumptions, duplicated work, and accidental phase or
-deployment drift.
+The AI context is checked by `python3 scripts/check_ai_context.py` and
+`python3 scripts/check_doc_drift.py`, plus the read-only
+`python3 scripts/agent_preflight.py` / `python3 scripts/agent_postflight.py`
+helpers. These are guardrails against stale assumptions, duplicated work, and
+accidental phase or deployment drift.
 
 ## Repository map
 
 | Path | Purpose |
 |---|---|
 | `apps/edr/` | FastAPI app, workflow nodes, schemas, retrieval pipeline, exporters, prompts, persistence, and tests |
-| `docs/` | Locked workflow spec, control docs, execution plans, policies, contracts, schemas, operations, and evaluation docs |
+| `docs/` | Locked workflow spec, control docs, execution plans, policies, contracts, schemas, operations, evaluation docs |
+| `docs/ai/` | AI agent shared context, handoff, machine-readable state, skill selection, failure modes, and task template |
 | `n8n/` | Real Phase 1C connector workflows (Header Auth, `$env`-sourced credentials) |
-| `scripts/` | Infrastructure/operations utilities: Qdrant collection init, MinIO bucket init, doc-drift and AI-context checkers |
-| `.github/workflows/` | CI validation for lint, syntax, config coverage, smoke tests, integration tests, and pip-audit |
+| `scripts/` | Infrastructure/operations utilities: Qdrant + MinIO init, doc-drift and AI-context checks, agent pre/post-flight |
+| `.github/workflows/` | CI validation: lint, syntax, config coverage, doc/AI-context checks, smoke + integration tests, evaluation suite, pip-audit |
 | Root config files | Docker Compose, Caddy, Python packaging, Makefile, env template, and ignore rules |
 
 ## Documentation
@@ -138,6 +141,7 @@ Use [docs/README.md](docs/README.md) as the full documentation index. Key suppor
 | Control-plane lock | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) |
 | Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
 | Phase 1A scope | [docs/execution/PHASE_1A_SCOPE.md](docs/execution/PHASE_1A_SCOPE.md) |
+| Latest phase report | [docs/execution/PHASE_1H_REPORT.md](docs/execution/PHASE_1H_REPORT.md) |
 | Feature matrix | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | RBAC matrix | [docs/security/rbac_matrix.md](docs/security/rbac_matrix.md) |
 | API contracts | [docs/contracts/](docs/contracts/) |
@@ -200,8 +204,9 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1E — LLM Nodes | Complete |
 | 1F — Persistence and Audit | Complete |
 | 1G — Human Review Gate | Complete |
-| 1H — Evaluation and Hardening | Safe next phase (requires explicit user approval) |
-| 1I–2C — Frontend/UI phases | Not started |
+| 1H — Evaluation and Hardening | Complete |
+| 1I — Frontend Foundation | Safe next phase (requires explicit user approval) |
+| 2A–2C — UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

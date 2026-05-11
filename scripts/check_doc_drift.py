@@ -8,7 +8,7 @@ every CI run must satisfy.
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
    FEATURE_MATRIX.md, and README.md must all reference the same "safe next
-   phase".
+   phase" (currently Phase 1I).
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 EXPECTED_NEXT_PHASE = "1I"
+EXPECTED_NEXT_PHASE_TITLE = "Frontend Foundation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 
 
@@ -81,14 +82,13 @@ def _control_plane_count(docs: dict[str, Path]) -> int:
 
 def _doc_mentions_next_phase(docs: dict[str, Path], name: str) -> bool:
     raw = _read(docs[name])
+    title = re.escape(EXPECTED_NEXT_PHASE_TITLE)
     candidates = [
         rf"Phase {EXPECTED_NEXT_PHASE} may start",
         rf"Phase {EXPECTED_NEXT_PHASE} is the safe next phase",
-        rf"safe next phase.*Phase {EXPECTED_NEXT_PHASE}",
-        rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}",
-        rf"\| {EXPECTED_NEXT_PHASE} — Evaluation and Hardening \| Safe next phase",
-        r"\| 1H — Evaluation and Hardening \| Safe next phase",
-        rf"Phases?\s+1A[–-]1G[^.]*Phase {EXPECTED_NEXT_PHASE}\s+is the safe next phase",
+        rf"safe next phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
+        rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}\b",
+        rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| Safe next phase",
     ]
     return any(re.search(pattern, raw) for pattern in candidates)
 

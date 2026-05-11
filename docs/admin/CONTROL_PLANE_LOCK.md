@@ -4,7 +4,7 @@
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_1G_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_1H_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -20,7 +20,7 @@ application features and does not define an Admin UI.
 | n8n status | Four workflow JSON files contain real 4–5 node pipelines and require n8n Header Auth | `n8n/*.json` |
 | Service-account credentials | Read from n8n container env (`$env.OWNCLOUD_*`, `$env.ODOO_*`); never sent through the webhook body | `n8n/owncloud_list.json`, `n8n/odoo_read.json`, `docker-compose.yml` |
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
-| Evaluation baseline | One JSONL golden example exists; 12 baseline categories and 50 go-live cases are required by spec | `apps/edr/evaluation/goldenset/example.jsonl`, spec Section 26 |
+| Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
 | Readiness | Phase 1A–1H + Phase 1D-fixup are complete; Phase 1I is the safe next phase | This document |
 
@@ -55,7 +55,7 @@ Phase 1E started:
 | C-3 | n8n webhooks accepted unauthenticated POSTs | All four webhook nodes now require `authentication=headerAuth`; CI test asserts this |
 | C-4 | Email node sent requests for any mailbox | Node 07 rejects mailboxes not in the allowlist before any external call; n8n `Enforce Mailbox Allowlist` node enforces a second time |
 | C-6 / S-1 | Service-account credentials flowed through the webhook body | ownCloud and Odoo workflows read credentials from `$env.*`; Python wrappers no longer include them; tests assert no leakage |
-| C-7 / I-6 | `PyJWT==2.7.0` and `cryptography==41.0.7` carried CVEs | Upgraded to `PyJWT==2.10.1` and `cryptography==44.0.0` |
+| C-7 / I-6 | `PyJWT==2.7.0` and `cryptography==41.0.7` carried CVEs | Upgraded to `PyJWT==2.10.1` and `cryptography==44.0.0` (later re-pinned in Phase 1H — see triage below) |
 | C-8 | Node 14 exported on `needs_review` because it only blocked `failed` | Now requires `quality_gate == "passed"` and a non-empty `report_json` |
 | L-2 / R-4 | JWT validator only surfaced first role; no JWKS cache | Validator caches the `PyJWKClient` and exposes the full `roles` tuple |
 | L-5 | `EvidenceObject.metadata` rejected n8n's `recipients` list | Schema now accepts scalars and lists of scalars |
@@ -64,42 +64,53 @@ Phase 1E started:
 | O-3 | Compose published Qdrant/MinIO/n8n on the public interface | Internal services use `expose:`; public-facing ports bound to `127.0.0.1` |
 | O-4 | Stale evaluation message claiming Phase 1G | Updated to Phase 1H |
 
-## Phase 1E–1G Closures
+## Phase 1E–1H Closures
 
-Phase 1E (LLM Nodes), Phase 1F (Persistence & Audit), and Phase 1G (Human
-Review Gate) shipped after the fixup. Each is locked here as evidence that
-the relevant control surface exists and is exercised by tests.
+Phase 1E (LLM Nodes), Phase 1F (Persistence & Audit), Phase 1G (Human Review
+Gate), and Phase 1H (Evaluation & Hardening) shipped after the fixup. Each is
+locked here as evidence that the relevant control surface exists and is
+exercised by tests.
 
 | Phase | Closure evidence |
 |---|---|
 | 1E — LLM Nodes | `apps/edr/llm.py` adds prompt-injection regex (11 patterns), per-tier token caps, and a daily cost tracker with `CostCapExceededError` / `TokenCapExceededError`. Nodes 02/03/04 use Haiku 4.5; node 11 implements the self-correct loop (max 3); node 12 uses Sonnet 4.6 with evidence-bound JSON output; node 13 is the deterministic claim checker; node 14 exports only when `quality_gate == "passed"` and `report_json` is non-empty. Tests: `apps/edr/tests/integration/test_phase1e.py` (22 cases). |
 | 1F — Persistence and Audit | `apps/edr/persistence/postgres_store.py` defines `audit_log` and `review_decisions` schemas idempotently. `apps/edr/persistence/minio_store.py` lazily ensures the configured bucket exists and persists the four staging artifacts; `scripts/init_minio.py` performs an explicit idempotent bucket create. Node 15 hashes user IDs (no raw IDs stored), persists the four artifacts and the audit row. The download endpoint `GET /reports/staging/{request_id}/download/{fmt}` enforces RBAC plus quality-gate state. Tests: `apps/edr/tests/integration/test_phase1f.py` (12 cases). |
 | 1G — Human Review Gate | `POST /reports/staging/{request_id}/{approve,reject,request-revision}` with role-aware action selection (`_check_reviewer_rbac`), self-approval blocking by hashed reviewer ID, mandatory comment for `admin_override`, and 409 on already-finalized reports. Node 16 reads review state from PostgreSQL; node 17 publishes only when `review_state == "approved"`, copies staging→final via `MinioStore.copy_to_final` (write-once via `FileExistsError`), writes `approval-log.json` exactly once, and updates `review_state` to `final`. `GET /reports/final/{request_id}/download/{fmt}` only serves once finalized; quality-gate `failed` blocks all download paths. Tests: `apps/edr/tests/integration/test_phase1g.py` (22 cases). |
+| 1H — Evaluation and Hardening | `apps/edr/evaluation/run.py` is a real runner (JSONL loader, single-node and full-workflow cases, dot-notation expectation resolution, aggregate pass-rate/precision/refusal metrics, non-zero exit on regression). `apps/edr/evaluation/goldenset/goldenset.jsonl` holds 65 executable cases across all 12 baseline categories (stale `example.jsonl` deleted). `node_13_quality_gate.py` enforces claim-to-evidence binding and Odoo-backed financial fields. `apps/edr/exporters/pdf.py` bundles `Amiri-Regular.ttf` (OFL), auto-detects Arabic, and appends an RTL limitation disclaimer (full bidi shaping deferred). `apps/edr/evaluation/load_test.py` is a local-only deterministic load test (baseline-only). `pip-audit` triage completed (see below). `.github/workflows/ci.yml` adds the `Evaluation suite` step (`--min-pass-rate 0.95 --min-precision 0.90`) and job-level `N8N_TIMEOUT: 5`. Tests: `test_evaluation.py` (15), `test_load_test.py` (5), `test_pdf_arabic.py` (7). Report: `docs/execution/PHASE_1H_REPORT.md`. |
 
-## Must Be Controlled Before Phase 1H
+## Standing Control Invariants
 
-- Documentation must agree on the 39-key environment baseline.
-- Documentation must agree that Phases 1A–1G plus the Phase 1D-fixup are complete.
+These hold for every phase, including the next one:
+
+- Documentation must agree on the 40-key environment baseline.
+- Documentation must agree that Phases 1A–1H plus the Phase 1D-fixup are complete.
 - RBAC documentation must use the 9 canonical roles from the locked spec.
 - n8n workflows must declare `authentication=headerAuth` and read service-account
   credentials from environment variables.
 - Service-account credentials must never be logged or transmitted via the
   webhook body.
 - CI must enforce: ruff, compileall, config coverage (40 keys), doc-drift
-  check, AI-context check, smoke tests, integration tests, and `pip-audit`
-  (non-blocking; see triage below).
+  check, AI-context check, smoke tests, integration tests, the evaluation suite
+  (`make eval` thresholds), and `pip-audit` (non-blocking; see triage below).
 - Production must remain `NOT_LIVE` until an operator runs the deployment
   steps in `docs/operations/runbook.md`. A push to `origin/main` is not a
   deployment.
 
-## Pip-audit Triage (Outstanding Before Phase 1H Promotion)
+## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
-`pip-audit` is wired into CI as `continue-on-error: true`. The following
-advisories are present against the pinned dependency set as of HEAD. They
-are recorded here so that Phase 1H can decide on upgrade vs accept-risk
-before promoting `pip-audit` to a hard gate.
+`pip-audit` is wired into CI as `continue-on-error: true`. Phase 1H triaged the
+advisories present against the pinned dependency set: the safe pins were
+upgraded — `cryptography` 44.0.0 → 44.0.1, `python-dotenv` 1.0.0 → 1.2.2,
+`PyJWT` 2.10.1 → 2.12.0 — and the remaining advisories (major-version bumps on
+the LangChain/LangGraph stack, Starlette, and pytest) were accepted as deferred.
+Promotion of `pip-audit` from advisory to a hard CI gate remains deferred to a
+later phase. The per-package residual list is recorded in
+`docs/execution/PHASE_1H_REPORT.md` and `docs/admin/FEATURE_MATRIX.md`.
 
-| Package | Pinned | Advisory IDs | Suggested fix version |
+The table below is the **pre-triage advisory snapshot** kept for traceability;
+the "Pinned" column reflects the versions in effect when the triage was performed.
+
+| Package | Pinned (pre-triage) | Advisory IDs | Suggested fix version |
 |---|---|---|---|
 | cryptography | 44.0.0 | GHSA-79v4-65xg-pq4g, GHSA-r6ph-v2qm-q3c2, GHSA-m959-cc7f-wv43 | 44.0.1 / 46.0.5 / 46.0.6 |
 | langchain-core | 0.2.43 | GHSA-6qv9-48xg-fc7f, GHSA-c67j-w6g6-q2cm, GHSA-2g6r-c272-w58r, GHSA-926x-3r5x-gfhw, GHSA-pjwx-r37v-7724 | 0.3.x / 1.x line |
@@ -111,15 +122,18 @@ before promoting `pip-audit` to a hard gate.
 | python-dotenv | 1.0.0 | GHSA-mf9w-mj56-hr94 | 1.2.2 |
 | starlette | 0.38.6 | GHSA-f96h-pmfr-66vw, GHSA-2c2j-9gv5-cj73 | 0.40.0 / 0.47.2 |
 
-Decision deferred to Phase 1H. No code in Phases 1E–1G should be re-pinned
-until 1H validates the upgrade path.
+No code in Phases 1E–1G was re-pinned until Phase 1H validated the safe-pin
+upgrade path; the remaining major-version bumps stay deferred until they can be
+regression-tested.
 
 ## Can Wait Until Later Phases
 
-- Full golden-set execution, prompt regression, Arabic PDF hardening, load
-  testing, and the pip-audit promotion to a hard gate can wait until Phase 1H.
-- Frontend / Admin UI work is out of scope for Phase 1A–1H and is governed
-  by the locked UI contract once spec changes authorize it.
+- Full Arabic bidirectional shaping/reshaping in PDF export, permanent
+  load-test p95 thresholds, promptfoo CLI integration, live Langfuse dashboard
+  validation, and promotion of `pip-audit` to a hard gate are all deferred past
+  Phase 1H.
+- Frontend / Admin UI work is out of scope until Phase 1I and is governed by the
+  locked UI contract; any Admin UI beyond the locked contract is a spec change.
 
 ## Admin And Control-Plane Coverage
 
@@ -133,9 +147,9 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**READY FOR PHASE 1H — production is NOT_LIVE.**
+**READY FOR PHASE 1I — production is NOT_LIVE.**
 
-Phases 1A–1G plus the Phase 1D-fixup are complete and validated by CI on
-HEAD. The next safe step is Phase 1H (Evaluation & Hardening) and it
-requires explicit user approval before it starts. This does not authorize
-deployment, frontend/UI work, or any spec change.
+Phases 1A–1H plus the Phase 1D-fixup are complete and validated by CI on HEAD.
+The next safe step is Phase 1I (Frontend Foundation & Static Admin Scaffolds)
+and it requires explicit user approval before it starts. This does not authorize
+deployment, API wiring inside the frontend, or any spec change.
