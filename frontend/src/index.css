@@ -1,7 +1,112 @@
 @import 'tailwindcss';
 
 /*
- * Phase 1I bootstrap stylesheet.
- * Design tokens (colors, spacing, depth, radius, typography) from
- * docs/design/PHASE_1I_UI_CONTRACT.md are introduced in the tokens slice.
+ * Phase 1I design tokens — mirrors docs/design/PHASE_1I_UI_CONTRACT.md.
+ * The TypeScript mirror of these values lives in src/tokens/*; keep the two
+ * in sync. This slice introduces the token layer only — no components, no
+ * layout shell, no routes.
  */
+@theme {
+  /* --- Surfaces & borders (contract §B) --- */
+  --color-surface-base: #0f1117;
+  --color-surface-raised: #1a1d27;
+  --color-surface-overlay: #242736;
+  --color-border: #2d3142;
+
+  /* --- Semantic colors (contract §B) --- */
+  --color-accent: #4f6ef7;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* --- Text colors (contract §B) --- */
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #4b5563;
+
+  /* --- Font families (contract §A.4 / §B). Web fonts (Inter, JetBrains Mono)
+     are wired in a later slice; these stacks fall back to system fonts. --- */
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /* --- Typography scale (contract §A.4). Adds to Tailwind's default text
+     scale; existing utilities like text-sm / text-lg are unaffected. --- */
+  --text-display: 20px;
+  --text-display--line-height: 1.3;
+  --text-display--letter-spacing: -0.01em;
+  --text-display--font-weight: 600;
+
+  --text-heading: 16px;
+  --text-heading--line-height: 1.4;
+  --text-heading--font-weight: 600;
+
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+  --text-body--font-weight: 400;
+
+  --text-label: 12px;
+  --text-label--line-height: 1.5;
+  --text-label--letter-spacing: 0.01em;
+  --text-label--font-weight: 500;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.5;
+  --text-caption--font-weight: 400;
+
+  --text-mono: 12px;
+  --text-mono--line-height: 1.4;
+  --text-mono--font-weight: 400;
+
+  /* --- Border radius (contract §A.3) --- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* --- Elevation (contract §A.2) --- */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.24);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.32);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+/*
+ * Fixed layout dimensions (contract §B / §C) and a few derived values. These
+ * are intentionally NOT Tailwind theme namespaces — they are hard tokens the
+ * layout-shell slice will consume directly. The spacing scale (space-1 … space-12
+ * = 4px … 48px, contract §A.1) deliberately coincides with Tailwind's default
+ * numeric spacing scale, so no custom spacing keys are defined here.
+ */
+:root {
+  --layout-topbar-height: 48px;
+  --layout-sidebar-width: 220px;
+  --layout-sidebar-rail-width: 48px;
+  --layout-main-max-width: 960px;
+  --layout-detail-panel-width: 380px;
+  --layout-min-app-width: 768px;
+
+  --overlay-scrim: rgb(0 0 0 / 0.6);
+  --overlay-scrim-panel: rgb(0 0 0 / 0.4);
+  --focus-ring:
+    0 0 0 2px var(--color-surface-base), 0 0 0 4px var(--color-accent);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-width: var(--layout-min-app-width);
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
