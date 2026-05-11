@@ -3,7 +3,7 @@
 ## Scope
 
 - Branch: `main`
-- Phase 1H commits (verified):
+- Phase 1H implementation commits (verified anchor: `074d524`):
   - `1d5ddeb` — Slice 1: Real evaluation runner (`apps/edr/evaluation/run.py`)
   - `6910017` — Slice 2: Golden set expanded to 65 executable JSONL cases
   - `82ff72e` — Slice 3: Strict evaluation rules enforced
@@ -12,9 +12,11 @@
   - `c7d7f4f` — Slice 6: Local-only load test (`apps/edr/evaluation/load_test.py`)
   - `f06a441` — Slice 7: pip-audit triage (safe pins upgraded)
   - `074d524` — Slice 8: CI integration (`make eval` step added)
-  - `3f9d3af` — Fix: configurable `N8N_TIMEOUT` to prevent CI hang
-  - `50d8f87` — Fix: move `N8N_TIMEOUT` to job level so integration tests also use 5 s
-- Ending commit on `main`: `50d8f87`
+- Post-implementation hygiene commits (CI timeout fix):
+  - `3f9d3af` — Add configurable `N8N_TIMEOUT` setting
+  - `50d8f87` — Move `N8N_TIMEOUT` to job level
+- Closeout commit: `11d1efc` — Truth reconciliation and Phase 1H report
+- Verified anchor: `074d5245912f39f7c7032314b0931a9abc3a247e`
 - Production status: `NOT_LIVE`
 - Final readiness decision: `PHASE_1H_COMPLETE_NOT_LIVE`
 
