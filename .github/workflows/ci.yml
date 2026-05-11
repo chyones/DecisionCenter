@@ -14,6 +14,10 @@ jobs:
     env:
       N8N_TIMEOUT: 5
       N8N_BASE_URL: http://127.0.0.1:5678
+      QDRANT_URL: http://127.0.0.1:6333
+      MINIO_ENDPOINT: 127.0.0.1:9000
+      REDIS_URL: redis://127.0.0.1:6379/0
+      POSTGRES_HOST: 127.0.0.1
 
     steps:
       - name: Check out repository
