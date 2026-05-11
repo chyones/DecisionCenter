@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       N8N_TIMEOUT: 5
+      N8N_BASE_URL: http://127.0.0.1:5678
 
     steps:
       - name: Check out repository
