@@ -6,6 +6,7 @@ import { ForbiddenScreen } from '../screens/ForbiddenScreen';
 import { AdminHealthScreen } from '../screens/AdminHealthScreen';
 import { AdminPermissionsScreen } from '../screens/AdminPermissionsScreen';
 import { AdminSourceMappingScreen } from '../screens/AdminSourceMappingScreen';
+import { QueryComposerScreen } from '../screens/QueryComposerScreen';
 
 export function Router() {
   const { role } = useRole();
@@ -25,13 +26,7 @@ export function Router() {
 
   // Workspace routes
   if (path === '/workspace/new') {
-    return (
-      <PlaceholderScreen
-        title="Query Composer"
-        state="static_scaffold"
-        body="Form shell with no project data and no submit behavior."
-      />
-    );
+    return <QueryComposerScreen />;
   }
 
   if (path === '/workspace/reports') {
