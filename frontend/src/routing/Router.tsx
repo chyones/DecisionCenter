@@ -3,6 +3,7 @@ import { useHashPath } from './useHashPath';
 import { isRouteAllowed, getDefaultLanding } from './guards';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { ForbiddenScreen } from '../screens/ForbiddenScreen';
+import { AdminHealthScreen } from '../screens/AdminHealthScreen';
 
 export function Router() {
   const { role } = useRole();
@@ -62,13 +63,7 @@ export function Router() {
   }
 
   if (path === '/admin/health') {
-    return (
-      <PlaceholderScreen
-        title="System Health"
-        state="static_scaffold"
-        body="Static table shaped like the System Health screen. No live data."
-      />
-    );
+    return <AdminHealthScreen />;
   }
 
   if (path === '/admin/permissions') {
