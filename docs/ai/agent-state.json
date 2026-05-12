@@ -1,14 +1,14 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "074d5245912f39f7c7032314b0931a9abc3a247e",
-  "status": "PHASE_1H_COMPLETE_NOT_LIVE",
+  "current_commit": "63e0e6f9a890914c62bde3acaf609703026d0620",
+  "status": "PHASE_1I_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
-  "last_completed_phase": "Phase 1H",
-  "next_allowed_phase": "Phase 1I",
+  "last_completed_phase": "Phase 1I",
+  "next_allowed_phase": "Phase 2A",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
-  "requires_explicit_user_approval_for_phase_1i": true,
-  "latest_report": "docs/execution/PHASE_1H_REPORT.md",
+  "requires_explicit_user_approval_for_phase_2a": true,
+  "latest_report": "docs/execution/PHASE_1I_REPORT.md",
   "must_not_deploy": true,
   "must_not_commit_env": true,
   "required_validation": [
@@ -18,6 +18,8 @@
     "ruff check .",
     "python3 -m compileall apps scripts",
     "python3 scripts/check_doc_drift.py",
-    "python3 scripts/check_ai_context.py"
+    "python3 scripts/check_ai_context.py",
+    "cd frontend && npm run lint",
+    "cd frontend && npm run build"
   ]
 }

@@ -25,8 +25,8 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "1I"
-EXPECTED_NEXT_PHASE_TITLE = "Frontend Foundation"
+EXPECTED_NEXT_PHASE = "2A"
+EXPECTED_NEXT_PHASE_TITLE = "User Chat Workspace Implementation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 
 

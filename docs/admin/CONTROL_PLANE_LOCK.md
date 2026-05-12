@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-10
+> **Date:** 2026-05-12
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_1H_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_1I_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1H + Phase 1D-fixup are complete; Phase 1I is the safe next phase | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase | This document |
 
 ## Authoritative Environment Baseline
 
@@ -132,7 +132,7 @@ regression-tested.
   load-test p95 thresholds, promptfoo CLI integration, live Langfuse dashboard
   validation, and promotion of `pip-audit` to a hard gate are all deferred past
   Phase 1H.
-- Frontend / Admin UI work is out of scope until Phase 1I and is governed by the
+- Frontend / Admin UI foundation is complete in Phase 1I and is governed by the
   locked UI contract; any Admin UI beyond the locked contract is a spec change.
 
 ## Admin And Control-Plane Coverage
@@ -147,9 +147,9 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**READY FOR PHASE 1I — production is NOT_LIVE.**
+**READY FOR PHASE 2A — production is NOT_LIVE.**
 
 Phases 1A–1H plus the Phase 1D-fixup are complete and validated by CI on HEAD.
-The next safe step is Phase 1I (Frontend Foundation & Static Admin Scaffolds)
+The next safe step is Phase 2A (User Chat Workspace Implementation)
 and it requires explicit user approval before it starts. This does not authorize
 deployment, API wiring inside the frontend, or any spec change.

@@ -3,7 +3,7 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-10
-> **Status:** Phases 1A–1H plus the Phase 1D-fixup are complete. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
@@ -23,7 +23,7 @@ endpoints, and the write-once publish-to-final flow are all wired and
 covered by integration tests. The 65-case executable golden set, evaluation
 runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
 load test, pip-audit triage, and CI integration are all complete.
-Phase 1I is the safe next phase and may start with explicit user approval.
+Phase 2A is the safe next phase and may start with explicit user approval.
 Production deployment is out of scope until Phase 2C closes.
 
 ---
@@ -242,7 +242,7 @@ Phase 1E starts. No new product features.
 
 ---
 
-## Phase 1I — Frontend Foundation & Static Admin Scaffolds
+## Phase 1I — Frontend Foundation & Static Admin Scaffolds (Complete)
 
 **Goal:** Establish the frontend codebase, build system, design system, and static screens that do not require live backend data. No API wiring.
 

@@ -2,7 +2,7 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Date:** 2026-05-10
-> **Status:** Phases 1A–1H plus the Phase 1D-fixup are complete. Phase 1I is the safe next phase. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -185,9 +185,9 @@
 
 ## Frontend & UI (Phases 1I–2C)
 
-Source of truth: `docs/design/UI_CONTRACT_v1.md`. All UI feature rows remain
-`missing` until Phase 1I. See `docs/execution/IMPLEMENTATION_PHASES.md` for the
-full phase scope.
+Source of truth: `docs/design/UI_CONTRACT_v1.md`. Frontend foundation and
+static scaffolds are complete in Phase 1I. See
+`docs/execution/IMPLEMENTATION_PHASES.md` for the full phase scope.
 
 ---
 
@@ -223,7 +223,7 @@ reflects the versions in effect when the triage was performed.
 
 | ID | Gap | Location | Impact | Phase to Fix |
 |----|-----|----------|--------|--------------|
-| G4 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | 1I |
+| G4 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | Closed in 1I |
 | G5 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | 2C |
 | G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
 | G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |

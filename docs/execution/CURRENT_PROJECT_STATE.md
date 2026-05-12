@@ -1,7 +1,7 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `50d8f87` (verified Phase 1H closeout commit).
-> **Audit date:** 2026-05-10
+> **Audited HEAD:** `63e0e6f` (verified Phase 1I closeout commit).
+> **Audit date:** 2026-05-12
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H — verified against
 > live repo files, CI evidence, and local test execution.
 
@@ -9,21 +9,31 @@
 
 ## Current Project Stage
 
-DecisionCenter has completed Phase 1H (Evaluation & Hardening); all prior
-phases including the Phase 1D-fixup remain closed and locked. The full
-execution pipeline runs end-to-end with evaluation coverage: authentication and
-RBAC at Node 01; n8n connectors with Header Auth and `$env`-sourced
-credentials; Voyage embeddings, Cohere reranking, tiktoken chunking, per-project
-Qdrant collections, and a Redis-backed evidence cache; LLM nodes 02/03/04/11/12
-(Haiku for Light, Sonnet for Heavy) with prompt-injection protection, per-tier
-token caps, and a daily cost cap; deterministic claim checking at Node 13;
-export gating at Node 14; MinIO + PostgreSQL persistence at Node 15 with hashed
-user IDs and the four artifacts; human review at Node 16; write-once publish to
-immutable final artifacts at Node 17; and a 65-case executable golden set with
-pass-rate and precision thresholds enforced in CI.
+DecisionCenter has completed Phase 1I (Frontend Foundation & Static Admin
+Scaffolds); all prior phases including the Phase 1D-fixup remain closed and
+locked. The full execution pipeline runs end-to-end with evaluation coverage:
+authentication and RBAC at Node 01; n8n connectors with Header Auth and
+`$env`-sourced credentials; Voyage embeddings, Cohere reranking, tiktoken
+chunking, per-project Qdrant collections, and a Redis-backed evidence cache;
+LLM nodes 02/03/04/11/12 (Haiku for Light, Sonnet for Heavy) with
+prompt-injection protection, per-tier token caps, and a daily cost cap;
+deterministic claim checking at Node 13; export gating at Node 14; MinIO +
+PostgreSQL persistence at Node 15 with hashed user IDs and the four artifacts;
+human review at Node 16; write-once publish to immutable final artifacts at
+Node 17; and a 65-case executable golden set with pass-rate and precision
+thresholds enforced in CI.
 
-Production is `NOT_LIVE`. Phase 1I (Frontend Foundation) is the next safe
-phase and requires explicit user approval before it starts.
+The frontend foundation is complete: Vite + React + TypeScript + Tailwind
+project in `frontend/`; design tokens; layout shell (Topbar, Sidebar, Main
+Content, Detail Panel); reusable components (StatusPill, Button, Modal, Toast,
+ConfirmDialog, SlideInPanel); role-guarded hash-based routing with 9 canonical
+roles; static scaffolds for Admin System Health, Permissions & Roles (Role
+Matrix tab), Source Mapping (read-only), and Query Composer shell. Frontend
+lint and build are wired into CI. No API calls, no data fetching, no submit
+behavior.
+
+Production is `NOT_LIVE`. Phase 2A (User Chat Workspace Implementation) is
+the next safe phase and requires explicit user approval before it starts.
 
 ---
 
@@ -42,6 +52,7 @@ phase and requires explicit user approval before it starts.
 | Phase 1F — Persistence and Audit | Complete | `apps/edr/persistence/postgres_store.py` defines `audit_log` and `review_decisions` schemas idempotently; `apps/edr/persistence/minio_store.py` lazily ensures the bucket via `_ensure_bucket()` and exposes `put_json`, `put_bytes`, `get_object`, `copy_to_final`. `scripts/init_minio.py` performs an explicit idempotent bucket create. Node 15 hashes user IDs and persists the four staging artifacts plus an audit row. Download endpoint enforces RBAC + quality gate. Tests: `apps/edr/tests/integration/test_phase1f.py` (12 cases). |
 | Phase 1G — Human Review Gate | Complete | `POST /reports/staging/{request_id}/{approve,reject,request-revision}` enforce reviewer RBAC via `_check_reviewer_rbac` (auditor blocked, admin override is metadata-only with mandatory comment), self-approval blocking by hashed reviewer ID, and 409 on already-finalized reports. Node 16 reads `review_state` from PostgreSQL. Node 17 publishes only when `review_state == "approved"`, copies staging→final via write-once `MinioStore.copy_to_final` (raises `FileExistsError`), writes `approval-log.json` exactly once, and updates `review_state` to `final`. `GET /reports/final/{request_id}/download/{fmt}` only serves once finalized; quality-gate `failed` blocks all download paths. Tests: `apps/edr/tests/integration/test_phase1g.py` (22 cases). |
 | Phase 1H — Evaluation and Hardening | Complete | Real evaluation runner (`apps/edr/evaluation/run.py`) with JSONL loader, per-case metrics, aggregate report, and non-zero exit on regression. 65 executable golden-set cases covering all 12 baseline categories. Arabic PDF hardening with bundled Amiri font and RTL limitation disclaimer. Local-only load test with deterministic fallback. pip-audit triage completed: safe pins upgraded (`cryptography` 44.0.1, `python-dotenv` 1.2.2, `PyJWT` 2.12.0); remaining 19 advisories on 9 packages accepted as deferred. CI integration: `make eval` runs with `--min-pass-rate 0.95 --min-precision 0.90`. `N8N_TIMEOUT` setting prevents connector hangs in CI. Tests: `test_evaluation.py` (15), `test_load_test.py` (5), `test_pdf_arabic.py` (7). |
+| Phase 1I — Frontend Foundation & Static Admin Scaffolds | Complete | Vite + React + TypeScript + Tailwind project in `frontend/`; design tokens (colors, typography, spacing, status pills); layout shell (Topbar, Sidebar, Main Content, Detail Panel); reusable components (StatusPill, Button, Modal, Toast, ConfirmDialog, SlideInPanel); role-guarded hash-based routing with 9 canonical roles; static scaffolds: Admin System Health, Permissions & Roles (Role Matrix tab), Source Mapping (read-only), Query Composer shell. Frontend lint and build wired into CI. No API calls, no data fetching, no submit behavior. |
 
 ---
 
@@ -49,7 +60,7 @@ phase and requires explicit user approval before it starts.
 
 | Phase | Evidence |
 |---|---|
-| Phase 1I, 2A, 2B, 2C — UI phases | No `frontend/` directory; no `make test:ui` target. |
+| Phase 2A, 2B, 2C — UI phases | `frontend/` exists with static scaffolds; live backend wiring pending. |
 
 ---
 
@@ -80,21 +91,21 @@ phase and requires explicit user approval before it starts.
 
 ## Safe Next Phase
 
-Phase 1I may start (requires explicit user approval).
+Phase 2A may start (requires explicit user approval).
 
-Allowed Phase 1I work is limited to:
+Allowed Phase 2A work is limited to:
 
-- Initialize frontend project (Vite + React + TypeScript + Tailwind) in `frontend/`.
-- Implement design tokens, layout shell, and reusable components per `UI_CONTRACT_v1.md`.
-- Build static scaffolds (no API wiring): Admin System Health, Permissions & Roles,
-  Source Mapping, Query Composer shell.
-- Add `frontend/` lint and build steps to CI.
+- Implement live backend integration for Query Composer (project dropdown, submit handler).
+- Implement Processing View with live status polling.
+- Implement Reports List with real data from MinIO/PostgreSQL.
+- Implement Report View with content rendering and Evidence Panel.
+- Add functional Upload Zone with file handling.
 
-## Forbidden Work In Phase 1I
+## Forbidden Work In Phase 2A
 
-Do not deploy. Do not wire API calls or data fetching. Do not render real report
-content. Do not change the locked spec unless an explicit spec-change ticket is
-approved. Do not commit secrets in workflows, docs, code, logs, or tests.
+Do not deploy. Do not change the locked spec unless an explicit spec-change
+ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
+tests.
 
 ---
 

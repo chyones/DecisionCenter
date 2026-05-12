@@ -93,11 +93,11 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
-Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, and Phase 1H are complete.
-Production is `NOT_LIVE`. Phase 1I (Frontend Foundation) is the safe next
-phase and requires explicit user approval before it starts. Treat the files
-above as the current authority before changing code, workflows, schemas,
-or operational assumptions.
+Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are
+complete. Production is `NOT_LIVE`. Phase 2A (User Chat Workspace
+Implementation) is the safe next phase and requires explicit user approval
+before it starts. Treat the files above as the current authority before
+changing code, workflows, schemas, or operational assumptions.
 
 ## AI Agent Operating Context
 
@@ -205,7 +205,8 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1F — Persistence and Audit | Complete |
 | 1G — Human Review Gate | Complete |
 | 1H — Evaluation and Hardening | Complete |
-| 1I — Frontend Foundation | Safe next phase (requires explicit user approval) |
+| 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
+| 2A — User Chat Workspace Implementation | Safe next phase (requires explicit user approval) |
 | 2A–2C — UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.

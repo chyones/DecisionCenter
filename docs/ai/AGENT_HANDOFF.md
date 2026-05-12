@@ -2,10 +2,34 @@
 
 ## What Was Done
 
-Phase 1H (Evaluation & Hardening) is complete. A lightweight AI agent operating
-layer was added afterward (`AGENTS.md`, `docs/ai/skills/README.md`,
-`docs/ai/failure-modes.md`, `docs/ai/task-template.md`,
-`scripts/agent_preflight.py`, `scripts/agent_postflight.py`).
+Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 1H
+(Evaluation & Hardening) was completed immediately before 1I.
+
+### Phase 1I — Frontend Foundation & Static Admin Scaffolds
+
+- `frontend/` — Vite + React + TypeScript + Tailwind project with `npm run build`
+  and `npm run lint` wired into CI.
+- Design tokens — color, typography, spacing, status-pill definitions, screen
+  states, shadows, radius from `docs/design/PHASE_1I_UI_CONTRACT.md` §B and §A.
+- Layout shell — `Topbar` (48px), `Sidebar` (220px/48px collapsible), `MainContent`
+  (960px max), `UnsupportedWidth` (<768px overlay).
+- Reusable components — `StatusPill` (13 states), `Button` (4 variants), `Modal`,
+  `Toast`, `ConfirmDialog` (typed-confirmation destructive guard), `SlideInPanel`.
+- Role-guarded routing — hash-based `Router` with `useHashPath`; 9 canonical roles;
+  `getDefaultLanding` and `isRouteAllowed` UX-only guards; `ForbiddenScreen` with
+  auto-redirect countdown; dev-only `RoleSwitcher` gated by `import.meta.env.DEV`.
+- Static scaffolds:
+  - `AdminHealthScreen` (`/admin/health`) — 10 static service rows, `StatusPill`,
+    cost-monitor placeholder bars.
+  - `AdminPermissionsScreen` (`/admin/permissions`) — Role Matrix tab only,
+    9 rows from `docs/security/rbac_matrix.md`, read-only.
+  - `AdminSourceMappingScreen` (`/admin/source-mapping`) — two-column layout,
+    project list + metadata rows from `docs/config/project_source_mapping.example.json`.
+  - `QueryComposerScreen` (`/workspace/new`) — form shell with disabled project
+    selector, enabled query textarea (ephemeral local typing), collapsed filters,
+    upload placeholder, disabled output-format checkboxes, disabled
+    "Generate Report →" button.
+- No API calls, no `fetch`/`axios`/network layer, no submit behavior, no live data.
 
 ### Phase 1H — Evaluation & Hardening
 
@@ -51,15 +75,15 @@ layer was added afterward (`AGENTS.md`, `docs/ai/skills/README.md`,
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit (anchor): `074d5245912f39f7c7032314b0931a9abc3a247e`
-- Status: `PHASE_1H_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `63e0e6f9a890914c62bde3acaf609703026d0620`
+- Status: `PHASE_1I_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Latest report: `docs/execution/PHASE_1H_REPORT.md`
+- Latest report: `docs/execution/PHASE_1I_REPORT.md`
 
 ## What Was NOT Done
 
-- Phase 1I (Frontend Foundation) not started — requires explicit user approval.
-- No frontend UI added.
+- Phase 2A (User Chat Workspace Implementation) not started — requires explicit user approval.
+- No live backend integration in frontend.
 - No full Arabic bidirectional shaping/reshaping in PDF export.
 - No promptfoo CLI integration (config is placeholder only).
 - No permanent load-test p95 thresholds (baseline-only).
@@ -71,20 +95,19 @@ layer was added afterward (`AGENTS.md`, `docs/ai/skills/README.md`,
 - `AGENTS.md`
 - `docs/ai/SHARED_CONTEXT.md`
 - `docs/ai/agent-state.json`
-- `docs/execution/PHASE_1H_REPORT.md`
+- `docs/execution/PHASE_1I_REPORT.md`
 - `docs/execution/IMPLEMENTATION_PHASES.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 
 ## Next Recommended Work
 
-Phase 1I — Frontend Foundation & Static Admin Scaffolds — requires explicit user
-approval. When authorized: initialize the `frontend/` project (Vite + React +
-TypeScript + Tailwind), implement design tokens and the layout shell, build
-reusable components and role-guarded routing, and add static admin scaffolds with
-no API wiring, per `docs/design/UI_CONTRACT_v1.md`. Add `frontend/` lint and build
-steps to CI.
+Phase 2A — User Chat Workspace Implementation — requires explicit user approval.
+When authorized: implement live backend integration for Query Composer (project
+dropdown, submit handler), Processing View with live status polling, Reports List
+with real data, Report View with content rendering and Evidence Panel, and
+functional Upload Zone.
 
-## Validation Proof (Phase 1H closeout)
+## Validation Proof (Phase 1I closeout)
 
 - `make smoke`: 2 passed.
 - `make test`: 143 passed.
@@ -93,7 +116,10 @@ steps to CI.
 - `python3 -m compileall apps scripts`: clean.
 - `python3 scripts/check_doc_drift.py`: clean.
 - `python3 scripts/check_ai_context.py`: clean.
+- `cd frontend && npm run lint`: clean.
+- `cd frontend && npm run build`: clean.
+- Zero forbidden network APIs in `frontend/src/`.
 
 ## Final Status
 
-`PHASE_1H_COMPLETE_NOT_LIVE`
+`PHASE_1I_COMPLETE_NOT_LIVE`

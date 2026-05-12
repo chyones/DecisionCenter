@@ -3,23 +3,21 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `074d5245912f39f7c7032314b0931a9abc3a247e`
-- Current status: `PHASE_1H_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `63e0e6f9a890914c62bde3acaf609703026d0620`
+- Current status: `PHASE_1I_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 1H
-- Current allowed next phase: Phase 1I (requires explicit user approval)
-- Latest report: `docs/execution/PHASE_1H_REPORT.md`
+- Last completed phase: Phase 1I
+- Current allowed next phase: Phase 2A (requires explicit user approval)
+- Latest report: `docs/execution/PHASE_1I_REPORT.md`
 
-Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, and 1H are
-complete. Phase 1H added a real evaluation runner (`apps/edr/evaluation/run.py`)
-with pass-rate and precision thresholds, expanded the executable golden set to
-65 cases across all 12 baseline categories (the old `example.jsonl` was
-deleted), hardened Arabic PDF export (bundled Amiri font + RTL limitation
-disclaimer; full bidi shaping deferred), added a local-only deterministic load
-test, completed the pip-audit triage (safe pins upgraded; remaining advisories
-accepted as deferred), and wired `make eval` into CI with a configurable
-`N8N_TIMEOUT` to prevent connector hangs. The machine-readable checkpoint is
-`docs/ai/agent-state.json`.
+Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
+are complete. Phase 1I established the frontend foundation: Vite + React +
+TypeScript + Tailwind project in `frontend/`; design tokens; layout shell;
+reusable components; role-guarded hash-based routing with 9 canonical roles;
+static scaffolds for Admin System Health, Permissions & Roles (Role Matrix
+only), Source Mapping (read-only), and Query Composer shell. Frontend lint and
+build are wired into CI. No API calls, no data fetching, no submit behavior.
+The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
 
@@ -44,10 +42,10 @@ is acceptable supporting evidence, but it does not replace `make smoke`,
 
 ## Current No-Go Rules
 
-- Do not start Phase 1I without explicit user approval.
-- Phase 1H is complete and pushed; CI passed.
-- Do not implement frontend or UI work as part of any non-1I task, and do not
-  wire APIs, data fetching, or report rendering even inside Phase 1I.
+- Do not start Phase 2A without explicit user approval.
+- Phase 1I is complete and pushed; CI passed.
+- Do not wire APIs, data fetching, or report rendering inside Phase 2A unless
+  explicitly scoped to that phase.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or generated caches.
@@ -131,5 +129,5 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 1I, update this shared context
-  and the handoff as part of that Phase 1I session.
+- If a future user explicitly authorizes Phase 2A, update this shared context
+  and the handoff as part of that Phase 2A session.
