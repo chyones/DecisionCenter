@@ -5,6 +5,7 @@ import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { ForbiddenScreen } from '../screens/ForbiddenScreen';
 import { AdminHealthScreen } from '../screens/AdminHealthScreen';
 import { AdminPermissionsScreen } from '../screens/AdminPermissionsScreen';
+import { AdminSourceMappingScreen } from '../screens/AdminSourceMappingScreen';
 
 export function Router() {
   const { role } = useRole();
@@ -72,13 +73,7 @@ export function Router() {
   }
 
   if (path === '/admin/source-mapping') {
-    return (
-      <PlaceholderScreen
-        title="Project Source Mapping"
-        state="static_scaffold"
-        body="Read-only view of the mapping shape. No credentials are shown."
-      />
-    );
+    return <AdminSourceMappingScreen />;
   }
 
   if (path.startsWith('/admin/')) {

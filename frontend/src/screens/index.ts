@@ -2,3 +2,4 @@ export { PlaceholderScreen, type PlaceholderScreenProps } from './PlaceholderScr
 export { ForbiddenScreen } from './ForbiddenScreen';
 export { AdminHealthScreen } from './AdminHealthScreen';
 export { AdminPermissionsScreen } from './AdminPermissionsScreen';
+export { AdminSourceMappingScreen } from './AdminSourceMappingScreen';
