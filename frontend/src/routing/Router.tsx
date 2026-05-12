@@ -8,6 +8,7 @@ import { AdminPermissionsScreen } from '../screens/AdminPermissionsScreen';
 import { AdminSourceMappingScreen } from '../screens/AdminSourceMappingScreen';
 import { QueryComposerScreen } from '../screens/QueryComposerScreen';
 import { ReportsListScreen } from '../screens/ReportsListScreen';
+import { ProcessingScreen } from '../screens/ProcessingScreen';
 
 export function Router() {
   const { role } = useRole();
@@ -32,6 +33,10 @@ export function Router() {
 
   if (path === '/workspace/reports') {
     return <ReportsListScreen />;
+  }
+
+  if (path.startsWith('/workspace/report/') && path.endsWith('/processing')) {
+    return <ProcessingScreen />;
   }
 
   if (path.startsWith('/workspace/')) {
