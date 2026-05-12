@@ -1,19 +1,20 @@
-// Phase 1I bootstrap placeholder. Foundation slice only: no router, no design
-// tokens, no reusable components, no API client, no auth. Subsequent Phase 1I
-// slices add the design system, layout shell, components, and role-guarded
-// routing per docs/design/PHASE_1I_UI_CONTRACT.md.
+import { AppShell } from './layout';
+
 function App() {
   return (
-    <main className="p-6">
-      <h1 className="text-lg font-semibold">
-        DecisionCenter — Phase 1I frontend bootstrap
-      </h1>
-      <p className="mt-2 text-sm">
-        Toolchain only (Vite + React + TypeScript + Tailwind). No application
-        code yet. See docs/design/PHASE_1I_UI_CONTRACT.md and
-        docs/execution/PHASE_1I_PLAN.md.
-      </p>
-    </main>
+    <AppShell>
+      <div className="rounded-md border border-border bg-surface-raised p-6">
+        <h1 className="text-display font-semibold text-text-primary">
+          DecisionCenter
+        </h1>
+        <p className="mt-2 text-body text-text-secondary">
+          Phase 1I — Slice 4 layout shell. No routes, no screens, no API calls.
+        </p>
+        <p className="mt-4 text-caption text-text-muted">
+          State: static_scaffold
+        </p>
+      </div>
+    </AppShell>
   );
 }
 
