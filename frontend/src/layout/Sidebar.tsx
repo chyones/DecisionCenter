@@ -1,31 +1,76 @@
 import {
-  LayoutDashboard,
+  FilePlus,
   FileText,
-  Settings,
+  LayoutDashboard,
+  Activity,
   Shield,
+  Map,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { useRole } from '../routing/RoleContext';
+import { useHashPath } from '../routing/useHashPath';
+import type { Role } from '../routing/roles';
 
 export interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
-interface NavItem {
+interface NavItemDef {
   icon: React.ElementType;
   label: string;
-  active?: boolean;
+  path: string;
+  visible: (role: Role) => boolean;
 }
 
-const navItems: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', active: true },
-  { icon: FileText, label: 'Reports', active: false },
-  { icon: Shield, label: 'Permissions', active: false },
-  { icon: Settings, label: 'Settings', active: false },
+const navItems: NavItemDef[] = [
+  // Workspace
+  {
+    icon: FilePlus,
+    label: 'New Query',
+    path: '/workspace/new',
+    visible: (r) => r !== 'auditor' && r !== 'admin',
+  },
+  {
+    icon: FileText,
+    label: 'Reports',
+    path: '/workspace/reports',
+    visible: (r) => r !== 'admin',
+  },
+  // Admin
+  {
+    icon: LayoutDashboard,
+    label: 'Dashboard',
+    path: '/admin',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: Activity,
+    label: 'System Health',
+    path: '/admin/health',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: Shield,
+    label: 'Permissions',
+    path: '/admin/permissions',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: Map,
+    label: 'Source Mapping',
+    path: '/admin/source-mapping',
+    visible: (r) => r === 'admin',
+  },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { role } = useRole();
+  const path = useHashPath();
+
+  const visibleItems = navItems.filter((item) => item.visible(role));
+
   const width = collapsed
     ? 'var(--layout-sidebar-rail-width)'
     : 'var(--layout-sidebar-width)';
@@ -36,8 +81,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       style={{ width }}
     >
       <nav className="flex-1 overflow-y-auto py-2">
-        {navItems.map((item) => {
-          const isActive = item.active;
+        {visibleItems.map((item) => {
+          const isActive = path === item.path;
           const activeClasses = isActive
             ? collapsed
               ? 'bg-accent/10 text-accent'
@@ -47,8 +92,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           return (
             <a
               key={item.label}
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href={'#' + item.path}
               className={[
                 'mx-2 flex h-9 items-center gap-2 rounded-sm px-3 text-body transition-colors duration-150',
                 activeClasses,
