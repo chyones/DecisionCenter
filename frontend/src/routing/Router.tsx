@@ -4,6 +4,7 @@ import { isRouteAllowed, getDefaultLanding } from './guards';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { ForbiddenScreen } from '../screens/ForbiddenScreen';
 import { AdminHealthScreen } from '../screens/AdminHealthScreen';
+import { AdminPermissionsScreen } from '../screens/AdminPermissionsScreen';
 
 export function Router() {
   const { role } = useRole();
@@ -67,13 +68,7 @@ export function Router() {
   }
 
   if (path === '/admin/permissions') {
-    return (
-      <PlaceholderScreen
-        title="Permissions & Roles"
-        state="static_scaffold"
-        body="Role Matrix tab only. Read-only from rbac_matrix.md."
-      />
-    );
+    return <AdminPermissionsScreen />;
   }
 
   if (path === '/admin/source-mapping') {
