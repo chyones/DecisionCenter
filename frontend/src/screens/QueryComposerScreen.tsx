@@ -1,24 +1,33 @@
 /**
- * Static Query Composer shell (Phase 1I Slice 9).
+ * Query Composer — live project dropdown + submit (Phase 2A Slice 2).
  *
- * Per `docs/design/PHASE_1I_UI_CONTRACT.md` §E.2:
- * - Form layout with no project data and no submit behavior.
- * - Query textarea is enabled for local typing only; text is ephemeral.
- * - All other inputs are disabled.
- * - No upload handler, no API calls.
+ * Per `docs/design/UI_CONTRACT_v1.md` §2.1:
+ * - Project dropdown from baked fixture (backend has no list endpoint yet).
+ * - Submit wired to `POST /reports/staging`.
+ * - All screen states: idle, draft, submitting, queued, error, no_projects.
+ * - Filters and upload remain disabled (future slices).
  */
 
 import { useState } from 'react';
 import { Upload, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Button } from '../components';
+import { useApi } from '../api';
+import { isApiError } from '../api';
+import type { OutputFormat, ReportResponse } from '../api';
 
-const OUTPUT_FORMATS = [
-  { label: 'MD', checked: true },
-  { label: 'DOCX', checked: false },
-  { label: 'XLSX', checked: false },
-  { label: 'PDF', checked: false },
-  { label: 'PPTX', checked: false },
+/** Baked from `docs/config/project_source_mapping.json` until a list endpoint exists. */
+const PROJECTS = [
+  { code: 'PRJ-001', contracts: ['CON-001'] },
+  { code: 'PRJ-002', contracts: ['CON-002', 'CON-003'] },
+];
+
+const OUTPUT_FORMATS: { label: string; value: OutputFormat }[] = [
+  { label: 'MD', value: 'md' },
+  { label: 'DOCX', value: 'docx' },
+  { label: 'XLSX', value: 'xlsx' },
+  { label: 'PDF', value: 'pdf' },
+  { label: 'PPTX', value: 'pptx' },
 ];
 
 const FILTER_FIELDS = [
@@ -28,24 +37,81 @@ const FILTER_FIELDS = [
   { label: 'Document type', placeholder: 'e.g. Contract, Claim, Notice' },
 ];
 
+type ScreenState = 'idle' | 'draft' | 'submitting' | 'queued' | 'error' | 'no_projects';
+
 export function QueryComposerScreen() {
+  const api = useApi();
+  const [projectCode, setProjectCode] = useState('');
   const [query, setQuery] = useState('');
+  const [formats, setFormats] = useState<OutputFormat[]>(['md']);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [state, setState] = useState<ScreenState>(
+    PROJECTS.length === 0 ? 'no_projects' : 'idle',
+  );
+  const [errorMsg, setErrorMsg] = useState('');
   const maxLength = 2000;
+
+  const canSubmit =
+    state !== 'submitting' &&
+    state !== 'no_projects' &&
+    projectCode.trim().length > 0 &&
+    query.trim().length > 0;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setState('submitting');
+    setErrorMsg('');
+
+    try {
+      const res = await api.post<ReportResponse>('/reports/staging', {
+        user_id: 'frontend-user',
+        query: query.trim(),
+        project_code: projectCode,
+        output_formats: formats,
+      });
+      setState('queued');
+      window.location.replace(
+        '#/workspace/report/' + res.request_id + '/processing',
+      );
+    } catch (err) {
+      setState('error');
+      if (isApiError(err)) {
+        setErrorMsg(err.message);
+      } else if (err instanceof Error) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('An unexpected error occurred.');
+      }
+    }
+  }
+
+  if (state === 'no_projects') {
+    return (
+      <div>
+        <div className="mb-8 flex items-baseline justify-between">
+          <h1 className="text-display font-semibold text-text-primary">
+            Query Composer
+          </h1>
+          <span className="text-caption text-text-muted">live form</span>
+        </div>
+        <div className="rounded-md border border-border bg-surface-raised p-6 text-body text-text-secondary">
+          No authorized projects for your role. Contact your administrator.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      {/* Page header (contract §I.3) */}
+      {/* Page header */}
       <div className="mb-8 flex items-baseline justify-between">
         <h1 className="text-display font-semibold text-text-primary">
           Query Composer
         </h1>
-        <span className="text-caption text-text-muted">
-          static_scaffold — no backend data
-        </span>
+        <span className="text-caption text-text-muted">live form</span>
       </div>
 
-      {/* Form card (contract §E.2) */}
+      {/* Form card */}
       <div className="rounded-md border border-border bg-surface-raised p-6">
         <div className="space-y-6">
           {/* Project selector */}
@@ -54,10 +120,21 @@ export function QueryComposerScreen() {
               Project
             </label>
             <select
-              disabled
-              className="h-10 w-full cursor-not-allowed rounded-sm border border-border bg-surface-base px-3 text-body text-text-muted opacity-50"
+              value={projectCode}
+              onChange={(e) => {
+                setProjectCode(e.target.value);
+                if (state === 'idle' || state === 'error') {
+                  setState('draft');
+                }
+              }}
+              className="h-10 w-full rounded-sm border border-border bg-surface-base px-3 text-body text-text-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface-base transition-colors duration-150"
             >
-              <option>No projects available in Phase 1I</option>
+              <option value="">Select a project…</option>
+              {PROJECTS.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {p.code}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -68,7 +145,12 @@ export function QueryComposerScreen() {
             </label>
             <textarea
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (state === 'idle' || state === 'error') {
+                  setState('draft');
+                }
+              }}
               maxLength={maxLength}
               placeholder="Enter your management question…"
               rows={4}
@@ -129,12 +211,18 @@ export function QueryComposerScreen() {
               {OUTPUT_FORMATS.map((fmt) => (
                 <label
                   key={fmt.label}
-                  className="inline-flex cursor-not-allowed items-center gap-2 text-body text-text-muted opacity-50"
+                  className="inline-flex items-center gap-2 text-body text-text-secondary"
                 >
                   <input
                     type="checkbox"
-                    checked={fmt.checked}
-                    disabled
+                    checked={formats.includes(fmt.value)}
+                    onChange={(e) => {
+                      setFormats((prev) =>
+                        e.target.checked
+                          ? [...prev, fmt.value]
+                          : prev.filter((f) => f !== fmt.value),
+                      );
+                    }}
                     className="h-4 w-4 rounded-sm border-border"
                   />
                   {fmt.label}
@@ -143,10 +231,22 @@ export function QueryComposerScreen() {
             </div>
           </div>
 
+          {/* Error banner */}
+          {state === 'error' && errorMsg && (
+            <div className="rounded-sm border border-error bg-error/10 p-3 text-body text-error">
+              {errorMsg}
+            </div>
+          )}
+
           {/* Action row */}
           <div className="flex justify-end">
-            <Button variant="primary" disabled>
-              Generate Report →
+            <Button
+              variant="primary"
+              disabled={!canSubmit}
+              isLoading={state === 'submitting'}
+              onClick={handleSubmit}
+            >
+              {state === 'submitting' ? 'Submitting…' : 'Generate Report →'}
             </Button>
           </div>
         </div>
