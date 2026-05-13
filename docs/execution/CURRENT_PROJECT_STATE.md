@@ -1,17 +1,22 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `63e0e6f` (verified Phase 1I closeout commit).
-> **Audit date:** 2026-05-12
-> **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H — verified against
-> live repo files, CI evidence, and local test execution.
+> **Audited HEAD:** `35f561d` (verified Phase 2A Slice 5 commit).
+> **Audit date:** 2026-05-13
+> **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H, 1I,
+> and Phase 2A Slices 1-5 — verified against live repo files, CI evidence, and
+> local validation evidence captured during the slice commits.
 
 ---
 
 ## Current Project Stage
 
 DecisionCenter has completed Phase 1I (Frontend Foundation & Static Admin
-Scaffolds); all prior phases including the Phase 1D-fixup remain closed and
-locked. The full execution pipeline runs end-to-end with evaluation coverage:
+Scaffolds) and is partway through Phase 2A (User Chat Workspace
+Implementation). Phase 2A Slice 5 is complete and CI-green at HEAD `35f561d`;
+Slice 6 (Export Panel) is the next allowed work and requires explicit user
+approval before implementation. All prior phases including the Phase 1D-fixup
+remain closed and locked. The backend execution pipeline runs end-to-end with
+evaluation coverage:
 authentication and RBAC at Node 01; n8n connectors with Header Auth and
 `$env`-sourced credentials; Voyage embeddings, Cohere reranking, tiktoken
 chunking, per-project Qdrant collections, and a Redis-backed evidence cache;
@@ -28,12 +33,22 @@ project in `frontend/`; design tokens; layout shell (Topbar, Sidebar, Main
 Content, Detail Panel); reusable components (StatusPill, Button, Modal, Toast,
 ConfirmDialog, SlideInPanel); role-guarded hash-based routing with 9 canonical
 roles; static scaffolds for Admin System Health, Permissions & Roles (Role
-Matrix tab), Source Mapping (read-only), and Query Composer shell. Frontend
-lint and build are wired into CI. No API calls, no data fetching, no submit
-behavior.
+Matrix tab), Source Mapping (read-only), and the initial Query Composer shell.
+Frontend lint and build are wired into CI.
 
-Production is `NOT_LIVE`. Phase 2A (User Chat Workspace Implementation) is
-the next safe phase and requires explicit user approval before it starts.
+Phase 2A has added the frontend API client foundation and the first user
+workspace screens. Query Composer now submits to the existing
+`POST /reports/staging` endpoint through the approved API client; its project
+dropdown is fixture-backed because no live project-list endpoint exists.
+Reports List, Processing View, Report View, and Evidence Panel are present as
+contract-correct unavailable/static shells where the required read/status
+endpoints are absent (`GET /reports`, `GET /reports/{id}`,
+`GET /reports/{id}/status`, and `DELETE /reports/{id}`). Export Panel, Upload
+Zone, routing polish, and Phase 2A closeout are not complete.
+
+Production is `NOT_LIVE`. Phase 2A is the safe next phase and is already in
+progress; within it, Slice 6 (Export Panel) is the next safe work item and
+requires explicit user approval before it starts.
 
 ---
 
@@ -52,7 +67,17 @@ the next safe phase and requires explicit user approval before it starts.
 | Phase 1F — Persistence and Audit | Complete | `apps/edr/persistence/postgres_store.py` defines `audit_log` and `review_decisions` schemas idempotently; `apps/edr/persistence/minio_store.py` lazily ensures the bucket via `_ensure_bucket()` and exposes `put_json`, `put_bytes`, `get_object`, `copy_to_final`. `scripts/init_minio.py` performs an explicit idempotent bucket create. Node 15 hashes user IDs and persists the four staging artifacts plus an audit row. Download endpoint enforces RBAC + quality gate. Tests: `apps/edr/tests/integration/test_phase1f.py` (12 cases). |
 | Phase 1G — Human Review Gate | Complete | `POST /reports/staging/{request_id}/{approve,reject,request-revision}` enforce reviewer RBAC via `_check_reviewer_rbac` (auditor blocked, admin override is metadata-only with mandatory comment), self-approval blocking by hashed reviewer ID, and 409 on already-finalized reports. Node 16 reads `review_state` from PostgreSQL. Node 17 publishes only when `review_state == "approved"`, copies staging→final via write-once `MinioStore.copy_to_final` (raises `FileExistsError`), writes `approval-log.json` exactly once, and updates `review_state` to `final`. `GET /reports/final/{request_id}/download/{fmt}` only serves once finalized; quality-gate `failed` blocks all download paths. Tests: `apps/edr/tests/integration/test_phase1g.py` (22 cases). |
 | Phase 1H — Evaluation and Hardening | Complete | Real evaluation runner (`apps/edr/evaluation/run.py`) with JSONL loader, per-case metrics, aggregate report, and non-zero exit on regression. 65 executable golden-set cases covering all 12 baseline categories. Arabic PDF hardening with bundled Amiri font and RTL limitation disclaimer. Local-only load test with deterministic fallback. pip-audit triage completed: safe pins upgraded (`cryptography` 44.0.1, `python-dotenv` 1.2.2, `PyJWT` 2.12.0); remaining 19 advisories on 9 packages accepted as deferred. CI integration: `make eval` runs with `--min-pass-rate 0.95 --min-precision 0.90`. `N8N_TIMEOUT` setting prevents connector hangs in CI. Tests: `test_evaluation.py` (15), `test_load_test.py` (5), `test_pdf_arabic.py` (7). |
-| Phase 1I — Frontend Foundation & Static Admin Scaffolds | Complete | Vite + React + TypeScript + Tailwind project in `frontend/`; design tokens (colors, typography, spacing, status pills); layout shell (Topbar, Sidebar, Main Content, Detail Panel); reusable components (StatusPill, Button, Modal, Toast, ConfirmDialog, SlideInPanel); role-guarded hash-based routing with 9 canonical roles; static scaffolds: Admin System Health, Permissions & Roles (Role Matrix tab), Source Mapping (read-only), Query Composer shell. Frontend lint and build wired into CI. No API calls, no data fetching, no submit behavior. |
+| Phase 1I — Frontend Foundation & Static Admin Scaffolds | Complete | Vite + React + TypeScript + Tailwind project in `frontend/`; design tokens (colors, typography, spacing, status pills); layout shell (Topbar, Sidebar, Main Content, Detail Panel); reusable components (StatusPill, Button, Modal, Toast, ConfirmDialog, SlideInPanel); role-guarded hash-based routing with 9 canonical roles; static scaffolds: Admin System Health, Permissions & Roles (Role Matrix tab), Source Mapping (read-only), Query Composer shell. Frontend lint and build wired into CI. |
+
+## Active Phase Progress
+
+| Phase / Slice | Status | Evidence |
+|---|---|---|
+| Phase 2A Slice 1 — API client foundation and auth wiring | Complete | `frontend/src/api/client.ts`, `frontend/src/api/types.ts`, `frontend/src/api/useApi.ts`, and `frontend/src/api/index.ts`; fetch is contained in the approved API client. Commit `840e954`; CI green. |
+| Phase 2A Slice 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx` submits to `POST /reports/staging`; project dropdown is fixture-backed because no live project-list endpoint exists. Commit `38f7b58`; CI green. |
+| Phase 2A Slice 3 — Reports List read-only listing | Complete | `frontend/src/screens/ReportsListScreen.tsx` renders grouped read-only unavailable states because `GET /reports` is absent. Commit `89a4e49`; CI green. |
+| Phase 2A Slice 4 — Processing View status shell | Complete | `frontend/src/screens/ProcessingScreen.tsx` renders the 18-node progress shell and disabled cancel action because `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent. Commit `5674581`; CI green. |
+| Phase 2A Slice 5 — Report View and Evidence Panel | Complete | `frontend/src/screens/ReportViewScreen.tsx` and `frontend/src/screens/EvidencePanel.tsx` render contract-correct unavailable/static shells because `GET /reports/{id}` is absent. Commit `35f561d`; GitHub Actions run `25788830982` completed successfully. |
 
 ---
 
@@ -60,7 +85,8 @@ the next safe phase and requires explicit user approval before it starts.
 
 | Phase | Evidence |
 |---|---|
-| Phase 2A, 2B, 2C — UI phases | `frontend/` exists with static scaffolds; live backend wiring pending. |
+| Phase 2A — remaining slices | Export Panel, Upload Zone, route/guard integration polish, error handling/polish, and closeout are still pending. |
+| Phase 2B, 2C — later UI phases | Admin control-plane live integration and UI hardening/acceptance are not started. |
 
 ---
 
@@ -91,15 +117,14 @@ the next safe phase and requires explicit user approval before it starts.
 
 ## Safe Next Phase
 
-Phase 2A may start (requires explicit user approval).
+Phase 2A is the safe next phase and is in progress. Slice 6 (Export Panel) may
+start only after explicit user approval.
 
-Allowed Phase 2A work is limited to:
+Allowed next work is limited to Phase 2A Slice 6:
 
-- Implement live backend integration for Query Composer (project dropdown, submit handler).
-- Implement Processing View with live status polling.
-- Implement Reports List with real data from MinIO/PostgreSQL.
-- Implement Report View with content rendering and Evidence Panel.
-- Add functional Upload Zone with file handling.
+- Implement the Export Panel shell/wiring according to `docs/execution/PHASE_2A_PLAN.md`.
+- Use live backend download endpoints only where they already exist.
+- Preserve the distinction between static/unavailable shells and real backend integration.
 
 ## Forbidden Work In Phase 2A
 
@@ -112,9 +137,8 @@ tests.
 ## README And Truth Doc Freshness
 
 This audit refreshed `CURRENT_PROJECT_STATE.md`, `IMPLEMENTATION_PHASES.md`,
-`FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`, `README.md`, the runbook, the
-connectors connection guide, the AI context, and `scripts/check_doc_drift.py`
-to reflect the live repo state at HEAD `50d8f87`.
+`FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`, `README.md`, and the AI context
+to reflect the live repo state at HEAD `35f561d`.
 
 ---
 
@@ -124,6 +148,6 @@ to reflect the live repo state at HEAD `50d8f87`.
 |---|---:|---|
 | Architecture quality | 8/10 | Clear phase plan, fixed 18-node graph, separated docs/contracts/policies, explicit service boundaries. |
 | Code foundation | 8/10 | Pinned dependencies, CI with config coverage + doc/AI checks + integration tests + drift detector, async runtime, retrieval pipeline + LLM + persistence + review gate working. |
-| Pre-1I readiness | 8/10 | End-to-end pipeline implemented and tested; 65-case golden set with CI enforcement; Arabic PDF hardened; 19 pip-audit advisories accepted as deferred; no frontend exists yet. |
-| Product readiness | 7/10 | Pipeline produces structured, evidence-bound reports with human approval; golden-set coverage (65 cases) and Arabic PDF hardening validated in CI; frontend does not exist yet. |
-| Overall maturity | 7/10 | Strong controlled foundation; functional implementation complete through review/publish; evaluation and hardening complete; frontend work remains.
+| Phase 2A readiness | 7/10 | Frontend foundation, API client, Query Composer submit, Reports List shell, Processing shell, Report View shell, and Evidence Panel shell are present; remaining 2A slices and missing backend read/status endpoints still block full workspace completion. |
+| Product readiness | 7/10 | Pipeline produces structured, evidence-bound reports with human approval; golden-set coverage (65 cases) and Arabic PDF hardening validated in CI; user workspace is partially implemented but not complete. |
+| Overall maturity | 7/10 | Strong controlled foundation; functional backend implementation complete through review/publish; evaluation and hardening complete; Phase 2A user workspace remains in progress. |

@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-12
+> **Date:** 2026-05-13
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_1I_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is in progress through Slice 5; Slice 6 is the next safe work item | This document |
 
 ## Authoritative Environment Baseline
 
@@ -96,6 +96,21 @@ These hold for every phase, including the next one:
   steps in `docs/operations/runbook.md`. A push to `origin/main` is not a
   deployment.
 
+## Phase 2A Progress Lock
+
+Phase 2A is not complete. The live repository and GitHub Actions evidence show
+that Slices 1-5 are complete at commit `35f561d`, with CI run `25788830982`
+completed successfully.
+
+| Slice | Status | Evidence |
+|---|---|---|
+| 1 — API client foundation and auth wiring | Complete | `frontend/src/api/*`; controlled `fetch` usage is contained in the API client. |
+| 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx`; submit is wired to `POST /reports/staging`; project dropdown remains fixture-backed because no project-list endpoint exists. |
+| 3 — Reports List read-only listing | Complete | `frontend/src/screens/ReportsListScreen.tsx`; unavailable/empty state because `GET /reports` is absent. |
+| 4 — Processing View status shell | Complete | `frontend/src/screens/ProcessingScreen.tsx`; static status shell because `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent. |
+| 5 — Report View and Evidence Panel | Complete | `frontend/src/screens/ReportViewScreen.tsx` and `frontend/src/screens/EvidencePanel.tsx`; unavailable/static shell because `GET /reports/{id}` is absent. |
+| 6 — Export Panel | Next allowed work | Requires explicit user approval before implementation. |
+
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
 `pip-audit` is wired into CI as `continue-on-error: true`. Phase 1H triaged the
@@ -147,9 +162,10 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**READY FOR PHASE 2A — production is NOT_LIVE.**
+**READY FOR PHASE 2A SLICE 6 — production is NOT_LIVE.**
 
-Phases 1A–1H plus the Phase 1D-fixup are complete and validated by CI on HEAD.
-The next safe step is Phase 2A (User Chat Workspace Implementation)
-and it requires explicit user approval before it starts. This does not authorize
-deployment, API wiring inside the frontend, or any spec change.
+Phases 1A–1I plus the Phase 1D-fixup are complete, and Phase 2A Slices 1-5 are
+validated by CI on HEAD `35f561d`. The next safe step is Phase 2A Slice 6
+(Export Panel), and it requires explicit user approval before it starts. This
+does not authorize deployment, Phase 2A closeout, Phase 2B, Phase 2C, or any
+spec change.

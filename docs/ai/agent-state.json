@@ -1,14 +1,31 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "63e0e6f9a890914c62bde3acaf609703026d0620",
-  "status": "PHASE_1I_COMPLETE_NOT_LIVE",
+  "current_commit": "35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa",
+  "status": "PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 1I",
-  "next_allowed_phase": "Phase 2A",
+  "active_phase": "Phase 2A",
+  "completed_phase_2a_slices": [
+    "Slice 1 — API client foundation and auth wiring",
+    "Slice 2 — Query Composer submit",
+    "Slice 3 — Reports List read-only listing",
+    "Slice 4 — Processing View status shell",
+    "Slice 5 — Report View and Evidence Panel"
+  ],
+  "next_allowed_phase": "Phase 2A Slice 6",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
-  "requires_explicit_user_approval_for_phase_2a": true,
-  "latest_report": "docs/execution/PHASE_1I_REPORT.md",
+  "requires_explicit_user_approval_for_phase_2a": false,
+  "requires_explicit_user_approval_for_phase_2a_slice_6": true,
+  "latest_report": "docs/execution/PHASE_2A_PLAN.md",
+  "latest_full_phase_report": "docs/execution/PHASE_1I_REPORT.md",
+  "latest_verified_ci": {
+    "commit": "35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa",
+    "run_id": 25788830982,
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25788830982"
+  },
   "must_not_deploy": true,
   "must_not_commit_env": true,
   "required_validation": [

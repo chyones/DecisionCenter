@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-10
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase. Production is `NOT_LIVE`.
+> **Date:** 2026-05-13
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress through Slice 5; Slice 6 is the safe next work item. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -186,8 +186,22 @@
 ## Frontend & UI (Phases 1I–2C)
 
 Source of truth: `docs/design/UI_CONTRACT_v1.md`. Frontend foundation and
-static scaffolds are complete in Phase 1I. See
+static scaffolds are complete in Phase 1I. Phase 2A user workspace work is in
+progress; this table distinguishes live backend integration from
+contract-correct static/unavailable shells. See
 `docs/execution/IMPLEMENTATION_PHASES.md` for the full phase scope.
+
+| Feature | Route / Component | Backend integration | Validation proof | Status |
+|---|---|---|---|---|
+| Frontend foundation | `frontend/` | N/A | Phase 1I CI closeout | implemented |
+| API client foundation | `frontend/src/api/*` | Controlled `fetch` wrapper with dev role header wiring | Commit `840e954`; CI green | implemented |
+| Query Composer submit | `/workspace/new` | Live `POST /reports/staging`; project dropdown fixture-backed because no project-list endpoint exists | Commit `38f7b58`; CI green | partial |
+| Reports List | `/workspace/reports` | No live list endpoint; `GET /reports` is absent | Commit `89a4e49`; CI green | partial |
+| Processing View | `/workspace/report/{request_id}/processing` | No status/cancel endpoint; `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent | Commit `5674581`; CI green | partial |
+| Report View | `/workspace/report/{request_id}` | No live report-detail endpoint; `GET /reports/{id}` is absent | Commit `35f561d`; CI run `25788830982` success | partial |
+| Evidence Panel | Slide-in from Report View | No live evidence endpoint available through report detail | Commit `35f561d`; CI run `25788830982` success | partial |
+| Export Panel | Slide-in from Report View | Not started; may use existing download endpoints in Slice 6 if approved | Not yet implemented | documented-only |
+| Upload Zone | Query Composer / future upload flow | Not started | Not yet implemented | documented-only |
 
 ---
 

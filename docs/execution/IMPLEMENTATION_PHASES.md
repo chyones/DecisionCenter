@@ -2,8 +2,8 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
-> **Date:** 2026-05-10
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Production is `NOT_LIVE`.
+> **Date:** 2026-05-13
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is in progress through Slice 5. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
@@ -23,8 +23,10 @@ endpoints, and the write-once publish-to-final flow are all wired and
 covered by integration tests. The 65-case executable golden set, evaluation
 runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
 load test, pip-audit triage, and CI integration are all complete.
-Phase 2A is the safe next phase and may start with explicit user approval.
-Production deployment is out of scope until Phase 2C closes.
+Phase 2A is the safe next phase and is in progress. Slices 1-5 are complete and
+CI-green at commit `35f561d`; Slice 6 is the safe next work item and may start
+only with explicit user approval. Production deployment is out of scope until
+Phase 2C closes.
 
 ---
 
@@ -288,6 +290,20 @@ Source of truth: `docs/design/UI_CONTRACT_v1.md` Section 10.
 
 **Backend dependency:** Phase 1F complete (real reports, evidence packs, MinIO persistence, audit log, cost data).
 **Additional dependency:** Phase 1G complete for approval/reject actions.
+
+**Live progress note (HEAD `35f561d`, 2026-05-13):** Phase 2A is not complete.
+Slices 1-5 are complete and CI-green. Slice 6 (Export Panel) is the next safe
+work item and requires explicit user approval before implementation. Current
+frontend integration is mixed:
+
+- API client foundation is present in `frontend/src/api/*`.
+- Query Composer submit is wired to live `POST /reports/staging`; its project
+  dropdown remains fixture-backed because no project-list endpoint exists.
+- Reports List, Processing View, Report View, and Evidence Panel are
+  contract-correct unavailable/static shells where the required backend
+  read/status endpoints are absent.
+- Export Panel, Upload Zone, route/guard polish, final error-handling polish,
+  and Phase 2A closeout remain pending.
 
 **Scope:**
 1. **Query Composer** (`/workspace/new`)

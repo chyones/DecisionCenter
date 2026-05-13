@@ -2,8 +2,36 @@
 
 ## What Was Done
 
-Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 1H
-(Evaluation & Hardening) was completed immediately before 1I.
+Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 2A
+(User Chat Workspace Implementation) is in progress through Slice 5 at verified
+commit `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`; GitHub Actions run
+`25788830982` completed successfully. Production remains `NOT_LIVE`.
+
+### Phase 2A — User Chat Workspace Implementation (Slices 1-5 Complete)
+
+- Slice 1 — API client foundation and auth wiring:
+  - `frontend/src/api/client.ts` — typed `fetch` wrapper, base URL handling,
+    JSON/error handling.
+  - `frontend/src/api/types.ts`, `frontend/src/api/useApi.ts`,
+    `frontend/src/api/index.ts`.
+  - Controlled network usage remains contained in the API client.
+- Slice 2 — Query Composer submit:
+  - `frontend/src/screens/QueryComposerScreen.tsx` submits to live
+    `POST /reports/staging`.
+  - Project dropdown is fixture-backed because no live project-list endpoint
+    exists at HEAD.
+- Slice 3 — Reports List read-only listing:
+  - `frontend/src/screens/ReportsListScreen.tsx` renders grouped read-only
+    unavailable/empty states because `GET /reports` is absent.
+- Slice 4 — Processing View status shell:
+  - `frontend/src/screens/ProcessingScreen.tsx` renders the 18-node progress
+    shell and disabled cancel action because `GET /reports/{id}/status` and
+    `DELETE /reports/{id}` are absent.
+- Slice 5 — Report View and Evidence Panel:
+  - `frontend/src/screens/ReportViewScreen.tsx` and
+    `frontend/src/screens/EvidencePanel.tsx` render contract-correct
+    unavailable/static shells because `GET /reports/{id}` is absent.
+  - Export button is disabled; Export Panel is Slice 6 and is not implemented.
 
 ### Phase 1I — Frontend Foundation & Static Admin Scaffolds
 
@@ -75,15 +103,21 @@ Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 1H
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit (anchor): `63e0e6f9a890914c62bde3acaf609703026d0620`
-- Status: `PHASE_1I_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`
+- Status: `PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Latest report: `docs/execution/PHASE_1I_REPORT.md`
+- Latest Phase 2A plan: `docs/execution/PHASE_2A_PLAN.md`
+- Latest full-phase report: `docs/execution/PHASE_1I_REPORT.md`
 
 ## What Was NOT Done
 
-- Phase 2A (User Chat Workspace Implementation) not started — requires explicit user approval.
-- No live backend integration in frontend.
+- Phase 2A is not complete; Slice 6 requires explicit user approval before implementation.
+- Export Panel not implemented.
+- Upload Zone not implemented.
+- Phase 2A route/guard polish, error handling/polish, and closeout not complete.
+- No live list/status/report-detail endpoints are wired because those backend
+  endpoints are absent; only Query Composer submit is wired to live
+  `POST /reports/staging`.
 - No full Arabic bidirectional shaping/reshaping in PDF export.
 - No promptfoo CLI integration (config is placeholder only).
 - No permanent load-test p95 thresholds (baseline-only).
@@ -95,17 +129,16 @@ Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 1H
 - `AGENTS.md`
 - `docs/ai/SHARED_CONTEXT.md`
 - `docs/ai/agent-state.json`
-- `docs/execution/PHASE_1I_REPORT.md`
+- `docs/execution/PHASE_2A_PLAN.md`
 - `docs/execution/IMPLEMENTATION_PHASES.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 
 ## Next Recommended Work
 
-Phase 2A — User Chat Workspace Implementation — requires explicit user approval.
-When authorized: implement live backend integration for Query Composer (project
-dropdown, submit handler), Processing View with live status polling, Reports List
-with real data, Report View with content rendering and Evidence Panel, and
-functional Upload Zone.
+Phase 2A Slice 6 — Export Panel — requires explicit user approval. When
+authorized, implement only the Export Panel slice, using existing backend
+download endpoints where they already exist and preserving unavailable/static
+states where backend support is absent.
 
 ## Validation Proof (Phase 1I closeout)
 
@@ -120,6 +153,14 @@ functional Upload Zone.
 - `cd frontend && npm run build`: clean.
 - Zero forbidden network APIs in `frontend/src/`.
 
+## Validation Proof (Phase 2A Slice 5)
+
+- GitHub Actions run `25788830982`: `completed` / `success`.
+- `frontend` job: success.
+- `smoke` job: success.
+- HEAD equals `origin/main` at `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`.
+- Working tree was clean before this truth reconciliation.
+
 ## Final Status
 
-`PHASE_1I_COMPLETE_NOT_LIVE`
+`PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE`

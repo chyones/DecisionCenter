@@ -3,20 +3,30 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `63e0e6f9a890914c62bde3acaf609703026d0620`
-- Current status: `PHASE_1I_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`
+- Current status: `PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 1I
-- Current allowed next phase: Phase 2A (requires explicit user approval)
-- Latest report: `docs/execution/PHASE_1I_REPORT.md`
+- Active phase: Phase 2A
+- Current allowed next work: Phase 2A Slice 6 (requires explicit user approval)
+- Latest Phase 2A plan: `docs/execution/PHASE_2A_PLAN.md`
+- Latest full-phase report: `docs/execution/PHASE_1I_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
 TypeScript + Tailwind project in `frontend/`; design tokens; layout shell;
 reusable components; role-guarded hash-based routing with 9 canonical roles;
 static scaffolds for Admin System Health, Permissions & Roles (Role Matrix
-only), Source Mapping (read-only), and Query Composer shell. Frontend lint and
-build are wired into CI. No API calls, no data fetching, no submit behavior.
+only), Source Mapping (read-only), and the initial Query Composer shell.
+Frontend lint and build are wired into CI.
+
+Phase 2A Slices 1-5 are complete and CI-green. The frontend now has an API
+client foundation, Query Composer submit wired to `POST /reports/staging`,
+Reports List read-only shell, Processing View shell, Report View shell, and
+Evidence Panel shell. The project dropdown remains fixture-backed because no
+live project-list endpoint exists. Reports List, Processing View, Report View,
+and Evidence Panel clearly show unavailable/static states where backend
+read/status endpoints are absent. Export Panel and Upload Zone are not started.
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
@@ -42,10 +52,11 @@ is acceptable supporting evidence, but it does not replace `make smoke`,
 
 ## Current No-Go Rules
 
-- Do not start Phase 2A without explicit user approval.
-- Phase 1I is complete and pushed; CI passed.
-- Do not wire APIs, data fetching, or report rendering inside Phase 2A unless
-  explicitly scoped to that phase.
+- Do not start Phase 2A Slice 6 without explicit user approval.
+- Phase 1I is complete and pushed; Phase 2A Slices 1-5 are complete and CI passed.
+- Do not claim Phase 2A is complete.
+- Do not wire APIs, data fetching, downloads, or report rendering unless
+  explicitly scoped to the approved Phase 2A slice.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or generated caches.
@@ -100,6 +111,8 @@ Protected source-of-truth files:
 - `docs/execution/PHASE_1F_REPORT.md`
 - `docs/execution/PHASE_1G_REPORT.md`
 - `docs/execution/PHASE_1H_REPORT.md`
+- `docs/execution/PHASE_1I_REPORT.md`
+- `docs/execution/PHASE_2A_PLAN.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 - `docs/admin/FEATURE_MATRIX.md`
 - `docs/ai/SHARED_CONTEXT.md`
@@ -129,5 +142,5 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 2A, update this shared context
-  and the handoff as part of that Phase 2A session.
+- If a future user explicitly authorizes Phase 2A Slice 6, update this shared
+  context and the handoff only as part of that approved slice session.
