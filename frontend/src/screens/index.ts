@@ -6,3 +6,5 @@ export { AdminSourceMappingScreen } from './AdminSourceMappingScreen';
 export { QueryComposerScreen } from './QueryComposerScreen';
 export { ReportsListScreen } from './ReportsListScreen';
 export { ProcessingScreen } from './ProcessingScreen';
+export { ReportViewScreen } from './ReportViewScreen';
+export { EvidencePanel } from './EvidencePanel';
