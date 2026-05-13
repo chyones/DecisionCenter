@@ -1,20 +1,23 @@
 /**
- * Query Composer — live project dropdown + submit (Phase 2A Slice 2).
+ * Query Composer — live project dropdown + submit + upload zone (Phase 2A Slice 7).
  *
  * Per `docs/design/UI_CONTRACT_v1.md` §2.1:
  * - Project dropdown from baked fixture (backend has no list endpoint yet).
  * - Submit wired to `POST /reports/staging`.
  * - All screen states: idle, draft, submitting, queued, error, no_projects.
- * - Filters and upload remain disabled (future slices).
+ * - Upload zone: local file selection, validation, preview, remove.
+ *   Actual upload submission disabled — no backend endpoint.
  */
 
 import { useState } from 'react';
-import { Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import { Button } from '../components';
 import { useApi } from '../api';
 import { isApiError } from '../api';
 import type { OutputFormat, ReportResponse } from '../api';
+import { UploadZone } from './UploadZone';
+import type { UploadFile } from './UploadZone';
 
 /** Baked from `docs/config/project_source_mapping.json` until a list endpoint exists. */
 const PROJECTS = [
@@ -45,6 +48,7 @@ export function QueryComposerScreen() {
   const [query, setQuery] = useState('');
   const [formats, setFormats] = useState<OutputFormat[]>(['md']);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [files, setFiles] = useState<UploadFile[]>([]);
   const [state, setState] = useState<ScreenState>(
     PROJECTS.length === 0 ? 'no_projects' : 'idle',
   );
@@ -195,12 +199,7 @@ export function QueryComposerScreen() {
           </div>
 
           {/* Upload zone */}
-          <div className="flex h-32 flex-col items-center justify-center rounded-sm border border-dashed border-border bg-surface-base">
-            <Upload className="h-6 w-6 text-text-muted" />
-            <p className="mt-2 text-body text-text-muted">
-              File upload will be available in a later phase.
-            </p>
-          </div>
+          <UploadZone files={files} onChange={setFiles} />
 
           {/* Output formats */}
           <div>
