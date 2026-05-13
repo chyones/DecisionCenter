@@ -116,6 +116,21 @@ export class ApiClient {
   delete<T>(path: string, init?: RequestInit): Promise<T> {
     return this.request<T>(path, { ...init, method: 'DELETE' });
   }
+
+  /**
+   * Download a file as a Blob. Used by Export Panel for report artifacts.
+   * Keeps `fetch` inside this module per Phase 2A network policy.
+   */
+  async download(path: string): Promise<Blob> {
+    const url = `${this.baseUrl}${path}`;
+    const headers = await this.buildHeaders({ method: 'GET' });
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const detail = response.statusText || `HTTP ${response.status}`;
+      throw new ApiError(response.status, detail);
+    }
+    return response.blob();
+  }
 }
 
 /** Default singleton client with no auth — replace via `useApi()` in React. */

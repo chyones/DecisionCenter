@@ -8,3 +8,4 @@ export { ReportsListScreen } from './ReportsListScreen';
 export { ProcessingScreen } from './ProcessingScreen';
 export { ReportViewScreen } from './ReportViewScreen';
 export { EvidencePanel } from './EvidencePanel';
+export { ExportPanel } from './ExportPanel';

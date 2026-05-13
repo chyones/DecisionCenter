@@ -27,6 +27,7 @@ import {
 import { Button, StatusPill } from '../components';
 import { useHashPath, useRole } from '../routing';
 import { EvidencePanel } from './EvidencePanel';
+import { ExportPanel } from './ExportPanel';
 
 import type { Role } from '../routing/roles';
 
@@ -78,6 +79,7 @@ export function ReportViewScreen() {
 
   const [reportState, setReportState] = useState<ReportState>('approved');
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   if (!requestId) {
     return (
@@ -198,7 +200,11 @@ export function ReportViewScreen() {
           >
             Evidence
           </Button>
-          <Button variant="secondary" disabled>
+          <Button
+            variant="secondary"
+            onClick={() => setExportOpen(true)}
+            disabled={reportState === 'needs_review'}
+          >
             Export ▾
           </Button>
         </div>
@@ -313,6 +319,16 @@ export function ReportViewScreen() {
 
       {/* Evidence Panel */}
       <EvidencePanel isOpen={evidenceOpen} onClose={() => setEvidenceOpen(false)} />
+
+      {/* Export Panel */}
+      <ExportPanel
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        requestId={requestId}
+        reportState={reportState}
+        qualityGate="passed"
+        role={role}
+      />
 
       {/* Dev-only state toggle */}
       {import.meta.env.DEV && <DevStateToggle state={reportState} onChange={setReportState} />}
