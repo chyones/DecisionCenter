@@ -244,6 +244,7 @@ export function ProcessingScreen() {
       {/* State banner */}
       {banner && (
         <div
+          role={banner.tone === 'error' ? 'alert' : 'status'}
           className={`mb-4 flex items-center gap-2 rounded-sm border ${TONE_COLORS[banner.tone].border} ${TONE_COLORS[banner.tone].bg} p-3`}
         >
           <span className={TONE_COLORS[banner.tone].text}>{banner.icon}</span>
@@ -354,6 +355,7 @@ export function ProcessingScreen() {
           <div className="mt-2 flex flex-wrap gap-2">
             {STATE_OPTIONS.map((s) => (
               <button
+                type="button"
                 key={s}
                 onClick={() => setState(s)}
                 className={`rounded-sm px-2 py-1 text-caption ${

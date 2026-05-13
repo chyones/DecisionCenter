@@ -106,7 +106,7 @@ export function ReportViewScreen() {
 
         <div className="rounded-sm border border-warning bg-warning/10 p-6">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
             <div>
               <h2 className="text-heading font-semibold text-warning">
                 Report flagged for mandatory review
@@ -121,11 +121,11 @@ export function ReportViewScreen() {
                 </h3>
                 <ul className="mt-2 space-y-1 text-body text-text-secondary">
                   <li className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
+                    <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
                     Section 3 claim has no Odoo evidence_id
                   </li>
                   <li className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
+                    <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
                     Missing Data section is non-empty
                   </li>
                 </ul>
@@ -158,18 +158,18 @@ export function ReportViewScreen() {
 
       {/* needs_review reviewer QG banner */}
       {reportState === 'needs_review' && isReviewer && (
-        <div className="mb-4 rounded-sm border border-warning bg-warning/10 p-4">
+        <div role="alert" className="mb-4 rounded-sm border border-warning bg-warning/10 p-4">
           <h3 className="flex items-center gap-2 text-body font-medium text-warning">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
             Quality gate flags (2)
           </h3>
           <ul className="mt-2 space-y-1 text-body text-text-secondary">
             <li className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" />
+              <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
               Section 3 claim: no Odoo ID
             </li>
             <li className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" />
+              <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
               Missing Data: non-empty
             </li>
           </ul>
@@ -178,9 +178,9 @@ export function ReportViewScreen() {
 
       {/* rejected banner */}
       {reportState === 'rejected' && (
-        <div className="mb-4 rounded-sm border border-error bg-error/10 p-4">
+        <div role="alert" className="mb-4 rounded-sm border border-error bg-error/10 p-4">
           <h3 className="flex items-center gap-2 text-body font-medium text-error">
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
             Report rejected
           </h3>
           <p className="mt-1 text-body text-text-secondary">
@@ -212,16 +212,17 @@ export function ReportViewScreen() {
         {/* Reviewer actions for needs_review */}
         {reportState === 'needs_review' && isReviewer && (
           <div className="flex items-center gap-2">
-            <Button variant="primary" icon={<Check className="h-4 w-4" />} disabled>
+            <Button variant="primary" icon={<Check className="h-4 w-4" aria-hidden="true" />} disabled title="Approve action requires a backend endpoint that is not yet available">
               Approve
             </Button>
-            <Button variant="danger" icon={<X className="h-4 w-4" />} disabled>
+            <Button variant="danger" icon={<X className="h-4 w-4" aria-hidden="true" />} disabled title="Reject action requires a backend endpoint that is not yet available">
               Reject
             </Button>
             <Button
               variant="secondary"
-              icon={<AlertCircle className="h-4 w-4" />}
+              icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}
               disabled
+              title="Request revision action requires a backend endpoint that is not yet available"
             >
               Request revision
             </Button>
@@ -240,9 +241,9 @@ export function ReportViewScreen() {
             <p>
               Contract CON-001 with Vendor X is active. Outstanding payment is AED
               142,000 as of{' '}
-              <sup className="cursor-pointer text-accent hover:underline">1</sup>{' '}
+              <sup tabIndex={0} role="button" aria-label="View evidence source 1" className="cursor-pointer rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base">1</sup>{' '}
               2026-04-30, per Odoo records{' '}
-              <sup className="cursor-pointer text-accent hover:underline">2</sup>.
+              <sup tabIndex={0} role="button" aria-label="View evidence source 2" className="cursor-pointer rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base">2</sup>.
             </p>
             <p>
               The project timeline remains on track with no identified blockers.
@@ -280,7 +281,7 @@ export function ReportViewScreen() {
           </h2>
           <div className="mt-3 space-y-2 text-body text-text-secondary">
             <p className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
               Invoice date in Odoo (2026-04-15) differs from email confirmation
               (2026-04-18).
             </p>
@@ -294,7 +295,7 @@ export function ReportViewScreen() {
           </h2>
           <div className="mt-3 space-y-2 text-body text-text-secondary">
             <p className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
               No PO reference found for Change Order #3.
             </p>
           </div>

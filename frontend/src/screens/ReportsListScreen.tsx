@@ -55,7 +55,7 @@ export function ReportsListScreen() {
       {/* Filter bar — disabled placeholders (backend endpoint missing) */}
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-sm border border-border bg-surface-raised p-3">
         <span className="text-label text-text-secondary">
-          <Filter className="mr-1 inline h-3.5 w-3.5" />
+          <Filter className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
           Filters:
         </span>
         <select

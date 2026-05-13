@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
-import { Button } from '../components';
+import { Button, useToasts } from '../components';
 import { useApi } from '../api';
 import { isApiError } from '../api';
 import type { OutputFormat, ReportResponse } from '../api';
@@ -44,6 +44,7 @@ type ScreenState = 'idle' | 'draft' | 'submitting' | 'queued' | 'error' | 'no_pr
 
 export function QueryComposerScreen() {
   const api = useApi();
+  const { addToast } = useToasts();
   const [projectCode, setProjectCode] = useState('');
   const [query, setQuery] = useState('');
   const [formats, setFormats] = useState<OutputFormat[]>(['md']);
@@ -54,6 +55,8 @@ export function QueryComposerScreen() {
   );
   const [errorMsg, setErrorMsg] = useState('');
   const maxLength = 2000;
+  const queryId = 'query-composer-query';
+  const projectId = 'query-composer-project';
 
   const canSubmit =
     state !== 'submitting' &&
@@ -79,13 +82,17 @@ export function QueryComposerScreen() {
       );
     } catch (err) {
       setState('error');
+      let message = 'An unexpected error occurred.';
       if (isApiError(err)) {
-        setErrorMsg(err.message);
+        message = err.message;
+        if (err.status === 0) {
+          message = 'Network error — please check your connection and try again.';
+        }
       } else if (err instanceof Error) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('An unexpected error occurred.');
+        message = err.message;
       }
+      setErrorMsg(message);
+      addToast('error', message, 'Submission failed');
     }
   }
 
@@ -120,10 +127,11 @@ export function QueryComposerScreen() {
         <div className="space-y-6">
           {/* Project selector */}
           <div>
-            <label className="mb-1 block text-label text-text-secondary">
+            <label htmlFor={projectId} className="mb-1 block text-label text-text-secondary">
               Project
             </label>
             <select
+              id={projectId}
               value={projectCode}
               onChange={(e) => {
                 setProjectCode(e.target.value);
@@ -144,10 +152,11 @@ export function QueryComposerScreen() {
 
           {/* Query textarea */}
           <div>
-            <label className="mb-1 block text-label text-text-secondary">
+            <label htmlFor={queryId} className="mb-1 block text-label text-text-secondary">
               Management question
             </label>
             <textarea
+              id={queryId}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -158,9 +167,10 @@ export function QueryComposerScreen() {
               maxLength={maxLength}
               placeholder="Enter your management question…"
               rows={4}
+              aria-describedby={`${queryId}-counter`}
               className="w-full min-h-[96px] resize-y rounded-sm border border-border bg-surface-base px-3 py-2 text-body text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface-base transition-colors duration-150"
             />
-            <div className="mt-1 text-right text-caption text-text-muted">
+            <div id={`${queryId}-counter`} className="mt-1 text-right text-caption text-text-muted">
               {query.length}/{maxLength}
             </div>
           </div>
@@ -232,7 +242,7 @@ export function QueryComposerScreen() {
 
           {/* Error banner */}
           {state === 'error' && errorMsg && (
-            <div className="rounded-sm border border-error bg-error/10 p-3 text-body text-error">
+            <div role="alert" className="rounded-sm border border-error bg-error/10 p-3 text-body text-error">
               {errorMsg}
             </div>
           )}

@@ -124,7 +124,16 @@ export class ApiClient {
   async download(path: string): Promise<Blob> {
     const url = `${this.baseUrl}${path}`;
     const headers = await this.buildHeaders({ method: 'GET' });
-    const response = await fetch(url, { method: 'GET', headers });
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers });
+    } catch (networkErr) {
+      const message =
+        networkErr instanceof Error ? networkErr.message : 'Network error';
+      throw new ApiError(0, message);
+    }
+
     if (!response.ok) {
       const detail = response.statusText || `HTTP ${response.status}`;
       throw new ApiError(response.status, detail);

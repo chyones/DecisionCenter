@@ -16,3 +16,7 @@ export {
   type ToastTone,
   type ToastViewportProps,
 } from './Toast';
+export {
+  ToastProvider,
+  useToasts,
+} from './ToastProvider';

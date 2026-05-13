@@ -27,7 +27,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-import { SlideInPanel } from '../components';
+import { SlideInPanel, useToasts } from '../components';
 import { useApi } from '../api';
 import { isApiError } from '../api';
 
@@ -91,6 +91,7 @@ export function ExportPanel({
   role,
 }: ExportPanelProps) {
   const api = useApi();
+  const { addToast } = useToasts();
   const [downloadingFmt, setDownloadingFmt] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -110,13 +111,17 @@ export function ExportPanel({
       const blob = await api.download(path);
       triggerDownload(blob, `executive-decision-report.${fmt}`);
     } catch (err) {
+      let message = 'Download failed.';
       if (isApiError(err)) {
-        setErrorMsg(err.message);
+        message = err.message;
+        if (err.status === 0) {
+          message = 'Network error — please check your connection and try again.';
+        }
       } else if (err instanceof Error) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Download failed.');
+        message = err.message;
       }
+      setErrorMsg(message);
+      addToast('error', message, 'Download failed');
     } finally {
       setDownloadingFmt(null);
     }
@@ -157,9 +162,11 @@ export function ExportPanel({
 
               return (
                 <button
+                  type="button"
                   key={f.fmt}
                   disabled={disabled}
                   onClick={() => handleDownload(f.fmt)}
+                  aria-label={`Download ${f.label} (${f.ext})`}
                   className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-body text-text-primary transition-colors hover:bg-surface-overlay disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {isActive ? (
@@ -185,20 +192,24 @@ export function ExportPanel({
           <div className="space-y-1">
             {/* evidence-pack.json — disabled: no endpoint at HEAD */}
             <button
+              type="button"
               disabled
               className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-body text-text-muted opacity-50 disabled:cursor-not-allowed"
+              aria-label="evidence-pack.json — unavailable"
             >
-              <FileCode className="h-4 w-4" />
+              <FileCode className="h-4 w-4" aria-hidden="true" />
               <span className="flex-1">evidence-pack.json</span>
               <span className="text-caption">RBAC-gated · endpoint N/A</span>
             </button>
 
             {/* audit-log.json — disabled: no endpoint at HEAD */}
             <button
+              type="button"
               disabled
               className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-body text-text-muted opacity-50 disabled:cursor-not-allowed"
+              aria-label="audit-log.json — unavailable"
             >
-              <ScrollText className="h-4 w-4" />
+              <ScrollText className="h-4 w-4" aria-hidden="true" />
               <span className="flex-1">audit-log.json</span>
               <span className="text-caption">RBAC-gated · endpoint N/A</span>
             </button>
@@ -212,7 +223,7 @@ export function ExportPanel({
 
         {/* Error banner */}
         {errorMsg && (
-          <div className="rounded-sm border border-error bg-error/10 p-3 text-body text-error">
+          <div role="alert" className="rounded-sm border border-error bg-error/10 p-3 text-body text-error">
             {errorMsg}
           </div>
         )}

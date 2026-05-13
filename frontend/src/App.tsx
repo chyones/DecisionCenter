@@ -1,13 +1,16 @@
 import { AppShell } from './layout';
 import { RoleProvider, Router, RoleSwitcher } from './routing';
+import { ToastProvider } from './components';
 
 function App() {
   return (
     <RoleProvider>
-      <AppShell>
-        <Router />
-      </AppShell>
-      <RoleSwitcher />
+      <ToastProvider>
+        <AppShell>
+          <Router />
+        </AppShell>
+        <RoleSwitcher />
+      </ToastProvider>
     </RoleProvider>
   );
 }

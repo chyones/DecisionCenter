@@ -117,7 +117,16 @@ export function UploadZone({ files, onChange }: UploadZoneProps) {
     <div className="space-y-3">
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload files. Drag files here or press Enter to browse."
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -133,7 +142,7 @@ export function UploadZone({ files, onChange }: UploadZoneProps) {
           validateAndAdd(e.dataTransfer.files);
         }}
         className={[
-          'flex cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed p-6 transition-colors',
+          'flex cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base',
           isDragging
             ? 'border-accent bg-accent/10'
             : 'border-border bg-surface-base hover:bg-surface-overlay',
@@ -160,8 +169,8 @@ export function UploadZone({ files, onChange }: UploadZoneProps) {
 
       {/* Error banner */}
       {dropError && (
-        <div className="flex items-start gap-2 rounded-sm border border-error bg-error/10 p-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-error" />
+        <div role="alert" className="flex items-start gap-2 rounded-sm border border-error bg-error/10 p-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-error" aria-hidden="true" />
           <p className="text-body text-error">{dropError}</p>
         </div>
       )}
@@ -174,7 +183,7 @@ export function UploadZone({ files, onChange }: UploadZoneProps) {
               key={f.id}
               className="flex items-center gap-3 rounded-sm border border-border bg-surface-base px-3 py-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-text-muted" />
+              <FileText className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body text-text-primary">{f.file.name}</p>
                 <p className="text-caption text-text-muted">{formatSize(f.file.size)}</p>

@@ -105,7 +105,8 @@ export function EvidencePanel({ isOpen, onClose }: EvidencePanelProps) {
                     size="compact"
                     disabled
                     className="h-6 px-1"
-                    icon={<Copy className="h-3 w-3" />}
+                    icon={<Copy className="h-3 w-3" aria-hidden="true" />}
+                    aria-label="Copy hash"
                   />
                 </p>
               </div>
