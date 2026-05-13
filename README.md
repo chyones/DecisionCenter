@@ -94,7 +94,7 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are
-complete. Phase 2A is the safe next phase and is in progress through Slice 5.
+complete. Phase 2A is active and in progress through Slice 5.
 Production is `NOT_LIVE`. Phase 2A Slice 6 (Export Panel) is the safe next work
 item and requires explicit user approval before it starts. Treat the files
 above as the current authority before changing code, workflows, schemas, or
@@ -208,7 +208,7 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1G — Human Review Gate | Complete |
 | 1H — Evaluation and Hardening | Complete |
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
-| 2A — User Chat Workspace Implementation | In progress: Slices 1-5 complete; Slice 6 next with explicit approval |
+| 2A — User Chat Workspace Implementation | Safe next phase in progress: Slices 1-5 complete; Slice 6 next with explicit approval |
 | 2B–2C — Later UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
