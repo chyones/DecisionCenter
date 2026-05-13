@@ -82,7 +82,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       <nav className="flex-1 overflow-y-auto py-2">
         {visibleItems.map((item) => {
-          const isActive = path === item.path;
+          const isActive =
+            path === item.path ||
+            (item.path === '/workspace/reports' && path.startsWith('/workspace/report/'));
           const activeClasses = isActive
             ? collapsed
               ? 'bg-accent/10 text-accent'

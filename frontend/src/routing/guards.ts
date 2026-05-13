@@ -36,6 +36,9 @@ export function isRouteAllowed(role: Role, path: string): boolean {
   if (path.startsWith('/workspace')) {
     if (role === 'admin') return false;
     if (path === '/workspace/new' && role === 'auditor') return false;
+    if (path.startsWith('/workspace/report/') && path.endsWith('/processing') && role === 'auditor') {
+      return false;
+    }
     return true;
   }
 

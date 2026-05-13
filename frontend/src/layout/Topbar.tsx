@@ -29,6 +29,10 @@ function roleBadgeColor(role: string): { bg: string; text: string } {
 function breadcrumbLabel(path: string): string {
   if (path === '/workspace/new') return 'Query Composer';
   if (path === '/workspace/reports') return 'Reports';
+  if (path.startsWith('/workspace/report/') && path.endsWith('/processing')) {
+    return 'Processing';
+  }
+  if (path.startsWith('/workspace/report/')) return 'Report View';
   if (path.startsWith('/workspace/')) return 'Workspace';
   if (path === '/admin') return 'Dashboard';
   if (path === '/admin/health') return 'System Health';
