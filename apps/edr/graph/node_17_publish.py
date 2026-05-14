@@ -17,6 +17,7 @@ _ARTIFACT_NAMES = [
     "executive-decision-report.md",
     "evidence-pack.json",
     "quality-gate-result.json",
+    "report-draft.json",
     "audit-log.json",
 ]
 

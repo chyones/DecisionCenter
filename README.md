@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase2a_slice9_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase2a_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -94,13 +94,12 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are
-complete. Phase 2A implementation slices 1–9 are complete at HEAD
-`e37b0c1`. Production is `NOT_LIVE`. The Phase 2A validation gate
-(end-to-end submit → processing → approve → final → download flow and
-U-01..U-16 manual QA) is deferred pending explicit user approval and a
-running stack. The phase-status table below is the authoritative marker
-for Phase 2A. Treat the files above as the current authority before
-changing code, workflows, schemas, or operational assumptions.
+complete. Phase 2A is complete and production is `NOT_LIVE`. The Phase 2A
+E2E path and U-01..U-16 manual QA passed locally on 2026-05-14. Phase 2B is
+the safe next phase, but it requires explicit user authorization before any
+work starts. The phase-status table below is the authoritative marker for
+Phase 2A. Treat the files above as the current authority before changing code,
+workflows, schemas, or operational assumptions.
 
 ## AI Agent Operating Context
 
@@ -213,8 +212,9 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1G — Human Review Gate | Complete |
 | 1H — Evaluation and Hardening | Complete |
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
-| 2A — User Chat Workspace Implementation | Safe next phase in progress: implementation slices 1–9 complete at HEAD `e37b0c1`; Phase 2A validation gate deferred pending explicit user approval |
-| 2B–2C — Later UI phases | Not started |
+| 2A — User Chat Workspace Implementation | Complete; E2E and U-01..U-16 manual QA passed; production `NOT_LIVE` |
+| 2B — Admin Visual Control Plane Implementation | Safe next phase; requires explicit user authorization |
+| 2C — UI Hardening and Production Readiness | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

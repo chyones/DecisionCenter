@@ -64,16 +64,24 @@ def _make_state(gate: str = "passed", with_export: bool = True) -> DecisionState
 
 
 @pytest.mark.asyncio
-async def test_node_15_writes_all_four_artifacts() -> None:
+async def test_node_15_writes_report_and_validation_artifacts() -> None:
     reset_daily_cost()
     reset_token_usage("req-1f-001")
     state = _make_state()
+    state.report_json = {
+        "request_id": "req-1f-001",
+        "project_code": "PRJ-001",
+        "query": state.query,
+        "quality_gate_status": "passed",
+        "sources": [],
+    }
 
     mock_minio = MagicMock()
     mock_minio.put_bytes.return_value = "staging/req-1f-001/executive-decision-report.md"
     mock_minio.put_json.side_effect = [
         "staging/req-1f-001/evidence-pack.json",
         "staging/req-1f-001/quality-gate-result.json",
+        "staging/req-1f-001/report-draft.json",
         "staging/req-1f-001/audit-log.json",
     ]
 
@@ -88,9 +96,9 @@ async def test_node_15_writes_all_four_artifacts() -> None:
         result = await node_15_save_audit.run(state)
 
     assert result.outputs["audit_status"] == "persisted"
-    assert len(result.outputs["artifact_keys"]) == 4
+    assert len(result.outputs["artifact_keys"]) == 5
     assert mock_minio.put_bytes.call_count == 1
-    assert mock_minio.put_json.call_count == 3
+    assert mock_minio.put_json.call_count == 4
 
 
 @pytest.mark.asyncio
@@ -364,7 +372,7 @@ async def test_download_blocks_unauthorized_user() -> None:
 
 
 @pytest.mark.asyncio
-async def test_download_allows_admin_or_auditor() -> None:
+async def test_download_allows_auditor_but_blocks_admin() -> None:
     from apps.edr.app import download_report
 
     mock_pg = MagicMock()
@@ -382,14 +390,25 @@ async def test_download_allows_admin_or_auditor() -> None:
     mock_minio = MagicMock()
     mock_minio.get_object.return_value = b"# Report\n"
 
-    for role in (Role.ADMIN.value, Role.AUDITOR.value):
-        with (
-            patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
-            patch("apps.edr.app.get_minio_store", return_value=mock_minio),
-        ):
-            response = await download_report(
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.get_minio_store", return_value=mock_minio),
+    ):
+        response = await download_report(
+            request_id="req-1f-001",
+            fmt="md",
+            claims=MagicMock(user_id="different-user", role=Role.AUDITOR.value),
+        )
+    assert response.status_code == 200
+
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.get_minio_store", return_value=mock_minio),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await download_report(
                 request_id="req-1f-001",
                 fmt="md",
-                claims=MagicMock(user_id="different-user", role=role),
+                claims=MagicMock(user_id="different-user", role=Role.ADMIN.value),
             )
-        assert response.status_code == 200
+    assert exc_info.value.status_code == 403

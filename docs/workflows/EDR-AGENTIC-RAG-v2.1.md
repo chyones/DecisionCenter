@@ -118,6 +118,7 @@ Staging path:
 /staging/{project_id}/{request_id}/evidence-pack.json
 /staging/{project_id}/{request_id}/audit-log.json
 /staging/{project_id}/{request_id}/quality-gate-result.json
+/staging/{project_id}/{request_id}/report-draft.json
 ```
 
 Final path (only after human approval):
@@ -126,6 +127,7 @@ Final path (only after human approval):
 /final/{project_id}/{request_id}/executive-decision-report.md
 /final/{project_id}/{request_id}/evidence-pack.json
 /final/{project_id}/{request_id}/approval-log.json
+/final/{project_id}/{request_id}/report-draft.json
 ```
 
 Reports MUST NOT exist in the final path without an approval log.
@@ -821,7 +823,12 @@ executive-decision-report.md
 evidence-pack.json
 audit-log.json
 quality-gate-result.json
+report-draft.json
 ```
+
+`report-draft.json` is an internal staged draft used for authorized reviewer
+preview when the quality gate requires manual review. It is not a public export
+format.
 
 ### Node 16 — Human Review
 
@@ -1504,7 +1511,8 @@ Exit test: structured report output validates and unsupported claims fail the qu
 
 ### Phase 1F — Persistence and Audit
 
-- Node 15 writes the four staging artifacts to MinIO.
+- Node 15 writes the staging artifacts to MinIO, including the internal
+  `report-draft.json` reviewer-preview artifact when a draft exists.
 - Audit events are persisted to PostgreSQL with hashed user identifiers.
 - Token cost is accumulated and checked against configured caps.
 - Download endpoints serve persisted staged reports and respect quality-gate state.

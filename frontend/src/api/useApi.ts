@@ -12,6 +12,7 @@ import { ApiClient } from './client';
 
 export function useApi(): ApiClient {
   const { role } = useRole();
+  const userId = `phase2a-${role}@local.test`;
 
   return useMemo(
     () =>
@@ -19,9 +20,9 @@ export function useApi(): ApiClient {
         getAuthHeaders: () => ({
           // Dev bypass mode: backend accepts X-User-Role when Entra is not configured.
           'x-user-role': role,
-          'x-user-id': 'frontend-user',
+          'x-user-id': userId,
         }),
       }),
-    [role],
+    [role, userId],
   );
 }

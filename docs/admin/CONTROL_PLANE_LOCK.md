@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-14 (updated for Phase 2A backend additions)
+> **Date:** 2026-05-14 (updated for Phase 2A manual QA closeout)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2A_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -20,9 +20,9 @@ application features and does not define an Admin UI.
 | n8n status | Four workflow JSON files contain real 4–5 node pipelines and require n8n Header Auth | `n8n/*.json` |
 | Service-account credentials | Read from n8n container env (`$env.OWNCLOUD_*`, `$env.ODOO_*`); never sent through the webhook body | `n8n/owncloud_list.json`, `n8n/odoo_read.json`, `docker-compose.yml` |
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
-| Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
+| Evaluation baseline | A 64-case executable golden set covers the required baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete; Phase 2A backend read/status/cancel/upload endpoints landed in a follow-on backend slice (closes gap G12); the Phase 2A validation gate is the next safe work item | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is complete and not live; Phase 2B is the safe next phase after explicit user authorization | This document |
 
 ## Authoritative Environment Baseline
 
@@ -74,9 +74,9 @@ exercised by tests.
 | Phase | Closure evidence |
 |---|---|
 | 1E — LLM Nodes | `apps/edr/llm.py` adds prompt-injection regex (11 patterns), per-tier token caps, and a daily cost tracker with `CostCapExceededError` / `TokenCapExceededError`. Nodes 02/03/04 use Haiku 4.5; node 11 implements the self-correct loop (max 3); node 12 uses Sonnet 4.6 with evidence-bound JSON output; node 13 is the deterministic claim checker; node 14 exports only when `quality_gate == "passed"` and `report_json` is non-empty. Tests: `apps/edr/tests/integration/test_phase1e.py` (22 cases). |
-| 1F — Persistence and Audit | `apps/edr/persistence/postgres_store.py` defines `audit_log` and `review_decisions` schemas idempotently. `apps/edr/persistence/minio_store.py` lazily ensures the configured bucket exists and persists the four staging artifacts; `scripts/init_minio.py` performs an explicit idempotent bucket create. Node 15 hashes user IDs (no raw IDs stored), persists the four artifacts and the audit row. The download endpoint `GET /reports/staging/{request_id}/download/{fmt}` enforces RBAC plus quality-gate state. Tests: `apps/edr/tests/integration/test_phase1f.py` (12 cases). |
+| 1F — Persistence and Audit | `apps/edr/persistence/postgres_store.py` defines `audit_log` and `review_decisions` schemas idempotently. `apps/edr/persistence/minio_store.py` lazily ensures the configured bucket exists and persists staging artifacts; `scripts/init_minio.py` performs an explicit idempotent bucket create. Node 15 hashes user IDs (no raw IDs stored), persists report/evidence/quality/audit artifacts plus internal `report-draft.json` when a draft exists, and writes the audit row. The download endpoint `GET /reports/staging/{request_id}/download/{fmt}` enforces RBAC plus quality-gate state. Tests: `apps/edr/tests/integration/test_phase1f.py`. |
 | 1G — Human Review Gate | `POST /reports/staging/{request_id}/{approve,reject,request-revision}` with role-aware action selection (`_check_reviewer_rbac`), self-approval blocking by hashed reviewer ID, mandatory comment for `admin_override`, and 409 on already-finalized reports. Node 16 reads review state from PostgreSQL; node 17 publishes only when `review_state == "approved"`, copies staging→final via `MinioStore.copy_to_final` (write-once via `FileExistsError`), writes `approval-log.json` exactly once, and updates `review_state` to `final`. `GET /reports/final/{request_id}/download/{fmt}` only serves once finalized; quality-gate `failed` blocks all download paths. Tests: `apps/edr/tests/integration/test_phase1g.py` (22 cases). |
-| 1H — Evaluation and Hardening | `apps/edr/evaluation/run.py` is a real runner (JSONL loader, single-node and full-workflow cases, dot-notation expectation resolution, aggregate pass-rate/precision/refusal metrics, non-zero exit on regression). `apps/edr/evaluation/goldenset/goldenset.jsonl` holds 65 executable cases across all 12 baseline categories (stale `example.jsonl` deleted). `node_13_quality_gate.py` enforces claim-to-evidence binding and Odoo-backed financial fields. `apps/edr/exporters/pdf.py` bundles `Amiri-Regular.ttf` (OFL), auto-detects Arabic, and appends an RTL limitation disclaimer (full bidi shaping deferred). `apps/edr/evaluation/load_test.py` is a local-only deterministic load test (baseline-only). `pip-audit` triage completed (see below). `.github/workflows/ci.yml` adds the `Evaluation suite` step (`--min-pass-rate 0.95 --min-precision 0.90`) and job-level `N8N_TIMEOUT: 5`. Tests: `test_evaluation.py` (15), `test_load_test.py` (5), `test_pdf_arabic.py` (7). Report: `docs/execution/PHASE_1H_REPORT.md`. |
+| 1H — Evaluation and Hardening | `apps/edr/evaluation/run.py` is a real runner (JSONL loader, single-node and full-workflow cases, dot-notation expectation resolution, aggregate pass-rate/precision/refusal metrics, non-zero exit on regression). `apps/edr/evaluation/goldenset/goldenset.jsonl` holds 64 executable cases. `node_13_quality_gate.py` enforces claim-to-evidence binding and Odoo-backed financial fields. `apps/edr/exporters/pdf.py` bundles `Amiri-Regular.ttf` (OFL), auto-detects Arabic, and appends an RTL limitation disclaimer (full bidi shaping deferred). `apps/edr/evaluation/load_test.py` is a local-only deterministic load test (baseline-only). `pip-audit` triage completed (see below). `.github/workflows/ci.yml` adds the `Evaluation suite` step (`--min-pass-rate 0.95 --min-precision 0.90`) and job-level `N8N_TIMEOUT: 5`. Tests: `test_evaluation.py` (15), `test_load_test.py` (5), `test_pdf_arabic.py` (7). Report: `docs/execution/PHASE_1H_REPORT.md`. |
 
 ## Standing Control Invariants
 
@@ -102,35 +102,24 @@ These hold for every phase, including the next one:
 
 ## Phase 2A Progress Lock
 
-Phase 2A is not fully complete. The live repository and GitHub Actions evidence
-show that implementation slices 1–9 are complete at commit `e37b0c1`, with CI
-run `25799899473` completed successfully. The Phase 2A validation gate
-(end-to-end submit → processing → approve → final → download flow and
-U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1) was not
-exercised at the Slice 9 closeout and is deferred under explicit approval;
-see `docs/execution/PHASE_2A_REPORT.md`.
-
-In a follow-on Phase 2A backend slice, the missing read/status/cancel/upload
-endpoints (`GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`,
-`DELETE /reports/{id}`, `POST /upload`) were added to `apps/edr/app.py` with
-role-scoped RBAC and mocked integration tests (`test_phase2a_backend.py`, 31
-cases). This closes gap G12. Frontend screens remain un-wired pending the
-validation gate, by design — the validation gate slice will exercise both
-ends together.
+Phase 2A is complete and not live. Implementation slices 1–9, backend
+read/status/content/cancel/upload additions, deterministic local E2E, and
+U-01..U-16 manual QA are complete. See
+`docs/execution/PHASE_2A_REPORT.md`.
 
 | Slice | Status | Evidence |
 |---|---|---|
 | 1 — API client foundation and auth wiring | Complete | `frontend/src/api/*`; controlled `fetch` usage is contained in the API client. Commit `840e954`. |
-| 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx`; submit is wired to `POST /reports/staging`; project dropdown remains fixture-backed because no project-list endpoint exists. Commit `38f7b58`. |
+| 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx`; submit is wired to `POST /reports/staging`; final closeout wiring loads backend project context. |
 | 3 — Reports List read-only listing | Complete | `frontend/src/screens/ReportsListScreen.tsx`; unavailable/empty state because `GET /reports` is absent. Commit `89a4e49`. |
 | 4 — Processing View status shell | Complete | `frontend/src/screens/ProcessingScreen.tsx`; static status shell because `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent. Commit `5674581`. |
 | 5 — Report View and Evidence Panel | Complete | `frontend/src/screens/ReportViewScreen.tsx` and `frontend/src/screens/EvidencePanel.tsx`; unavailable/static shell because `GET /reports/{id}` is absent. Commit `35f561d`. |
 | 6 — Export Panel | Complete | `frontend/src/screens/ExportPanel.tsx`; wired to existing `GET /reports/{staging,final}/{id}/download/{fmt}`; artifact rows disabled because no artifact-fetch endpoint exists. Commit `96ec4b9`. |
-| 7 — Upload Zone | Complete | `frontend/src/screens/UploadZone.tsx`; drag-and-drop + client-side validation; submission disabled because `POST /upload` is absent. Commit `52b8a02`. |
+| 7 — Upload Zone | Complete | `frontend/src/screens/UploadZone.tsx`; drag-and-drop + client-side validation; backend `POST /upload` enforces matching rules. |
 | 8 — Routing integration + role guards | Complete | `frontend/src/layout/Sidebar.tsx`, `Topbar.tsx`, `routing/guards.ts`. Commit `a5aedfc`. |
 | 9 — Error handling and polish | Complete | `frontend/src/components/ToastProvider.tsx`; error surfaces unified across workspace screens. Commit `e37b0c1`. |
-| Phase 2A backend additions (gap G12) | Complete | Five backend endpoints added to `apps/edr/app.py`: `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload`. RBAC enforced server-side; 31 mocked integration cases in `test_phase2a_backend.py`. Frontend shells remain un-wired pending the validation gate. |
-| Phase 2A validation gate | Deferred | E2E + U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1; requires explicit user approval and a running stack. |
+| Phase 2A backend additions (gap G12) | Complete | Backend endpoints in `apps/edr/app.py`: `GET /workspace/context`, `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `GET /reports/{id}/content`, `DELETE /reports/{id}`, `POST /upload`. RBAC enforced server-side; QA regressions in `test_phase2a_backend.py`. |
+| Phase 2A validation gate | Complete | `make phase2a-e2e` passed; U-01..U-16 manual QA passed; `make smoke`, `make test`, `make eval`, ruff, compileall, frontend lint/build, doc drift, AI context, and postflight form the closeout gate. |
 
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
@@ -170,11 +159,8 @@ regression-tested.
   Phase 1H.
 - Frontend / Admin UI foundation is complete in Phase 1I and is governed by the
   locked UI contract; any Admin UI beyond the locked contract is a spec change.
-- Backend read/status/cancel/upload endpoints required by remaining Phase 2A
-  workspace shells (`GET /reports`, `GET /reports/{id}`,
-  `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload`) are
-  acknowledged-missing per `docs/execution/PHASE_2A_PLAN.md` §F.2 and remain
-  outside the Slice 1–9 closeout.
+- Phase 2B Admin Visual Control Plane implementation is not started and
+  requires explicit user authorization.
 
 ## Admin And Control-Plane Coverage
 
@@ -188,10 +174,8 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**READY FOR PHASE 2A VALIDATION GATE — production is NOT_LIVE.**
+**PHASE_2A_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
 
-Phases 1A–1I plus the Phase 1D-fixup are complete, and Phase 2A implementation
-slices 1–9 are validated by CI on HEAD `e37b0c1` (run `25799899473`). The next
-safe step is the Phase 2A validation gate (E2E + U-01..U-16 manual QA), which
-requires explicit user approval and a running stack. This does not authorize
-deployment, Phase 2A completion claims, Phase 2B, Phase 2C, or any spec change.
+Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. The next safe
+phase is Phase 2B, but it requires explicit user authorization. This does not
+authorize deployment, Phase 2B implementation, Phase 2C, or any spec change.

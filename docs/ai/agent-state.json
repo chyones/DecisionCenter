@@ -1,10 +1,10 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "4901f66d4eb9f04d59d32c949671a53ad4872246",
-  "status": "PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE",
+  "current_commit": "0a19bae781b78cceb57a4cca99197cb9af8eed6c",
+  "status": "PHASE_2A_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
-  "last_completed_phase": "Phase 1I",
-  "active_phase": "Phase 2A",
+  "last_completed_phase": "Phase 2A",
+  "active_phase": "None — awaiting explicit Phase 2B authorization",
   "completed_phase_2a_slices": [
     "Slice 1 — API client foundation and auth wiring",
     "Slice 2 — Query Composer submit",
@@ -15,15 +15,17 @@
     "Slice 7 — Upload Zone",
     "Slice 8 — Routing integration and role guards",
     "Slice 9 — Error handling and polish",
-    "Backend additions — read/status/cancel/upload endpoints (closes gap G12)"
+    "Backend additions — read/status/cancel/upload endpoints (closes gap G12)",
+    "E2E unblock harness",
+    "Manual QA blocker fixes and closeout"
   ],
-  "phase_2a_validation_gate_status": "E2E_PASSED_U01_U16_PENDING",
-  "next_allowed_phase": "Phase 2A manual QA + closeout (U-01..U-16)",
+  "phase_2a_validation_gate_status": "COMPLETE_U01_U16_PASSED",
+  "next_allowed_phase": "Phase 2B — Admin Visual Control Plane Implementation (requires explicit user authorization)",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
   "requires_explicit_user_approval_for_phase_2a_slice_6": false,
-  "requires_explicit_user_approval_for_phase_2a_validation_gate": true,
+  "requires_explicit_user_approval_for_phase_2a_validation_gate": false,
   "requires_explicit_user_approval_for_phase_2b": true,
   "latest_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
@@ -34,9 +36,22 @@
     "conclusion": "success",
     "url": "https://github.com/chyones/DecisionCenter/actions/runs/25844350960"
   },
+  "latest_local_validation": {
+    "date": "2026-05-14",
+    "phase2a_e2e": "PASS",
+    "smoke": "2 passed",
+    "test": "184 passed, 1 warning",
+    "eval": "64/64 passed",
+    "ruff": "clean",
+    "compileall": "clean",
+    "frontend_lint": "clean",
+    "frontend_build": "success"
+  },
   "must_not_deploy": true,
   "must_not_commit_env": true,
   "required_validation": [
+    "python3 scripts/agent_preflight.py",
+    "make phase2a-e2e",
     "make smoke",
     "make test",
     "make eval",
@@ -46,6 +61,6 @@
     "python3 scripts/check_ai_context.py",
     "cd frontend && npm run lint",
     "cd frontend && npm run build",
-    "make phase2a-e2e"
+    "python3 scripts/agent_postflight.py --allow-no-evidence"
   ]
 }

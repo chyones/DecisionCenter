@@ -144,7 +144,19 @@ async def run(state: DecisionState) -> DecisionState:
     except Exception:
         pass
 
-    artifact_keys = report_keys + ([ev_key] if ev_key else []) + ([qg_key] if qg_key else [])
+    draft_key: str | None = None
+    if state.report_json:
+        try:
+            draft_key = minio.put_json(request_id, "report-draft.json", state.report_json)
+        except Exception:
+            pass
+
+    artifact_keys = (
+        report_keys
+        + ([ev_key] if ev_key else [])
+        + ([qg_key] if qg_key else [])
+        + ([draft_key] if draft_key else [])
+    )
 
     # Update artifact keys in audit artifact before persisting it
     audit_artifact.artifact_keys = artifact_keys

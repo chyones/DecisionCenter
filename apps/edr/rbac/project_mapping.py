@@ -40,6 +40,9 @@ class ProjectMapping:
             raise ProjectNotFoundError(f"Unknown project_code: {project_code!r}")
         return self._mapping[project_code]
 
+    def all_projects(self) -> list[dict[str, Any]]:
+        return [self._mapping[key] for key in sorted(self._mapping)]
+
     def allowed_mailboxes(self, project_code: str) -> list[str]:
         entry = self.get(project_code)
         email = entry.get("email", {})

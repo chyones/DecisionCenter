@@ -32,13 +32,14 @@ import { useApi } from '../api';
 import { isApiError } from '../api';
 
 import type { OutputFormat } from '../api';
+import type { ReportState } from '../api';
 import type { Role } from '../routing/roles';
 
 export interface ExportPanelProps {
   isOpen: boolean;
   onClose: () => void;
   requestId: string;
-  reportState: 'staging' | 'needs_review' | 'approved' | 'rejected' | 'final';
+  reportState: ReportState;
   qualityGate: string;
   role: Role;
 }

@@ -125,6 +125,50 @@ export interface UploadResponse {
   content_hash: string;
 }
 
+export interface WorkspaceProject {
+  project_code: string;
+  contract_numbers: string[];
+}
+
+export interface WorkspaceContextResponse {
+  user_id: string;
+  role: string;
+  allowed_projects: WorkspaceProject[];
+  can_generate_report: boolean;
+  can_approve: boolean;
+  can_access_odoo_budget: boolean;
+}
+
+export interface EvidencePanelEntry {
+  evidence_id: string;
+  citation_label: string;
+  source_type: string;
+  title: string;
+  confidence: string;
+  hash_sha256: string;
+  hash_short: string;
+  excerpt: string;
+  source_uri: string;
+  timestamp: string | null;
+}
+
+export interface ReportContentResponse {
+  request_id: string;
+  project_code: string | null;
+  query: string | null;
+  state: ReportState;
+  quality_gate: string | null;
+  requires_approval: boolean;
+  markdown: string | null;
+  evidence: EvidencePanelEntry[];
+  quality_gate_flags: string[];
+  content_available: boolean;
+  content_unavailable_reason: string | null;
+  can_review: boolean;
+  is_requester: boolean;
+  immutable: boolean;
+}
+
 /**
  * Optional query parameters accepted by `GET /reports`. The backend ignores
  * unknown fields and validates `limit`/`offset` bounds (1..200 / 0..).

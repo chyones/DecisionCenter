@@ -3,13 +3,13 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-14
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete at HEAD `e37b0c1`; the Phase 2A validation gate (E2E + U-01..U-16 manual QA) is the safe next work item and is deferred pending explicit user approval. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase after explicit user authorization. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note (HEAD `e37b0c1`, 2026-05-14):
+Live audit note (Phase 2A closeout, 2026-05-14):
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the Phase
 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are complete.
 The four n8n workflow JSON files contain real 4–5 node pipelines, declare
@@ -20,16 +20,12 @@ wired. The LLM tier (Haiku 4.5 / Sonnet 4.6), the deterministic claim
 checker, the export pipeline, MinIO + PostgreSQL persistence (with
 `scripts/init_minio.py` for explicit bucket creation), the human review
 endpoints, and the write-once publish-to-final flow are all wired and
-covered by integration tests. The 65-case executable golden set, evaluation
+covered by integration tests. The 64-case executable golden set, evaluation
 runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
-load test, pip-audit triage, and CI integration are all complete. Phase 2A
-is the safe next phase and is in progress: implementation slices 1–9 are
-complete and CI-green at HEAD `e37b0c1` (CI run `25799899473`). The
-Phase 2A validation gate (E2E + U-01..U-16 manual QA per
-`docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised at the Slice 9
-closeout and is deferred under explicit approval (see
-`docs/execution/PHASE_2A_REPORT.md`). Production deployment is out of scope
-until Phase 2C closes.
+load test, pip-audit triage, and CI integration are all complete. Phase 2A is
+complete: implementation slices 1–9, backend read/status/content/cancel/upload
+additions, deterministic local E2E, and U-01..U-16 manual QA passed. Production
+deployment is out of scope until Phase 2C closes and an operator deploys.
 
 ---
 
@@ -43,7 +39,7 @@ until Phase 2C closes.
 | **1D** | Embedding & Vector Retrieval | Evidence retrieval pipeline from document to ranked Evidence Objects | ~USD 5/mo (Voyage-3-large) | No LLM report generation |
 | **1D-fixup** | Audit closure | Close audit findings (correctness, security, drift) before Phase 1E | Zero | No new features |
 | **1E** | LLM Nodes | Nodes 02, 03, 04, 11, 12, 13, 14 produce real structured output | ~USD 220/mo (Anthropic majority) | No persistence changes, no publish logic |
-| **1F** | Persistence & Audit | All 4 output files written to MinIO staging; audit trail in PostgreSQL | ~USD 5/mo (MinIO storage) | No human review UI, no approval logic |
+| **1F** | Persistence & Audit | Output files written to MinIO staging; audit trail in PostgreSQL | ~USD 5/mo (MinIO storage) | No human review UI, no approval logic |
 | **1G** | Human Review Gate | Approval/reject mechanism for Node 16 → Node 17 with immutable final output | Zero new API costs | No eval logic, no load testing |
 | **1H** | Evaluation & Hardening | Prove correctness against spec before production use | Small eval API costs | No new features |
 
@@ -228,7 +224,7 @@ Phase 1E starts. No new product features.
 
 **Goal:** Prove correctness against spec before production use.
 
-1. ✅ Expand the executable golden set to 65 cases covering all 12 required baseline categories from spec Section 26.
+1. ✅ Expand the executable golden set to 64 executable cases covering the required baseline categories from spec Section 26.
 2. ✅ Wire `apps/edr/evaluation/run.py` to execute against golden set and report metrics from `docs/evaluation/edr_metrics.md`.
 3. ✅ Wire `apps/edr/evaluation/promptfoo.config.yaml` with structured placeholder (real providers and tests awaiting promptfoo CLI).
 4. ✅ Fix PDF Arabic RTL — register bundled `Amiri-Regular.ttf` (OFL license), auto-detect Arabic Unicode, append RTL limitation disclaimer.
@@ -239,7 +235,7 @@ Phase 1E starts. No new product features.
 9. ✅ CI timeout fix: add `N8N_TIMEOUT` setting (default 60 s, 5 s in CI) to prevent connector hangs when n8n is unavailable.
 
 **Validation gate before 1I:**
-- ✅ 65 executable golden set cases pass and `make eval` exits 0 in CI.
+- ✅ 64 executable golden set cases pass and `make eval` exits 0.
 - ✅ PDF with Arabic content renders with Amiri font (RTL shaping deferred).
 - ✅ Load test: 5 concurrent requests complete; baseline recorded.
 - ✅ Langfuse monthly cost projection ≤ USD 300.
@@ -294,30 +290,24 @@ Source of truth: `docs/design/UI_CONTRACT_v1.md` Section 10.
 **Backend dependency:** Phase 1F complete (real reports, evidence packs, MinIO persistence, audit log, cost data).
 **Additional dependency:** Phase 1G complete for approval/reject actions.
 
-**Live progress note (HEAD `e37b0c1`, 2026-05-14):** Phase 2A implementation
-slices 1–9 are complete and CI-green at HEAD `e37b0c1` (CI run
-`25799899473`). The Phase 2A validation gate (E2E + U-01..U-16 manual QA per
-`docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised at the Slice 9
-closeout and is deferred under explicit approval (see
-`docs/execution/PHASE_2A_REPORT.md`). Current frontend integration:
+**Live progress note (2026-05-14):** Phase 2A is complete and not live. The
+implementation slices, backend additions, E2E unblock harness, and manual QA
+blocker fixes are complete. Current frontend integration:
 
 - API client foundation is present in `frontend/src/api/*`.
-- Query Composer submit is wired to live `POST /reports/staging`; its project
-  dropdown remains fixture-backed because no project-list endpoint exists.
-- Reports List, Processing View, Report View, and Evidence Panel are
-  contract-correct unavailable/static shells where the required backend
-  read/status endpoints are absent.
+- Query Composer submit is wired to live `GET /workspace/context` and
+  `POST /reports/staging`; its project dropdown is backend role-scoped.
+- Reports List, Processing View, Report View, and Evidence Panel are wired to
+  live backend state.
 - Export Panel is wired to the existing
   `GET /reports/{staging,final}/{id}/download/{fmt}` endpoints; artifact
   rows (`evidence-pack.json`, `audit-log.json`) are disabled because no
   artifact-fetch endpoint exists.
-- Upload Zone provides drag-and-drop and client-side validation; submission
-  is disabled because `POST /upload` is absent.
+- Upload Zone provides drag-and-drop and client-side validation; backend
+  `POST /upload` enforces matching server rules.
 - Routing integration / role guards (Slice 8) and a unified error-handling
   pass (Slice 9) landed at HEAD.
-- Phase 2A validation gate and the minimal backend read/status/cancel/upload
-  endpoints named in §F.2 remain pending; both require explicit user
-  approval.
+- `make phase2a-e2e` passes and U-01 through U-16 manual QA passed.
 
 **Scope:**
 1. **Query Composer** (`/workspace/new`)
@@ -351,11 +341,11 @@ closeout and is deferred under explicit approval (see
    - Filters by project, state, date range.
 
 **Validation gate before 2B:**
-- End-to-end test: submit query → processing → staging → approve → final → download MD.
-- U-01 through U-16 acceptance criteria from UI_CONTRACT Section 9.1 pass in manual QA.
-- `quality_gate = "failed"` blocks Export Panel and all downloads.
-- `needs_review` requester sees flags only; reviewer sees watermarked draft.
-- Financial section hidden with explicit message for unauthorized roles.
+- ✅ End-to-end test: submit query → processing → staging → approve → final → download MD.
+- ✅ U-01 through U-16 acceptance criteria from UI_CONTRACT Section 9.1 pass in manual QA.
+- ✅ `quality_gate = "failed"` blocks Export Panel and all downloads.
+- ✅ `needs_review` requester sees flags only; reviewer sees watermarked draft.
+- ✅ Financial section hidden with explicit message for unauthorized roles.
 
 ---
 

@@ -23,5 +23,9 @@ export {
   type ReportStatusResponse,
   type CancelReportResponse,
   type UploadResponse,
+  type WorkspaceProject,
+  type WorkspaceContextResponse,
+  type EvidencePanelEntry,
+  type ReportContentResponse,
   type ListReportsParams,
 } from './types';

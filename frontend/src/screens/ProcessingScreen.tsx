@@ -9,9 +9,8 @@
  *   quality_gate_needs_review, quality_gate_failed, awaiting_reviewer,
  *   timed_out, rbac_denied, cancelled.
  *
- * Limitation: `GET /reports/{id}/status` and `DELETE /reports/{id}` do not exist
- * at backend HEAD. The screen renders a contract-correct static shell with a
- * local state toggle (dev-only) and an elapsed timer. No backend polling occurs.
+ * Uses `GET /reports/{id}/status` and `DELETE /reports/{id}` for live Phase 2A
+ * status/cancel behavior.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -28,7 +27,10 @@ import {
   Ban,
 } from 'lucide-react';
 
-import { Button, StatusPill } from '../components';
+import { Button, ConfirmDialog, StatusPill, useToasts } from '../components';
+import { useApi } from '../api';
+import { isApiError } from '../api';
+import type { CancelReportResponse, ReportStatusResponse } from '../api';
 import { useHashPath } from '../routing';
 
 type ProcessingState =
@@ -68,7 +70,7 @@ const NODES: NodeStep[] = [
   { id: 'node_17_publish', label: 'Publishing' },
 ];
 
-/** Demo active node index for the "running" static shell. */
+/** Initial active node index until the first backend status response arrives. */
 const DEMO_ACTIVE_INDEX = 5;
 
 function formatElapsed(seconds: number): string {
@@ -158,19 +160,9 @@ const TONE_COLORS: Record<
   },
 };
 
-const STATE_OPTIONS: ProcessingState[] = [
-  'running',
-  'self_correct_retry',
-  'quality_gate_passed',
-  'quality_gate_needs_review',
-  'quality_gate_failed',
-  'awaiting_reviewer',
-  'timed_out',
-  'rbac_denied',
-  'cancelled',
-];
-
 export function ProcessingScreen() {
+  const api = useApi();
+  const { addToast } = useToasts();
   const path = useHashPath();
   const requestId = useMemo(() => {
     const m = path.match(/^\/workspace\/report\/([^/]+)\/processing$/);
@@ -178,6 +170,9 @@ export function ProcessingScreen() {
   }, [path]);
 
   const [state, setState] = useState<ProcessingState>('running');
+  const [status, setStatus] = useState<ReportStatusResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   // Elapsed timer — local only, counts up every second.
@@ -188,6 +183,58 @@ export function ProcessingScreen() {
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [state]);
+
+  useEffect(() => {
+    if (!requestId) return;
+    let active = true;
+
+    async function loadStatus() {
+      try {
+        const res = await api.get<ReportStatusResponse>(`/reports/${requestId}/status`);
+        if (!active) return;
+        setStatus(res);
+        setErrorMsg('');
+        if (res.state === 'cancelled') setState('cancelled');
+        else if (res.state === 'failed' || res.quality_gate === 'failed') setState('quality_gate_failed');
+        else if (res.state === 'needs_review' || res.quality_gate === 'needs_review') setState('quality_gate_needs_review');
+        else if (res.state === 'staging') setState('awaiting_reviewer');
+        else if (res.state === 'approved' || res.state === 'final') setState('quality_gate_passed');
+      } catch (err) {
+        if (!active) return;
+        let message = 'Unable to load processing status.';
+        if (isApiError(err)) {
+          message = err.status === 0
+            ? 'Network error — please check your connection and try again.'
+            : err.message;
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        setErrorMsg(message);
+      }
+    }
+
+    void loadStatus();
+    const id = window.setInterval(() => {
+      if (!status?.is_terminal) void loadStatus();
+    }, 3000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, [api, requestId, status?.is_terminal]);
+
+  async function handleCancel() {
+    if (!requestId) return;
+    const res = await api.delete<CancelReportResponse>(`/reports/${requestId}`);
+    setState('cancelled');
+    setStatus((current) =>
+      current
+        ? { ...current, state: res.state, is_terminal: true, current_node: 0 }
+        : current,
+    );
+    setCancelOpen(false);
+    addToast('info', 'Report generation was cancelled.', 'Cancelled');
+  }
 
   const activeIndex = useMemo(() => {
     if (state === 'cancelled') return -1;
@@ -209,6 +256,9 @@ export function ProcessingScreen() {
   }, [state, activeIndex]);
 
   const banner = getStateBanner(state);
+  const cancelAllowed = status
+    ? status.state === 'staging' || status.state === 'needs_review'
+    : state === 'running' || state === 'self_correct_retry';
 
   if (!requestId) {
     return (
@@ -237,11 +287,17 @@ export function ProcessingScreen() {
           </p>
         </div>
         <span className="text-caption text-text-muted">
-          static shell — no status endpoint
+          Live backend status
         </span>
       </div>
 
       {/* State banner */}
+      {errorMsg && (
+        <div role="alert" className="mb-4 rounded-sm border border-error bg-error/10 p-3 text-body text-error">
+          {errorMsg}
+        </div>
+      )}
+
       {banner && (
         <div
           role={banner.tone === 'error' ? 'alert' : 'status'}
@@ -339,37 +395,29 @@ export function ProcessingScreen() {
           Elapsed: <span className="font-medium text-text-primary">{formatElapsed(elapsed)}</span>
         </div>
 
-        {/* Cancel action — disabled because no DELETE endpoint exists */}
-        <Button variant="danger" disabled title="Cancel action requires a backend endpoint that is not yet available">
+        <Button
+          variant="danger"
+          disabled={!cancelAllowed || state === 'cancelled'}
+          onClick={() => setCancelOpen(true)}
+        >
           <X className="h-4 w-4" />
           Cancel
         </Button>
       </div>
 
-      {/* Dev-only state toggle */}
-      {import.meta.env.DEV && (
-        <div className="mt-8 rounded-sm border border-dashed border-border bg-surface-raised p-3">
-          <span className="text-label font-medium text-text-secondary">
-            Dev — preview state:
-          </span>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {STATE_OPTIONS.map((s) => (
-              <button
-                type="button"
-                key={s}
-                onClick={() => setState(s)}
-                className={`rounded-sm px-2 py-1 text-caption ${
-                  state === s
-                    ? 'bg-accent text-text-primary'
-                    : 'bg-surface-overlay text-text-secondary hover:bg-surface-base'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={cancelOpen}
+        title="Cancel report generation"
+        confirmationText="cancel"
+        confirmLabel="Cancel report"
+        onClose={() => setCancelOpen(false)}
+        onConfirm={handleCancel}
+      >
+        <p className="text-body text-text-secondary">
+          This will stop the workflow and write a cancellation audit event.
+        </p>
+      </ConfirmDialog>
+
     </div>
   );
 }

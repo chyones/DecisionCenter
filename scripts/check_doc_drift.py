@@ -8,7 +8,7 @@ every CI run must satisfy.
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
    FEATURE_MATRIX.md, and README.md must all reference the same "safe next
-   phase" (currently Phase 2A).
+   phase" (currently Phase 2B).
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
@@ -33,8 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "2A"
-EXPECTED_NEXT_PHASE_TITLE = "User Chat Workspace Implementation"
+EXPECTED_NEXT_PHASE = "2B"
+EXPECTED_NEXT_PHASE_TITLE = "Admin Visual Control Plane Implementation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 MAX_ANCHOR_DRIFT_COMMITS = 3
 

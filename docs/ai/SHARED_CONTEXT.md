@@ -3,14 +3,13 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `4901f66d4eb9f04d59d32c949671a53ad4872246`
-- Current status: `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `0a19bae781b78cceb57a4cca99197cb9af8eed6c`
+- Current status: `PHASE_2A_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 1I
-- Active phase: Phase 2A (implementation slices 1–9 complete; validation gate
-  deferred)
-- Current allowed next work: Phase 2A validation gate (E2E + U-01..U-16 manual
-  QA). Requires explicit user approval and a running stack.
+- Last completed phase: Phase 2A
+- Active phase: none; awaiting explicit Phase 2B authorization.
+- Current allowed next work: Phase 2B — Admin Visual Control Plane
+  Implementation. Requires explicit user authorization before any work begins.
 - Latest report (full-phase closeout): `docs/execution/PHASE_2A_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
@@ -21,29 +20,26 @@ static scaffolds for Admin System Health, Permissions & Roles (Role Matrix
 only), Source Mapping (read-only), and the initial Query Composer shell.
 Frontend lint and build are wired into CI.
 
-Phase 2A implementation Slices 1–9 are complete and CI-green at HEAD
-`e37b0c1` (CI run `25799899473`). The frontend has an API client
-foundation, Query Composer submit wired to `POST /reports/staging`, Reports
-List read-only shell, Processing View shell, Report View shell, Evidence
-Panel shell, Export Panel wired to the existing download endpoints, Upload
-Zone (client-side validation), routing/role-guard updates, and an error-
-handling polish pass. The Query Composer project dropdown remains
-fixture-backed because no project-list endpoint exists. The Phase 2A
-backend additions slice landed the previously missing endpoints
-(`GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`,
-`DELETE /reports/{id}`, `POST /upload`) in `apps/edr/app.py` with
-role-scoped RBAC and a 31-case mocked integration test file. Frontend
-screens are intentionally un-wired against the new endpoints — Reports
-List, Processing View, Report View, and Evidence Panel still render the
-same unavailable shells. The Phase 2A validation gate slice will wire and
-exercise both ends together.
+Phase 2A is complete and not live. Implementation slices 1–9, the backend
+read/status/content/cancel/upload additions, the deterministic local E2E
+harness, and the final manual-QA blocker fixes are complete. The current
+workspace uses live backend state for the Query Composer project list,
+Reports List, Processing View, Report View, Evidence Panel, review actions,
+quality-gate banners, final immutable display, and cancellation path.
 
-Phase 2A is not fully closed: the Phase 2A validation gate (end-to-end
-submit → processing → approve → final → download flow and U-01..U-16
-manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised at
-the Slice 9 closeout and is recorded as deferred under explicit approval in
-`docs/execution/PHASE_2A_REPORT.md`. The machine-readable checkpoint is
-`docs/ai/agent-state.json`.
+The Phase 2A closeout gate passed locally on 2026-05-14:
+
+- `make phase2a-e2e`: PASS; 18 workflow nodes visited; `quality_gate=passed`;
+  pre-approval download returned 403; final markdown download returned 1443 bytes.
+- U-01 through U-16 manual QA: PASSED.
+- `make smoke`: 2 passed.
+- `make test`: 184 passed, 1 warning.
+- `make eval`: 64/64 passed.
+- `ruff check .`, `python3 -m compileall apps scripts`, frontend lint/build,
+  doc drift, AI context, and postflight checks are required before closeout
+  commit.
+
+The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
 
@@ -58,6 +54,8 @@ ruff check .
 python3 -m compileall apps scripts
 python3 scripts/check_doc_drift.py
 python3 scripts/check_ai_context.py
+cd frontend && npm run lint
+cd frontend && npm run build
 ```
 
 For pure documentation / truth work, `python3 scripts/check_doc_drift.py` and
@@ -73,14 +71,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start the Phase 2A validation gate without explicit user approval and
-  a running stack.
-- Do not start Phase 2B without explicit user approval; Phase 2B is blocked on
-  Phase 2A validation gate closure.
-- Do not claim Phase 2A is fully complete until the validation gate has been
-  exercised and its evidence captured.
-- Do not wire new APIs, data fetching, downloads, or report rendering unless
-  explicitly scoped to an approved follow-on task.
+- Do not start Phase 2B without explicit user authorization.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or
@@ -168,6 +159,6 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes the Phase 2A validation gate, Phase
-  2B, or any other gated next step, update this shared context, the handoff,
-  and `docs/ai/agent-state.json` only as part of that approved session.
+- If a future user explicitly authorizes Phase 2B or any other gated next
+  step, update this shared context, the handoff, and
+  `docs/ai/agent-state.json` only as part of that approved session.

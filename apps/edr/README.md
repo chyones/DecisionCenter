@@ -1,36 +1,37 @@
 # EDR Application Package
 
-`apps/edr/` contains the Python FastAPI app and the current EDR workflow skeleton.
+`apps/edr/` contains the FastAPI application, the fixed 18-node LangGraph
+workflow, retrieval/connectors, exporters, persistence, RBAC, evaluation, and
+tests for DecisionCenter.
 
 ## Package Map
 
 | Path | Purpose |
 |---|---|
-| `app.py` | FastAPI routes, health checks, Entra/bypass claim extraction, and the staged-report entry point |
-| `config.py` | Pydantic settings for the 36-key `.env.example` baseline |
-| `connectors/` | n8n webhook client wrappers; real workflow logic lives outside Python in Phase 1C |
-| `evaluation/` | Stub evaluation runner, promptfoo placeholder, and one executable golden example |
-| `exporters/` | Export helpers for Markdown, Word, Excel, PDF, and PowerPoint |
-| `graph/` | Fixed 18-node workflow skeleton and state/runner helpers |
-| `prompts/` | Prompt source files to be wired in later LLM phases |
-| `retrieval/` | Retrieval helper skeletons, RRF implementation, cache, embedding, and rerank placeholders |
+| `app.py` | FastAPI routes, health checks, Entra/local-bypass claim extraction, report staging, review, download, Phase 2A workspace APIs, and upload handling |
+| `config.py` | Pydantic settings for the locked `.env.example` baseline |
+| `auth/` | Microsoft Entra JWT validation |
+| `rbac/` | Canonical 9-role permissions and project-source mapping loader |
+| `connectors/` | n8n webhook client wrappers and response validation |
+| `retrieval/` | Chunking, embeddings, Qdrant, rerank, hybrid search, and cache helpers |
+| `graph/` | Fixed 18-node async workflow and state/runner helpers |
+| `exporters/` | Markdown, Word, Excel, PDF, and PowerPoint exports |
+| `persistence/` | PostgreSQL audit/review state and MinIO artifact/upload storage |
+| `evaluation/` | Executable golden-set runner and local load-test helpers |
 | `schemas/` | Pydantic models corresponding to the JSON Schemas in `docs/schemas/` |
-| `tests/` | Smoke and RBAC integration tests that validate the fixed workflow skeleton, node 01 authorization, and approval gate boundary |
+| `tests/` | Smoke and integration tests for RBAC, connectors, retrieval, LLM nodes, persistence, review/publish, evaluation, and Phase 2A workspace APIs |
 
 ## Current Boundary
 
-Phase 1A infrastructure, Phase 1B RBAC/identity, and Phase 1B.5 async runtime readiness
-are complete. Node 01 performs role/project authorization from JWT or local bypass claims
-and `docs/config/project_source_mapping.json`. All 18 graph nodes are async.
+Phases 1A through 1I, the Phase 1D-fixup, and Phase 2A are complete. Production
+is `NOT_LIVE`. Phase 2A closeout evidence is recorded in
+`docs/execution/PHASE_2A_REPORT.md`.
 
-Product logic remains intentionally limited: retrieval nodes 05-08 are stubbed, n8n
-workflows are empty placeholders, embeddings and reranking raise `NotImplementedError`,
-persistence/audit is not implemented, approval APIs do not exist, and no LLM calls are wired.
-
-Safe next phase: Phase 1C, limited to real n8n connector workflows plus schema/curl
-validation. Do not add Python node logic, LLM calls, embeddings, persistence, approval APIs,
-frontend work, or unrelated product behavior during Phase 1C.
+Safe next phase: Phase 2B — Admin Visual Control Plane Implementation. It
+requires explicit user authorization before any implementation starts. Do not
+deploy, do not start Phase 2B by inference, and do not add unrelated product
+behavior.
 
 Before changing behavior, read `docs/admin/CONTROL_PLANE_LOCK.md`,
-`docs/execution/IMPLEMENTATION_PHASES.md`, and the relevant spec sections in
-`docs/workflows/EDR-AGENTIC-RAG-v2.1.md`.
+`docs/execution/IMPLEMENTATION_PHASES.md`, `docs/ai/SHARED_CONTEXT.md`, and
+the relevant spec sections in `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`.

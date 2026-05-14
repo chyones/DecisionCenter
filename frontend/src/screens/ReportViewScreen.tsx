@@ -1,37 +1,23 @@
-/**
- * Report View — Phase 2A Slice 5.
- *
- * Per `docs/design/UI_CONTRACT_v1.md` §2.3:
- * - Route: `/workspace/report/{request_id}`
- * - Report content with superscript citations linking to Evidence Panel.
- * - Financial Position conditional rendering per role (`can_access_odoo_budget`).
- * - Conflicts Detected and Missing Data sections always rendered if non-empty.
- * - Report states: staging, needs_review, approved, rejected, final.
- * - needs_review requester: QG flags only. Reviewer: watermarked draft + actions.
- * - Evidence Panel slide-in.
- *
- * Limitation: `GET /reports/{id}` does not exist at backend HEAD. The screen
- * renders a contract-correct static shell with dev-only state toggles. No backend
- * data is invented.
- */
-
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle,
   AlertCircle,
+  AlertTriangle,
   Check,
-  X,
   Eye,
+  Lock,
+  Stamp,
+  X,
 } from 'lucide-react';
 
-import { Button, StatusPill } from '../components';
+import { Button, StatusPill, useToasts } from '../components';
+import { isApiError, useApi } from '../api';
+import type { EvidencePanelEntry, ReportContentResponse, ReportState } from '../api';
 import { useHashPath, useRole } from '../routing';
+import type { StatusValue } from '../tokens';
 import { EvidencePanel } from './EvidencePanel';
 import { ExportPanel } from './ExportPanel';
 
 import type { Role } from '../routing/roles';
-
-type ReportState = 'staging' | 'needs_review' | 'approved' | 'rejected' | 'final';
 
 const ROLES_WITH_BUDGET: Role[] = [
   'executive',
@@ -43,20 +29,8 @@ const ROLES_WITH_BUDGET: Role[] = [
   'auditor',
 ];
 
-const STATE_OPTIONS: ReportState[] = [
-  'staging',
-  'needs_review',
-  'approved',
-  'rejected',
-  'final',
-];
-
 function canAccessBudget(role: Role): boolean {
   return ROLES_WITH_BUDGET.includes(role);
-}
-
-function canApprove(role: Role): boolean {
-  return !['auditor', 'admin'].includes(role);
 }
 
 function Watermark() {
@@ -70,6 +44,8 @@ function Watermark() {
 }
 
 export function ReportViewScreen() {
+  const api = useApi();
+  const { addToast } = useToasts();
   const path = useHashPath();
   const { role } = useRole();
   const requestId = useMemo(() => {
@@ -77,152 +53,185 @@ export function ReportViewScreen() {
     return m ? m[1] : null;
   }, [path]);
 
-  const [reportState, setReportState] = useState<ReportState>('approved');
+  const [report, setReport] = useState<ReportContentResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [highlightedEvidenceId, setHighlightedEvidenceId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  const loadReport = useCallback(async () => {
+    if (!requestId) return;
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await api.get<ReportContentResponse>(`/reports/${requestId}/content`);
+      setReport(res);
+    } catch (err) {
+      let message = 'Unable to load report.';
+      if (isApiError(err)) {
+        message = err.status === 0
+          ? 'Network error — please check your connection and try again.'
+          : err.message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setErrorMsg(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, requestId]);
+
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
+
+  async function runReviewAction(action: 'approve' | 'reject' | 'request-revision') {
+    if (!requestId) return;
+    setActionBusy(action);
+    try {
+      if (action === 'approve') {
+        await api.post(`/reports/staging/${requestId}/approve`, {
+          comment: 'Approved from Phase 2A workspace.',
+        });
+      } else if (action === 'reject') {
+        const reason = window.prompt('Reason for rejection');
+        if (!reason) return;
+        await api.post(`/reports/staging/${requestId}/reject`, { reason });
+      } else {
+        const reason = window.prompt('Requested revision');
+        if (!reason) return;
+        await api.post(`/reports/staging/${requestId}/request-revision`, { reason });
+      }
+      addToast('success', 'Review action recorded.', 'Report updated');
+      await loadReport();
+    } catch (err) {
+      let message = 'Review action failed.';
+      if (isApiError(err)) message = err.message;
+      else if (err instanceof Error) message = err.message;
+      addToast('error', message, 'Review action failed');
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   if (!requestId) {
+    return <InvalidReport message="Report request ID is missing from the URL." />;
+  }
+
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle className="h-12 w-12 text-error" aria-hidden="true" />
-        <h2 className="mt-3 text-heading font-semibold text-text-primary">
-          Invalid URL
-        </h2>
-        <p className="mt-2 max-w-[400px] text-body text-text-secondary">
-          Report request ID is missing from the URL.
-        </p>
+      <div className="rounded-sm border border-border bg-surface-raised p-6 text-body text-text-secondary">
+        Loading report…
       </div>
     );
   }
 
-  const isReviewer = canApprove(role);
+  if (errorMsg || !report) {
+    return <InvalidReport message={errorMsg || 'Report not found.'} />;
+  }
+
   const showBudget = canAccessBudget(role);
-
-  // needs_review requester view (QG flags only)
-  if (reportState === 'needs_review' && !isReviewer) {
-    return (
-      <div>
-        <PageHeader requestId={requestId} reportState={reportState} />
-
-        <div className="rounded-sm border border-warning bg-warning/10 p-6">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
-            <div>
-              <h2 className="text-heading font-semibold text-warning">
-                Report flagged for mandatory review
-              </h2>
-              <p className="mt-2 text-body text-text-secondary">
-                Your report has been flagged for mandatory review. Report content
-                is not available until a reviewer has approved it.
-              </p>
-              <div className="mt-4">
-                <h3 className="text-label font-medium text-text-secondary">
-                  Quality gate flags:
-                </h3>
-                <ul className="mt-2 space-y-1 text-body text-text-secondary">
-                  <li className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
-                    Section 3 claim has no Odoo evidence_id
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
-                    Missing Data section is non-empty
-                  </li>
-                </ul>
-              </div>
-              <div className="mt-6">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    window.location.hash = '/workspace/new';
-                  }}
-                >
-                  New query
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {import.meta.env.DEV && <DevStateToggle state={reportState} onChange={setReportState} />}
-      </div>
-    );
-  }
+  const exportsAllowed =
+    (report.state === 'approved' || report.state === 'final') &&
+    report.quality_gate !== 'failed';
+  const showReviewActions = report.can_review && (
+    report.state === 'staging' || report.state === 'needs_review'
+  );
+  const showWatermark = report.can_review && report.state === 'needs_review';
+  const failed = report.quality_gate === 'failed' || report.state === 'failed';
 
   return (
     <div className="relative">
-      <PageHeader requestId={requestId} reportState={reportState} />
+      <PageHeader report={report} />
 
-      {/* needs_review reviewer watermark */}
-      {reportState === 'needs_review' && isReviewer && <Watermark />}
+      {showWatermark && <Watermark />}
 
-      {/* needs_review reviewer QG banner */}
-      {reportState === 'needs_review' && isReviewer && (
-        <div role="alert" className="mb-4 rounded-sm border border-warning bg-warning/10 p-4">
-          <h3 className="flex items-center gap-2 text-body font-medium text-warning">
-            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-            Quality gate flags (2)
-          </h3>
-          <ul className="mt-2 space-y-1 text-body text-text-secondary">
-            <li className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
-              Section 3 claim: no Odoo ID
-            </li>
-            <li className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
-              Missing Data: non-empty
-            </li>
-          </ul>
-        </div>
-      )}
-
-      {/* rejected banner */}
-      {reportState === 'rejected' && (
+      {failed && (
         <div role="alert" className="mb-4 rounded-sm border border-error bg-error/10 p-4">
           <h3 className="flex items-center gap-2 text-body font-medium text-error">
             <X className="h-4 w-4" aria-hidden="true" />
-            Report rejected
+            Quality gate failed
           </h3>
           <p className="mt-1 text-body text-text-secondary">
-            This report was rejected by a reviewer. Reason: Insufficient evidence
-            for Section 3 claims.
+            Report content and exports are blocked because the quality gate failed.
           </p>
         </div>
       )}
 
-      {/* Action bar */}
-      <div className="mb-6 flex items-center justify-between">
+      {report.state === 'staging' && (
+        <div role="status" className="mb-4 rounded-sm border border-warning bg-warning/10 p-4">
+          <h3 className="flex items-center gap-2 text-body font-medium text-warning">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            Awaiting review
+          </h3>
+          <p className="mt-1 text-body text-text-secondary">
+            This staged report is waiting for an authorized reviewer.
+          </p>
+        </div>
+      )}
+
+      {report.state === 'needs_review' && (
+        <div role="alert" className="mb-4 rounded-sm border border-warning bg-warning/10 p-4">
+          <h3 className="flex items-center gap-2 text-body font-medium text-warning">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            Quality gate flags ({report.quality_gate_flags.length})
+          </h3>
+          <FlagList flags={report.quality_gate_flags} />
+        </div>
+      )}
+
+      {report.immutable && (
+        <div role="status" className="mb-4 rounded-sm border border-success bg-success/10 p-4">
+          <h3 className="flex items-center gap-2 text-body font-medium text-success">
+            <Lock className="h-4 w-4" aria-hidden="true" />
+            Locked immutable final report
+          </h3>
+        </div>
+      )}
+
+      <div className="mb-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            icon={<Eye className="h-4 w-4" />}
-            onClick={() => setEvidenceOpen(true)}
-          >
-            Evidence
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setExportOpen(true)}
-            disabled={reportState === 'needs_review'}
-          >
-            Export ▾
-          </Button>
+          {report.evidence.length > 0 && (
+            <Button
+              variant="secondary"
+              icon={<Eye className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => setEvidenceOpen(true)}
+            >
+              Evidence
+            </Button>
+          )}
+          {exportsAllowed && (
+            <Button variant="secondary" onClick={() => setExportOpen(true)}>
+              Export
+            </Button>
+          )}
         </div>
 
-        {/* Reviewer actions for needs_review */}
-        {reportState === 'needs_review' && isReviewer && (
+        {showReviewActions && (
           <div className="flex items-center gap-2">
-            <Button variant="primary" icon={<Check className="h-4 w-4" aria-hidden="true" />} disabled title="Approve action requires a backend endpoint that is not yet available">
+            <Button
+              variant="primary"
+              icon={<Check className="h-4 w-4" aria-hidden="true" />}
+              isLoading={actionBusy === 'approve'}
+              onClick={() => void runReviewAction('approve')}
+            >
               Approve
             </Button>
-            <Button variant="danger" icon={<X className="h-4 w-4" aria-hidden="true" />} disabled title="Reject action requires a backend endpoint that is not yet available">
+            <Button
+              variant="danger"
+              icon={<X className="h-4 w-4" aria-hidden="true" />}
+              isLoading={actionBusy === 'reject'}
+              onClick={() => void runReviewAction('reject')}
+            >
               Reject
             </Button>
             <Button
               variant="secondary"
               icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}
-              disabled
-              title="Request revision action requires a backend endpoint that is not yet available"
+              isLoading={actionBusy === 'request-revision'}
+              onClick={() => void runReviewAction('request-revision')}
             >
               Request revision
             </Button>
@@ -230,182 +239,218 @@ export function ReportViewScreen() {
         )}
       </div>
 
-      {/* Report content */}
-      <div className="space-y-6">
-        {/* Executive Summary */}
-        <section className="rounded-sm border border-border bg-surface-raised p-4">
-          <h2 className="text-heading font-semibold text-text-primary">
-            Executive Summary
-          </h2>
-          <div className="mt-3 space-y-2 text-body text-text-secondary">
-            <p>
-              Contract CON-001 with Vendor X is active. Outstanding payment is AED
-              142,000 as of{' '}
-              <sup tabIndex={0} role="button" aria-label="View evidence source 1" className="cursor-pointer rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base">1</sup>{' '}
-              2026-04-30, per Odoo records{' '}
-              <sup tabIndex={0} role="button" aria-label="View evidence source 2" className="cursor-pointer rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base">2</sup>.
-            </p>
-            <p>
-              The project timeline remains on track with no identified blockers.
-              All deliverables for Phase 1 have been accepted.
-            </p>
-          </div>
-        </section>
-
-        {/* Financial Position — conditional */}
-        <section className="rounded-sm border border-border bg-surface-raised p-4">
+      {!showBudget && (
+        <section className="mb-6 rounded-sm border border-border bg-surface-raised p-4">
           <h2 className="text-heading font-semibold text-text-primary">
             Financial Position
           </h2>
-          {showBudget ? (
-            <div className="mt-3 space-y-2 text-body text-text-secondary">
-              <p>
-                Total contract value: AED 1,250,000. Invoiced to date: AED
-                980,000. Outstanding: AED 270,000.
-              </p>
-              <p>
-                Budget utilization: 78%. Forecast completion: within budget.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-3 text-body text-text-muted">
-              [Financial data is not available for your role]
-            </p>
-          )}
+          <p className="mt-3 text-body text-text-muted">
+            [Financial data is not available for your role]
+          </p>
         </section>
+      )}
 
-        {/* Conflicts Detected */}
-        <section className="rounded-sm border border-border bg-surface-raised p-4">
-          <h2 className="text-heading font-semibold text-text-primary">
-            Conflicts Detected
-          </h2>
-          <div className="mt-3 space-y-2 text-body text-text-secondary">
-            <p className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-              Invoice date in Odoo (2026-04-15) differs from email confirmation
-              (2026-04-18).
-            </p>
-          </div>
-        </section>
+      {report.content_available && report.markdown ? (
+        <MarkdownReport
+          markdown={report.markdown}
+          evidence={report.evidence}
+          showBudget={showBudget}
+          onCitation={(evidenceId) => {
+            setHighlightedEvidenceId(evidenceId);
+            setEvidenceOpen(true);
+          }}
+        />
+      ) : (
+        <div className="rounded-sm border border-border bg-surface-raised p-6">
+          <p className="text-body text-text-secondary">
+            {report.content_unavailable_reason || 'Report content is not available.'}
+          </p>
+          <FlagList flags={report.quality_gate_flags} />
+        </div>
+      )}
 
-        {/* Missing Data */}
-        <section className="rounded-sm border border-border bg-surface-raised p-4">
-          <h2 className="text-heading font-semibold text-text-primary">
-            Missing Data
-          </h2>
-          <div className="mt-3 space-y-2 text-body text-text-secondary">
-            <p className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
-              No PO reference found for Change Order #3.
-            </p>
-          </div>
-        </section>
-
-        {/* Sources */}
-        <section className="rounded-sm border border-border bg-surface-raised p-4">
-          <h2 className="text-heading font-semibold text-text-primary">Sources</h2>
-          <div className="mt-3 flex flex-wrap gap-3 text-body text-text-secondary">
-            <span>
-              <sup className="text-accent">1</sup> Odoo · account.analytic.line
-            </span>
-            <span>
-              <sup className="text-accent">2</sup> SharePoint · Contract doc
-            </span>
-            <span>
-              <sup className="text-accent">3</sup> Email · Shared mailbox
-            </span>
-          </div>
-        </section>
-      </div>
-
-      {/* Evidence Panel */}
-      <EvidencePanel isOpen={evidenceOpen} onClose={() => setEvidenceOpen(false)} />
-
-      {/* Export Panel */}
-      <ExportPanel
-        isOpen={exportOpen}
-        onClose={() => setExportOpen(false)}
-        requestId={requestId}
-        reportState={reportState}
-        qualityGate="passed"
-        role={role}
+      <EvidencePanel
+        isOpen={evidenceOpen}
+        onClose={() => setEvidenceOpen(false)}
+        evidence={report.evidence}
+        highlightedEvidenceId={highlightedEvidenceId}
       />
 
-      {/* Dev-only state toggle */}
-      {import.meta.env.DEV && <DevStateToggle state={reportState} onChange={setReportState} />}
+      {exportsAllowed && (
+        <ExportPanel
+          isOpen={exportOpen}
+          onClose={() => setExportOpen(false)}
+          requestId={requestId}
+          reportState={report.state}
+          qualityGate={report.quality_gate || 'needs_review'}
+          role={role}
+        />
+      )}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Sub-components                                                     */
-/* ------------------------------------------------------------------ */
+function InvalidReport({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <AlertCircle className="h-12 w-12 text-error" aria-hidden="true" />
+      <h2 className="mt-3 text-heading font-semibold text-text-primary">
+        Report unavailable
+      </h2>
+      <p className="mt-2 max-w-[400px] text-body text-text-secondary">
+        {message}
+      </p>
+    </div>
+  );
+}
 
-function PageHeader({
-  requestId,
-  reportState,
-}: {
-  requestId: string;
-  reportState: ReportState;
-}) {
-  const statusMap: Record<ReportState, { status: 'staging' | 'needs_review' | 'approved' | 'rejected' | 'final'; label: string }> = {
-    staging: { status: 'staging', label: 'Staging' },
-    needs_review: { status: 'needs_review', label: 'Needs review' },
-    approved: { status: 'approved', label: 'Approved' },
-    rejected: { status: 'rejected', label: 'Rejected' },
-    final: { status: 'final', label: 'Final' },
-  };
-
-  const mapped = statusMap[reportState];
-
+function PageHeader({ report }: { report: ReportContentResponse }) {
+  const status = toStatusPill(report.state);
   return (
     <div className="mb-6 flex items-baseline justify-between">
       <div>
         <div className="flex items-center gap-2">
-          <StatusPill status={mapped.status} label={mapped.label} />
+          <StatusPill status={status} label={labelForState(report.state)} />
+          {report.immutable && <Stamp className="h-4 w-4 text-success" aria-hidden="true" />}
           <span className="text-body font-medium text-text-primary">
-            PRJ-001
+            {report.project_code || 'No project'}
           </span>
         </div>
         <p className="mt-1 text-caption text-text-muted">
-          Request: <code className="text-text-secondary">{requestId}</code> ·
-          2026-05-06 14:22 · executive
+          Request: <code className="text-text-secondary">{report.request_id}</code>
         </p>
       </div>
-      <span className="text-caption text-text-muted">
-        static shell — no report endpoint
-      </span>
     </div>
   );
 }
 
-function DevStateToggle({
-  state,
-  onChange,
-}: {
-  state: ReportState;
-  onChange: (s: ReportState) => void;
-}) {
+function toStatusPill(state: ReportState): StatusValue {
+  if (state === 'revision_requested') return 'needs_review';
+  if (state === 'cancelled') return 'rejected';
+  if (state === 'failed') return 'failed';
+  return state;
+}
+
+function labelForState(state: ReportState): string {
+  return state.replace(/_/g, ' ');
+}
+
+function FlagList({ flags }: { flags: string[] }) {
+  if (flags.length === 0) return null;
   return (
-    <div className="mt-8 rounded-sm border border-dashed border-border bg-surface-raised p-3">
-      <span className="text-label font-medium text-text-secondary">
-        Dev — preview report state:
-      </span>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {STATE_OPTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => onChange(s)}
-            className={`rounded-sm px-2 py-1 text-caption ${
-              state === s
-                ? 'bg-accent text-text-primary'
-                : 'bg-surface-overlay text-text-secondary hover:bg-surface-base'
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-    </div>
+    <ul className="mt-2 space-y-1 text-body text-text-secondary">
+      {flags.map((flag) => (
+        <li key={flag} className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
+          {flag}
+        </li>
+      ))}
+    </ul>
   );
+}
+
+function MarkdownReport({
+  markdown,
+  evidence,
+  showBudget,
+  onCitation,
+}: {
+  markdown: string;
+  evidence: EvidencePanelEntry[];
+  showBudget: boolean;
+  onCitation: (evidenceId: string) => void;
+}) {
+  const evidenceById = new Map(evidence.map((entry) => [entry.evidence_id, entry]));
+  const lines = markdown.split('\n');
+  const rendered: ReactNode[] = [];
+  let skipFinancial = false;
+
+  lines.forEach((line, idx) => {
+    if (!showBudget && line.startsWith('## 2. Financial Snapshot')) {
+      skipFinancial = true;
+      return;
+    }
+    if (skipFinancial && line.startsWith('## ') && !line.startsWith('## 2.')) {
+      skipFinancial = false;
+    }
+    if (skipFinancial) return;
+    if (!line.trim()) return;
+
+    if (line.startsWith('# ')) {
+      rendered.push(
+        <h1 key={idx} className="text-display font-semibold text-text-primary">
+          {line.replace(/^# /, '')}
+        </h1>,
+      );
+    } else if (line.startsWith('## ')) {
+      rendered.push(
+        <h2 key={idx} className="mt-6 text-heading font-semibold text-text-primary">
+          {line.replace(/^## /, '')}
+        </h2>,
+      );
+    } else if (line.startsWith('- ')) {
+      rendered.push(
+        <p key={idx} className="pl-4 text-body text-text-secondary">
+          • {renderInline(line.replace(/^- /, ''), evidenceById, onCitation)}
+        </p>,
+      );
+    } else if (!line.startsWith('|---') && !line.startsWith('---')) {
+      rendered.push(
+        <p key={idx} className="text-body text-text-secondary">
+          {renderInline(line, evidenceById, onCitation)}
+        </p>,
+      );
+    }
+  });
+
+  return (
+    <article className="space-y-3 rounded-sm border border-border bg-surface-raised p-4">
+      {rendered}
+    </article>
+  );
+}
+
+function renderInline(
+  text: string,
+  evidenceById: Map<string, EvidencePanelEntry>,
+  onCitation: (evidenceId: string) => void,
+): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /\[([A-Za-z0-9_.:-]+)\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    const evidenceId = match[1];
+    const entry = evidenceById.get(evidenceId);
+    if (!entry) continue;
+
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    nodes.push(
+      <sup
+        key={`${evidenceId}-${match.index}`}
+        tabIndex={0}
+        role="button"
+        aria-label={`View evidence source ${entry.citation_label}`}
+        className="cursor-pointer rounded-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base"
+        onClick={() => onCitation(evidenceId)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onCitation(evidenceId);
+          }
+        }}
+      >
+        {entry.citation_label}
+      </sup>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes.length > 0 ? nodes : [text];
 }

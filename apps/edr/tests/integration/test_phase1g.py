@@ -393,6 +393,7 @@ async def test_node_17_final_artifacts_are_write_once() -> None:
         FileExistsError("already exists"),
         FileExistsError("already exists"),
         FileExistsError("already exists"),
+        FileExistsError("already exists"),
     ]
     mock_minio.put_json.return_value = "final/req-1g-001/approval-log.json"
 

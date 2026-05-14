@@ -5,7 +5,7 @@
  * - Drag-and-drop and file-picker support.
  * - Client-side validation: type, per-file size (10 MB), count (5), total size (30 MB).
  * - Preview list with filename, size, and remove action.
- * - Upload submission is disabled because `POST /upload` does not exist at backend HEAD.
+ * - Upload validation mirrors the backend `POST /upload` contract.
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -210,12 +210,10 @@ export function UploadZone({ files, onChange }: UploadZoneProps) {
         </p>
       </div>
 
-      {/* Backend limitation */}
       <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-raised p-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
         <p className="text-body text-text-secondary">
-          File upload submission requires a backend endpoint (<code>POST /upload</code>)
-          that is not yet available. Selection and preview are local-only.
+          Files are validated here before they are attached to a report request.
         </p>
       </div>
     </div>

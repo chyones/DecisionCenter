@@ -2,7 +2,7 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Date:** 2026-05-14 (updated)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete and the missing Phase 2A backend read/status/cancel/upload endpoints landed in a follow-on backend slice (closes gap G12). The Phase 2A validation gate is the safe next work item and is deferred pending explicit user approval. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase after explicit user authorization. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -39,7 +39,7 @@
 | Draft JSON Report (Heavy) | 16.12, 14, 15 | `node_12_draft_json.py` | All | `ExecutiveDecisionReport` | `node: draft_json` | Sonnet 4.6 with evidence-bound JSON; deterministic fallback; `test_phase1e.py` covers 2 cases | implemented |
 | Quality Gate | 16.13, 17 | `node_13_quality_gate.py` | All | `QualityGateResult` | `node: quality_gate` | deterministic checker; rejects unsupported claims and missing-Odoo financials; `test_phase1e.py` covers 4 cases | implemented |
 | Compose Markdown Report | 16.14 | `node_14_compose_md.py` | All | `DecisionState.outputs["exported_reports"]` | `node: compose_md` | export blocked unless `quality_gate == "passed"` (regression test); 5 formats verified | implemented |
-| Save & Audit | 16.15 | `node_15_save_audit.py` | All | `AuditLog` | `node: save_audit` | MinIO + PostgreSQL persistence; `test_phase1f.py` covers 12 cases including hashed-user-id invariant | implemented |
+| Save & Audit | 16.15 | `node_15_save_audit.py` | All | `AuditLog` | `node: save_audit` | MinIO + PostgreSQL persistence; includes internal `report-draft.json` when a draft exists; hashed-user-id invariant tested | implemented |
 | Human Review Gate | 16.16 | `node_16_review.py` | Approval roles per `docs/security/rbac_matrix.md` | `DecisionState.outputs["human_review_status"]` | `node: review` | reads PG `review_decisions`; `test_phase1g.py` covers pending/approved/rejected/revision_requested | implemented |
 | Publish to /final | 16.17 | `node_17_publish.py` | Approval roles per `docs/security/rbac_matrix.md` | `DecisionState.outputs["publish_status"]` | `node: publish` | write-once `copy_to_final` (`FileExistsError`) + single `approval-log.json`; `test_phase1g.py` covers immutability | implemented |
 
@@ -51,16 +51,18 @@
 |---------|--------------|----------|-----------|----------------|-------------|------------------|--------|
 | Health check | 27 | `GET /healthz` | All (unauthenticated) | Service status JSON | None | health proof + CI smoke | implemented |
 | Stage report | 27 | `POST /reports/staging` | Report-capable roles only | `ReportRequest` → `DecisionState` | `request_id` generated (UUID) | smoke + RBAC integration tests | implemented |
-| Download staging report | 27 | `GET /reports/staging/{id}/download/{fmt}` | Request owner + admin/auditor (metadata only); blocked when approval required and `review_state != approved` | MIME type response | `download` event | `test_phase1f.py` + `test_phase1g.py` | implemented |
+| Download staging report | 27 | `GET /reports/staging/{id}/download/{fmt}` | Request owner or auditor; admin denied; blocked when approval required and `review_state != approved` | MIME type response | `download` event | `test_phase1f.py` + `test_phase1g.py` + Phase 2A admin-denial regression | implemented |
 | Approve report | 27, 16.16 | `POST /reports/staging/{id}/approve` | Approval roles per `docs/security/rbac_matrix.md`; admin uses `admin_override` with mandatory comment; auditor blocked; self-approval blocked | Approval record | `approval` event | `test_phase1g.py` | implemented |
 | Reject report | 27, 16.16 | `POST /reports/staging/{id}/reject` | Approval roles per `docs/security/rbac_matrix.md`; auditor blocked; self-rejection blocked | Rejection record (reason required) | `rejection` event | `test_phase1g.py` | implemented |
 | Request revision | 27, 16.16 | `POST /reports/staging/{id}/request-revision` | Approval roles per `docs/security/rbac_matrix.md`; auditor blocked; self-request blocked | Revision record (reason required, optional comment) | `revision_requested` event | `test_phase1g.py` | implemented |
-| Download final report | 27 | `GET /reports/final/{id}/download/{fmt}` | Request owner + admin/auditor; only when `review_state == final` | MIME type response | `download` event | `test_phase1g.py` | implemented |
+| Download final report | 27 | `GET /reports/final/{id}/download/{fmt}` | Request owner or auditor; admin denied; only when `review_state == final` | MIME type response | `download` event | `test_phase1g.py` + Phase 2A admin-denial regression | implemented |
+| Workspace context | 27, UI_CONTRACT §2.1 | `GET /workspace/context` | Report-capable roles receive allowed projects; admin denied; non-generating roles get empty project set | `WorkspaceContextResponse` | None | `test_phase2a_backend.py` | implemented |
 | List reports | 27, PHASE_2A_PLAN §F.2 | `GET /reports` | Own `user_id_hash` for normal roles; auditor sees all (read-only); admin denied | `ReportListResponse` (paginated `ReportSummary`) | None (read-only) | `test_phase2a_backend.py` (6 cases) | implemented |
 | Get report metadata | 27, PHASE_2A_PLAN §F.2 | `GET /reports/{id}` | Owner or auditor; admin denied | `ReportDetail` + `ReviewDecisionView` history | None (read-only) | `test_phase2a_backend.py` (5 cases) | implemented |
 | Get report status | 27, PHASE_2A_PLAN §F.2 | `GET /reports/{id}/status` | Owner or auditor; admin denied | `ReportStatusResponse` (state + node progress) | None (read-only) | `test_phase2a_backend.py` (3 cases) | implemented |
-| Cancel report | 27, PHASE_2A_PLAN §F.2 | `DELETE /reports/{id}` | Requester only; blocked on terminal states (final/rejected/cancelled) | `CancelReportResponse`; writes `cancelled` review_decision | `cancelled` event | `test_phase2a_backend.py` (4 cases) | implemented |
-| Upload attachment | 27, PHASE_2A_PLAN §F.2 | `POST /upload` | Authenticated; per-file ≤10 MB; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML) | `UploadResponse` (upload_id, sha256 hash); persisted under `uploads/{user_id_hash}/{upload_id}/{filename}` | None (storage only) | `test_phase2a_backend.py` (5 cases) | implemented |
+| Get report content | 27, UI_CONTRACT §2.3 | `GET /reports/{id}/content` | Owner, auditor, or authorized reviewer; admin denied; needs-review requester sees flags only | `ReportContentResponse` + evidence entries | None (read-only) | `test_phase2a_backend.py` | implemented |
+| Cancel report | 27, PHASE_2A_PLAN §F.2 | `DELETE /reports/{id}` | Requester only; admin denied; blocked on terminal states (final/rejected/cancelled) | `CancelReportResponse`; writes `report.cancelled` review_decision | `report.cancelled` event | `test_phase2a_backend.py` | implemented |
+| Upload attachment | 27, PHASE_2A_PLAN §F.2 | `POST /upload` | Authenticated non-admin; per-file ≤10 MB; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML) | `UploadResponse` (upload_id, sha256 hash); persisted under `uploads/{user_id_hash}/{upload_id}/{filename}` | None (storage only) | `test_phase2a_backend.py` | implemented |
 
 ---
 
@@ -177,8 +179,8 @@
 | Feature | Spec Section | Component | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
 | Smoke tests | 26 | `apps/edr/tests/smoke/test_smoke.py` | N/A | N/A | N/A | `make smoke` passes (2 cases) | implemented |
-| Integration tests | 26 | `apps/edr/tests/integration/*.py` | N/A | N/A | N/A | 141 integration cases pass on HEAD (`make test`: 143 with smoke) — RBAC, connectors, retrieval, 1D fixes/security, 1E, 1F, 1G, 1H (evaluation, load test, Arabic PDF), doc drift | implemented |
-| Golden set | 26.1 | `apps/edr/evaluation/goldenset/goldenset.jsonl` | N/A | 65 executable cases covering 12 baseline categories | N/A | `make eval` passes in CI (`--min-pass-rate 0.95 --min-precision 0.90`) | implemented |
+| Integration tests | 26 | `apps/edr/tests/integration/*.py` | N/A | N/A | N/A | `make test`: 184 passed with smoke, integration, evaluation, load, PDF, Phase 2A backend/content regressions, and doc drift | implemented |
+| Golden set | 26.1 | `apps/edr/evaluation/goldenset/goldenset.jsonl` | N/A | 64 executable cases | N/A | `make eval`: 64/64 passed, pass rate 100.00%, precision 92.19% | implemented |
 | Evaluation runner | 26.4 | `apps/edr/evaluation/run.py` | N/A | JSONL loader, per-case metrics, aggregate report, non-zero on regression | N/A | `make eval` exits 0 in CI | implemented |
 | Load test | 26 | `apps/edr/evaluation/load_test.py` | N/A | Local-only deterministic fallback; latency percentiles | N/A | `test_load_test.py` (5 cases); `make load-test` baseline; no permanent thresholds | implemented |
 | Test cases spec | 26.1 | `docs/evaluation/edr_test_cases.md` | N/A | 12 baseline categories defined | N/A | N/A | implemented |
@@ -192,26 +194,24 @@
 
 Source of truth: `docs/design/UI_CONTRACT_v1.md`. Frontend foundation and
 static scaffolds are complete in Phase 1I. Phase 2A user workspace
-implementation slices 1–9 are complete; this table distinguishes live backend
-integration from contract-correct static/unavailable shells. See
+implementation and the U-01..U-16 manual QA closeout are complete. See
 `docs/execution/IMPLEMENTATION_PHASES.md` for the full phase scope and
-`docs/execution/PHASE_2A_REPORT.md` for the closeout report and deferred
-validation gate.
+`docs/execution/PHASE_2A_REPORT.md` for the closeout report.
 
 | Feature | Route / Component | Backend integration | Validation proof | Status |
 |---|---|---|---|---|
 | Frontend foundation | `frontend/` | N/A | Phase 1I CI closeout | implemented |
 | API client foundation | `frontend/src/api/*` | Controlled `fetch` wrapper with dev role header wiring | Commit `840e954`; CI green | implemented |
-| Query Composer submit | `/workspace/new` | Live `POST /reports/staging`; project dropdown fixture-backed because no project-list endpoint exists | Commit `38f7b58`; CI green | partial |
-| Reports List | `/workspace/reports` | Backend `GET /reports` available (role-scoped, paginated); frontend shell un-wired pending validation gate | Commit `89a4e49` (shell) + Phase 2A backend additions (endpoint); CI green | partial |
-| Processing View | `/workspace/report/{request_id}/processing` | Backend `GET /reports/{id}/status` and `DELETE /reports/{id}` available; frontend shell un-wired pending validation gate | Commit `5674581` (shell) + Phase 2A backend additions (endpoints); CI green | partial |
-| Report View | `/workspace/report/{request_id}` | Backend `GET /reports/{id}` available (metadata + review-decision history); frontend shell un-wired pending validation gate | Commit `35f561d` (shell) + Phase 2A backend additions (endpoint); CI run `25788830982` success | partial |
-| Evidence Panel | Slide-in from Report View | No live evidence endpoint available through report detail | Commit `35f561d`; CI run `25788830982` success | partial |
-| Export Panel | Slide-in from Report View | Live downloads via `GET /reports/{staging,final}/{id}/download/{fmt}`; `evidence-pack.json`/`audit-log.json` rows disabled because no artifact-fetch endpoint exists | Commit `96ec4b9`; CI run `25795083507` success | partial |
-| Upload Zone | Query Composer | Backend `POST /upload` available (10 MB limit, PDF/DOCX/XLSX/TXT/MSG/EML allowlist); frontend client-side validation and preview list operate; submission un-wired pending validation gate | Commit `52b8a02` (shell) + Phase 2A backend additions (endpoint); CI run `25796533185` success | partial |
+| Query Composer submit | `/workspace/new` | Live `GET /workspace/context` + `POST /reports/staging`; project dropdown is backend role-scoped | Phase 2A U-01/U-02/U-04 QA; frontend lint/build | implemented |
+| Reports List | `/workspace/reports` | Live `GET /reports` with role-scoped filters | Phase 2A U-03 QA; frontend lint/build | implemented |
+| Processing View | `/workspace/report/{request_id}/processing` | Live `GET /reports/{id}/status` and `DELETE /reports/{id}` | Phase 2A U-05/U-16 QA; `make phase2a-e2e` | implemented |
+| Report View | `/workspace/report/{request_id}` | Live `GET /reports/{id}/content`; review actions use existing approval endpoints | Phase 2A U-06/U-07/U-08/U-09/U-14/U-15 QA | implemented |
+| Evidence Panel | Slide-in from Report View | Evidence entries come from `GET /reports/{id}/content` | Phase 2A U-10/U-11 QA | implemented |
+| Export Panel | Slide-in from Report View | Live downloads via `GET /reports/{staging,final}/{id}/download/{fmt}`; rendered only for approved/final non-failed reports | Phase 2A U-06/U-08 QA | implemented |
+| Upload Zone | Query Composer | Frontend validates before upload; backend `POST /upload` enforces matching 10 MB and type rules | Phase 2A U-12/U-13 QA | implemented |
 | Routing integration + role guards | `frontend/src/routing/*`, `Sidebar`, `Topbar` | UX-only guards; server enforces RBAC | Commit `a5aedfc`; CI run `25798446018` success | implemented |
 | Error handling polish | `frontend/src/components/ToastProvider.tsx` + workspace screens | Network-error and inline-error surfaces unified | Commit `e37b0c1`; CI run `25799899473` success | implemented |
-| Phase 2A validation gate | E2E + U-01..U-16 manual QA | Deferred under explicit approval; requires running stack | `docs/execution/PHASE_2A_REPORT.md` | documented-only |
+| Phase 2A validation gate | E2E + U-01..U-16 manual QA | Complete | `docs/execution/PHASE_2A_REPORT.md` | implemented |
 
 ---
 
@@ -252,15 +252,16 @@ reflects the versions in effect when the triage was performed.
 | G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
 | G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |
 | G11 | `pip-audit` not promoted to a hard CI gate | `.github/workflows/ci.yml` | 19 advisories on 9 packages accepted as deferred; gate stays `continue-on-error` | Later phase (2+) |
-| G12 | Phase 2A backend read/status/cancel/upload endpoints absent | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel, Upload Zone rendered unavailable shells | Closed in Phase 2A backend additions: `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload` added with RBAC and tests; frontend shells remain un-wired pending the Phase 2A validation gate |
-| G13 | Phase 2A validation gate (E2E + U-01..U-16 manual QA) not exercised | Manual QA / running stack | Phase 2A cannot be marked fully complete until the gate is run | Phase 2A validation gate; requires explicit user approval |
+| G12 | Phase 2A backend read/status/cancel/upload endpoint gap | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel, Upload Zone originally rendered unavailable shells | Closed in Phase 2A backend additions and final QA blocker fixes |
+| G13 | Phase 2A validation gate (E2E + U-01..U-16 manual QA) not exercised | Manual QA / running stack | Phase 2A could not be marked fully complete until the gate was run | Closed in Phase 2A manual QA closeout |
 
 Closed gaps:
 - G1 (nodes 11–17 stubs) — closed by Phase 1E/1F/1G.
 - G2 (MinIO bucket init) — closed by `scripts/init_minio.py` and runtime `_ensure_bucket()`.
-- G3 (only one executable golden example) — closed in Phase 1H: 65-case `goldenset.jsonl`; stale `example.jsonl` deleted.
+- G3 (only one executable golden example) — closed in Phase 1H: executable `goldenset.jsonl`; stale `example.jsonl` deleted.
 - G6 (Langfuse unwired) — closed in Phase 1E (tracing hook present); live dashboard validation tracked as G9 above.
 - G7 (cost cap not load-tested) — closed in Phase 1H: `load_test.py` exercises the deterministic path; baseline recorded.
 - G8 (pip-audit advisories untriaged) — closed in Phase 1H: triage completed, safe pins upgraded; hard-gate promotion tracked as G11 above.
 - G10 (Arabic RTL PDF render not validated) — closed in Phase 1H: Amiri font, Arabic auto-detection, RTL disclaimer, `test_pdf_arabic.py`; remaining bidi-shaping work tracked as G10b above.
-- G12 (Phase 2A backend read/status/cancel/upload endpoints) — closed in Phase 2A backend additions: five endpoints added to `apps/edr/app.py` with RBAC, mocked integration tests (`test_phase2a_backend.py`, 31 cases), and TypeScript API contract types in `frontend/src/api/types.ts`. Frontend screens remain un-wired pending the Phase 2A validation gate.
+- G12 (Phase 2A backend read/status/cancel/upload endpoints) — closed in Phase 2A backend additions and final QA blocker fixes.
+- G13 (Phase 2A validation gate) — closed in Phase 2A manual QA closeout: E2E and U-01..U-16 passed.

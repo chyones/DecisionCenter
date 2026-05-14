@@ -23,7 +23,9 @@ from fastapi import HTTPException, UploadFile
 from apps.edr.app import (
     cancel_report,
     get_report,
+    get_report_content,
     get_report_status,
+    get_workspace_context,
     list_reports,
     upload_file,
     _derive_external_state,
@@ -142,6 +144,38 @@ def test_safe_filename_strips_directory_and_unsafe_chars() -> None:
     assert _safe_filename("contracts/contract 2024.pdf") == "contract_2024.pdf"
     assert _safe_filename("") == "upload"
     assert _safe_filename("///") == "upload"
+
+
+# ---------------------------------------------------------------------------
+# GET /workspace/context
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_workspace_context_returns_projects_for_report_role() -> None:
+    response = await get_workspace_context(
+        claims=_claims(role=Role.EXECUTIVE.value)
+    )
+
+    assert response.can_generate_report is True
+    assert response.can_approve is True
+    assert [p.project_code for p in response.allowed_projects] == ["PRJ-001", "PRJ-002"]
+
+
+@pytest.mark.asyncio
+async def test_workspace_context_empty_for_non_report_role() -> None:
+    response = await get_workspace_context(claims=_claims(role=Role.AUDITOR.value))
+
+    assert response.can_generate_report is False
+    assert response.allowed_projects == []
+
+
+@pytest.mark.asyncio
+async def test_workspace_context_denies_admin() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await get_workspace_context(claims=_claims(role=Role.ADMIN.value))
+
+    assert exc.value.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +460,102 @@ async def test_get_status_denies_admin() -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /reports/{id}/content
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_report_content_hides_needs_review_from_requester() -> None:
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_audit = AsyncMock(
+        return_value=_audit_row(quality_gate_status="needs_review")
+    )
+
+    mock_minio = MagicMock()
+    mock_minio.get_object.return_value = (
+        b'{"checks":[{"verdict":"needs_review","reason":"Reviewer required"}]}'
+    )
+
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.get_minio_store", return_value=mock_minio),
+    ):
+        response = await get_report_content(
+            request_id="req-2a-001",
+            claims=_claims(user_id="user-42", role=Role.EXECUTIVE.value),
+        )
+
+    assert response.state == "needs_review"
+    assert response.content_available is False
+    assert response.markdown is None
+    assert response.quality_gate_flags == ["Reviewer required"]
+
+
+@pytest.mark.asyncio
+async def test_report_content_allows_reviewer_to_view_staged_draft() -> None:
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_audit = AsyncMock(
+        return_value=_audit_row(quality_gate_status="needs_review")
+    )
+
+    evidence_pack = (
+        b'{"evidence":[{"evidence_id":"ev-1","source_type":"sharepoint",'
+        b'"source_uri":"sp://doc","title":"Doc","excerpt":"Supported claim",'
+        b'"hash_sha256":"abcdef0123456789","confidence":"high"}]}'
+    )
+    qg = b'{"checks":[{"verdict":"needs_review","reason":"Reviewer required"}]}'
+    draft = (
+        b'{"request_id":"req-2a-001","project_code":"PRJ-001","query":"q",'
+        b'"executive_summary":[{"claim":"Supported claim","evidence_ids":["ev-1"],'
+        b'"confidence":"high"}],"sources":[],"quality_gate_status":"needs_review"}'
+    )
+
+    def get_object(_request_id: str, filename: str, prefix: str = "staging") -> bytes:
+        if filename == "quality-gate-result.json":
+            return qg
+        if filename == "evidence-pack.json":
+            return evidence_pack
+        if filename == "report-draft.json":
+            return draft
+        raise FileNotFoundError(filename)
+
+    mock_minio = MagicMock()
+    mock_minio.get_object.side_effect = get_object
+
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.get_minio_store", return_value=mock_minio),
+    ):
+        response = await get_report_content(
+            request_id="req-2a-001",
+            claims=_claims(user_id="reviewer-9", role=Role.PROJECT_MANAGER.value),
+        )
+
+    assert response.can_review is True
+    assert response.content_available is True
+    assert response.markdown is not None
+    assert response.evidence[0].citation_label == "1"
+
+
+@pytest.mark.asyncio
+async def test_report_content_denies_admin() -> None:
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_audit = AsyncMock(return_value=_audit_row())
+
+    with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
+        with pytest.raises(HTTPException) as exc:
+            await get_report_content(
+                request_id="req-2a-001",
+                claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
+            )
+
+    assert exc.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
 # DELETE /reports/{id}
 # ---------------------------------------------------------------------------
 
@@ -443,7 +573,19 @@ async def test_cancel_report_sets_state_and_records_decision() -> None:
 
     assert response.state == "cancelled"
     mock_pg.insert_review_decision.assert_awaited_once()
+    assert mock_pg.insert_review_decision.call_args.kwargs["action"] == "report.cancelled"
     mock_pg.update_review_state.assert_awaited_once_with("req-2a-001", "cancelled")
+
+
+@pytest.mark.asyncio
+async def test_cancel_report_denies_admin() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await cancel_report(
+            request_id="req-2a-001",
+            claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -535,6 +677,19 @@ async def test_upload_accepts_pdf_and_writes_to_minio() -> None:
     kwargs = mock_minio.put_upload.call_args.kwargs
     assert kwargs["user_id_hash"] == hash_user_id("user-42")
     assert kwargs["filename"] == "doc.pdf"
+
+
+@pytest.mark.asyncio
+async def test_upload_denies_admin() -> None:
+    upload = _upload_file()
+
+    with pytest.raises(HTTPException) as exc:
+        await upload_file(
+            claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
+            file=upload,
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

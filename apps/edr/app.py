@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import re
 import socket
@@ -15,11 +16,12 @@ from pydantic import BaseModel, Field
 from apps.edr.auth.validator import EntraJWTValidator, JWTClaims
 from apps.edr.config import settings
 from apps.edr.exporters.base import MIME_TYPES
+from apps.edr.exporters.markdown import to_markdown
 from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
 from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
-from apps.edr.rbac.project_mapping import RbacDeniedError
+from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
 
 app = FastAPI(
@@ -121,6 +123,50 @@ class UploadResponse(BaseModel):
     content_hash: str
 
 
+class WorkspaceProject(BaseModel):
+    project_code: str
+    contract_numbers: list[str] = Field(default_factory=list)
+
+
+class WorkspaceContextResponse(BaseModel):
+    user_id: str
+    role: str
+    allowed_projects: list[WorkspaceProject]
+    can_generate_report: bool
+    can_approve: bool
+    can_access_odoo_budget: bool
+
+
+class EvidencePanelEntry(BaseModel):
+    evidence_id: str
+    citation_label: str
+    source_type: str
+    title: str
+    confidence: str
+    hash_sha256: str
+    hash_short: str
+    excerpt: str
+    source_uri: str
+    timestamp: str | None = None
+
+
+class ReportContentResponse(BaseModel):
+    request_id: str
+    project_code: str | None
+    query: str | None
+    state: str
+    quality_gate: str | None
+    requires_approval: bool
+    markdown: str | None = None
+    evidence: list[EvidencePanelEntry] = Field(default_factory=list)
+    quality_gate_flags: list[str] = Field(default_factory=list)
+    content_available: bool
+    content_unavailable_reason: str | None = None
+    can_review: bool
+    is_requester: bool
+    immutable: bool
+
+
 # Accepted upload types — mirrors `frontend/src/screens/UploadZone.tsx` constants.
 _ACCEPTED_UPLOAD_CONTENT_TYPES: frozenset[str] = frozenset(
     {
@@ -218,6 +264,10 @@ def _validated_role(claims: JWTClaims) -> Role:
         return Role(role)
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=f"Invalid role: {role}") from exc
+
+
+def _role_permissions(role: Role):
+    return ROLE_PERMISSIONS[role]
 
 
 def _derive_external_state(audit: dict[str, Any]) -> str:
@@ -324,6 +374,102 @@ def _check_can_read_own_report(
             status_code=403,
             detail="Not authorized to access this report.",
         )
+
+
+def _is_requester(claims: JWTClaims, audit: dict[str, Any]) -> bool:
+    if not claims.user_id:
+        return False
+    return hash_user_id(claims.user_id) == audit.get("user_id_hash", "")
+
+
+def _can_review_report(claims: JWTClaims, audit: dict[str, Any]) -> bool:
+    try:
+        role = _validated_role(claims)
+    except HTTPException:
+        return False
+    if role in (Role.ADMIN, Role.AUDITOR):
+        return False
+    perms = _role_permissions(role)
+    if not perms.can_approve:
+        return False
+    return not _is_requester(claims, audit)
+
+
+def _check_can_read_report_content(claims: JWTClaims, audit: dict[str, Any]) -> None:
+    role = _validated_role(claims)
+    if role == Role.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is not authorized to view report content.",
+        )
+
+    if not (settings.entra_client_id and settings.entra_tenant_id):
+        return
+
+    if _is_requester(claims, audit) or role == Role.AUDITOR or _can_review_report(claims, audit):
+        return
+
+    raise HTTPException(status_code=403, detail="Not authorized to access this report.")
+
+
+def _load_json_artifact(request_id: str, filename: str, prefix: str) -> dict[str, Any]:
+    minio = get_minio_store()
+    try:
+        raw = minio.get_object(request_id, filename, prefix=prefix)
+        parsed = json.loads(raw.decode("utf-8"))
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _load_text_artifact(request_id: str, filename: str, prefix: str) -> str | None:
+    minio = get_minio_store()
+    try:
+        return minio.get_object(request_id, filename, prefix=prefix).decode("utf-8")
+    except Exception:
+        return None
+
+
+def _quality_gate_flags(qg_result: dict[str, Any]) -> list[str]:
+    checks = qg_result.get("checks")
+    if not isinstance(checks, list):
+        return []
+    flags: list[str] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        verdict = check.get("verdict")
+        if verdict == "supported":
+            continue
+        reason = check.get("reason") or check.get("claim_id") or "Quality gate flag"
+        flags.append(str(reason))
+    return flags
+
+
+def _evidence_entries(evidence_pack: dict[str, Any]) -> list[EvidencePanelEntry]:
+    raw_evidence = evidence_pack.get("evidence")
+    if not isinstance(raw_evidence, list):
+        return []
+    entries: list[EvidencePanelEntry] = []
+    for idx, item in enumerate(raw_evidence, start=1):
+        if not isinstance(item, dict):
+            continue
+        full_hash = str(item.get("hash_sha256") or "")
+        entries.append(
+            EvidencePanelEntry(
+                evidence_id=str(item.get("evidence_id") or ""),
+                citation_label=str(idx),
+                source_type=str(item.get("source_type") or "unknown"),
+                title=str(item.get("title") or "Untitled evidence"),
+                confidence=str(item.get("confidence") or "unknown"),
+                hash_sha256=full_hash,
+                hash_short=full_hash[-8:] if len(full_hash) >= 8 else full_hash,
+                excerpt=str(item.get("excerpt") or ""),
+                source_uri=str(item.get("source_uri") or ""),
+                timestamp=item.get("timestamp") if isinstance(item.get("timestamp"), str) else None,
+            )
+        )
+    return entries
 
 
 @app.get("/healthz")
@@ -438,6 +584,41 @@ async def stage_report(
         "exported_formats": list(exports.keys()),
         "exports": exports,
     }
+
+
+@app.get("/workspace/context", response_model=WorkspaceContextResponse)
+async def get_workspace_context(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> WorkspaceContextResponse:
+    """Return the role-scoped workspace context used by the Phase 2A UI."""
+    claims = _require_claims(claims)
+    role = _validated_role(claims)
+    if role == Role.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is not authorized to access the user workspace.",
+        )
+    perms = _role_permissions(role)
+
+    projects: list[WorkspaceProject] = []
+    if perms.can_generate_report:
+        mapping = ProjectMapping.load()
+        projects = [
+            WorkspaceProject(
+                project_code=str(entry.get("project_code", "")),
+                contract_numbers=list(entry.get("contract_numbers", [])),
+            )
+            for entry in mapping.all_projects()
+        ]
+
+    return WorkspaceContextResponse(
+        user_id=claims.user_id,
+        role=role.value,
+        allowed_projects=projects,
+        can_generate_report=perms.can_generate_report,
+        can_approve=perms.can_approve,
+        can_access_odoo_budget=perms.can_access_odoo_budget,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -594,6 +775,78 @@ async def get_report_status(
     )
 
 
+@app.get("/reports/{request_id}/content", response_model=ReportContentResponse)
+async def get_report_content(
+    request_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> ReportContentResponse:
+    """Return report content and evidence for the Phase 2A Report View.
+
+    Requesters whose reports need mandatory review receive quality-gate flags
+    only. Reviewers can inspect the staged draft, but export/download remains
+    blocked until approval/finalization by the existing download endpoints.
+    """
+    claims = _require_claims(claims)
+
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    _check_can_read_report_content(claims, audit)
+
+    state = _derive_external_state(audit)
+    prefix = "final" if state == "final" else "staging"
+    qg_result = _load_json_artifact(request_id, "quality-gate-result.json", prefix)
+    flags = _quality_gate_flags(qg_result)
+    evidence_pack = _load_json_artifact(request_id, "evidence-pack.json", prefix)
+    evidence = _evidence_entries(evidence_pack)
+
+    is_requester = _is_requester(claims, audit)
+    can_review = _can_review_report(claims, audit) and state in {"staging", "needs_review"}
+    markdown: str | None = None
+    unavailable_reason: str | None = None
+
+    if audit.get("quality_gate_status") == "failed":
+        unavailable_reason = "Download blocked: quality gate failed."
+    elif state == "needs_review" and is_requester:
+        unavailable_reason = "Report content is hidden until reviewer approval."
+    else:
+        markdown = _load_text_artifact(
+            request_id,
+            "executive-decision-report.md",
+            prefix,
+        )
+        if not markdown or markdown.startswith("# No Report Generated"):
+            draft = _load_json_artifact(request_id, "report-draft.json", prefix)
+            if draft:
+                markdown = to_markdown(draft)
+        if not markdown:
+            unavailable_reason = "Report content is not available."
+
+    content_available = markdown is not None and unavailable_reason is None
+    if not content_available and not can_review:
+        evidence = []
+
+    return ReportContentResponse(
+        request_id=audit["request_id"],
+        project_code=audit.get("project_code"),
+        query=audit.get("query"),
+        state=state,
+        quality_gate=audit.get("quality_gate_status"),
+        requires_approval=bool(audit.get("requires_approval", True)),
+        markdown=markdown if content_available else None,
+        evidence=evidence if content_available or can_review else [],
+        quality_gate_flags=flags,
+        content_available=content_available,
+        content_unavailable_reason=unavailable_reason,
+        can_review=can_review,
+        is_requester=is_requester,
+        immutable=state == "final",
+    )
+
+
 @app.delete("/reports/{request_id}", response_model=CancelReportResponse)
 async def cancel_report(
     request_id: str,
@@ -606,6 +859,11 @@ async def cancel_report(
     audit row plus a ``review_decisions`` entry — the audit trail is preserved.
     """
     claims = _require_claims(claims)
+    if claims.role == Role.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is not authorized to cancel workspace reports.",
+        )
 
     pg = get_postgres_store()
     await pg.init_schema()
@@ -638,7 +896,7 @@ async def cancel_report(
     await pg.insert_review_decision(
         request_id=request_id,
         reviewer_id_hash=canceller_hash,
-        action="cancelled",
+        action="report.cancelled",
         reason="Cancelled by requester.",
     )
     await pg.update_review_state(request_id, "cancelled")
@@ -702,6 +960,11 @@ async def upload_file(
     to a future query.
     """
     claims = _require_claims(claims)
+    if claims.role == Role.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is not authorized to upload workspace files.",
+        )
 
     safe_name = _safe_filename(file.filename or "")
     _validate_upload_type(safe_name, file.content_type)
@@ -907,6 +1170,11 @@ async def _download_artifact(
             status_code=403,
             detail="Download blocked: quality gate failed.",
         )
+    if claims and claims.role == Role.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin role is not authorized to download report content.",
+        )
 
     # Authorization (skip in bypass mode)
     if settings.entra_client_id and settings.entra_tenant_id:
@@ -917,12 +1185,8 @@ async def _download_artifact(
         stored_hash = audit.get("user_id_hash", "")
         role = claims.role
 
-        # Admin and auditor can access metadata but admin cannot view report content.
-        # For downloads, we allow admin/auditor on staging; on final we also allow.
-        allowed = requester_hash == stored_hash or role in (
-            Role.ADMIN.value,
-            Role.AUDITOR.value,
-        )
+        # Auditor can access read-only report content; admin remains metadata-only.
+        allowed = requester_hash == stored_hash or role == Role.AUDITOR.value
         if not allowed:
             raise HTTPException(
                 status_code=403,

@@ -1,132 +1,221 @@
-/**
- * My Reports List — Phase 2A Slice 3.
- *
- * Per `docs/design/UI_CONTRACT_v1.md` §2.6:
- * - Group by state: In progress, Awaiting review, Approved / Final.
- * - Role-scoped: own requests only (auditor sees project-scoped read-only).
- * - Filters by project, state, date range.
- * - Click row → Report View.
- *
- * Limitation: `GET /reports` does not exist at backend HEAD. The structural layout
- * is rendered with empty-state messaging per group. No backend data is invented.
- */
-
+import { useEffect, useMemo, useState } from 'react';
 import { Filter, FolderOpen } from 'lucide-react';
 
+import { isApiError, useApi } from '../api';
+import type { ReportListResponse, ReportState, ReportSummary } from '../api';
 import { StatusPill } from '../components';
 import { useRole } from '../routing';
+import type { StatusValue } from '../tokens';
 
-const GROUPS = [
+const GROUPS: {
+  title: string;
+  states: ReportState[];
+  emptyText: string;
+}[] = [
   {
     title: 'In progress',
-    statuses: ['processing' as const, 'staging' as const],
+    states: ['staging'],
     emptyText:
       'No in-progress reports. Submit a query from the Query Composer to see reports here.',
   },
   {
     title: 'Awaiting review',
-    statuses: ['needs_review' as const],
+    states: ['needs_review', 'revision_requested'],
     emptyText: 'No reports awaiting review.',
   },
   {
     title: 'Approved / Final',
-    statuses: ['approved' as const, 'final' as const],
+    states: ['approved', 'final'],
     emptyText: 'No approved or finalized reports.',
   },
 ];
 
-export function ReportsListScreen() {
-  const { role } = useRole();
+const STATE_OPTIONS: { label: string; value: ReportState | '' }[] = [
+  { label: 'All states', value: '' },
+  { label: 'Staging', value: 'staging' },
+  { label: 'Needs review', value: 'needs_review' },
+  { label: 'Approved', value: 'approved' },
+  { label: 'Final', value: 'final' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
 
+export function ReportsListScreen() {
+  const api = useApi();
+  const { role } = useRole();
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [projectFilter, setProjectFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState<ReportState | ''>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const isAuditor = role === 'auditor';
+
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams();
+    if (projectFilter) params.set('project_code', projectFilter);
+    if (stateFilter) params.set('state', stateFilter);
+
+    setIsLoading(true);
+    api
+      .get<ReportListResponse>(`/reports${params.size ? `?${params}` : ''}`)
+      .then((res) => {
+        if (!active) return;
+        setReports(res.reports);
+        setErrorMsg('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        let message = 'Unable to load reports.';
+        if (isApiError(err)) {
+          message = err.status === 0
+            ? 'Network error — please check your connection and try again.'
+            : err.message;
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        setErrorMsg(message);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, projectFilter, stateFilter]);
+
+  const projects = useMemo(
+    () =>
+      Array.from(
+        new Set(reports.map((report) => report.project_code).filter(Boolean)),
+      ) as string[],
+    [reports],
+  );
 
   return (
     <div>
-      {/* Page header */}
       <div className="mb-8 flex items-baseline justify-between">
         <h1 className="text-display font-semibold text-text-primary">
           My Reports
         </h1>
         <span className="text-caption text-text-muted">
-          backend endpoint unavailable
+          {isAuditor ? 'auditor read-only' : 'live list'}
         </span>
       </div>
 
-      {/* Filter bar — disabled placeholders (backend endpoint missing) */}
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-sm border border-border bg-surface-raised p-3">
         <span className="text-label text-text-secondary">
           <Filter className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
           Filters:
         </span>
         <select
-          disabled
-          className="h-8 cursor-not-allowed rounded-sm border border-border bg-surface-base px-2 text-label text-text-muted opacity-50"
+          value={projectFilter}
+          onChange={(event) => setProjectFilter(event.target.value)}
+          className="h-8 rounded-sm border border-border bg-surface-base px-2 text-label text-text-secondary"
         >
-          <option>All projects</option>
+          <option value="">All projects</option>
+          {projects.map((project) => (
+            <option key={project} value={project}>{project}</option>
+          ))}
         </select>
         <select
-          disabled
-          className="h-8 cursor-not-allowed rounded-sm border border-border bg-surface-base px-2 text-label text-text-muted opacity-50"
+          value={stateFilter}
+          onChange={(event) => setStateFilter(event.target.value as ReportState | '')}
+          className="h-8 rounded-sm border border-border bg-surface-base px-2 text-label text-text-secondary"
         >
-          <option>All states</option>
+          {STATE_OPTIONS.map((option) => (
+            <option key={option.label} value={option.value}>{option.label}</option>
+          ))}
         </select>
-        <input
-          type="text"
-          disabled
-          placeholder="Date range"
-          className="h-8 cursor-not-allowed rounded-sm border border-border bg-surface-base px-2 text-label text-text-muted opacity-50"
-        />
         <span className="ml-auto text-caption text-text-muted">
-          {isAuditor
-            ? 'Auditor view: project-scoped read-only'
-            : 'Showing your requests only'}
+          {isAuditor ? 'Auditor view: read-only' : 'Showing your requests only'}
         </span>
       </div>
 
-      {/* Report groups */}
-      <div className="space-y-8">
-        {GROUPS.map((group) => (
-          <section key={group.title}>
-            <h2 className="mb-3 text-heading font-semibold text-text-primary">
-              {group.title}
-            </h2>
-            <div className="rounded-sm border border-border">
-              {/* Header row */}
-              <div className="grid grid-cols-[1fr_120px_140px_120px] gap-3 border-b border-border bg-surface-raised px-4 py-2 text-label font-medium text-text-secondary">
-                <span>Query</span>
-                <span>Project</span>
-                <span>Status</span>
-                <span>Submitted</span>
-              </div>
+      {errorMsg && (
+        <div role="alert" className="mb-4 rounded-sm border border-error bg-error/10 p-3 text-body text-error">
+          {errorMsg}
+        </div>
+      )}
 
-              {/* Empty state */}
-              <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-                <FolderOpen
-                  className="h-8 w-8 text-text-muted"
-                  aria-hidden="true"
-                />
-                <p className="mt-2 max-w-[400px] text-body text-text-secondary">
-                  {group.emptyText}
-                </p>
-                <p className="mt-1 text-caption text-text-muted">
-                  Report listing requires a live backend endpoint (
-                  <code>GET /reports</code>) that is not yet available.
-                </p>
-              </div>
-
-              {/* Status legend (contract-correct examples, non-interactive) */}
-              <div className="flex flex-wrap items-center gap-2 border-t border-border bg-surface-raised px-4 py-2">
-                <span className="text-caption text-text-muted">
-                  Status types:
-                </span>
-                {group.statuses.map((s) => (
-                  <StatusPill key={s} status={s} />
-                ))}
-              </div>
-            </div>
-          </section>
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="rounded-sm border border-border bg-surface-raised p-6 text-body text-text-secondary">
+          Loading reports…
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {GROUPS.map((group) => {
+            const rows = reports.filter((report) => group.states.includes(report.state));
+            return (
+              <ReportGroup
+                key={group.title}
+                title={group.title}
+                rows={rows}
+                emptyText={group.emptyText}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
+}
+
+function ReportGroup({
+  title,
+  rows,
+  emptyText,
+}: {
+  title: string;
+  rows: ReportSummary[];
+  emptyText: string;
+}) {
+  return (
+    <section>
+      <h2 className="mb-3 text-heading font-semibold text-text-primary">
+        {title}
+      </h2>
+      <div className="rounded-sm border border-border">
+        <div className="grid grid-cols-[1fr_120px_140px_120px] gap-3 border-b border-border bg-surface-raised px-4 py-2 text-label font-medium text-text-secondary">
+          <span>Query</span>
+          <span>Project</span>
+          <span>Status</span>
+          <span>Submitted</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <FolderOpen className="h-8 w-8 text-text-muted" aria-hidden="true" />
+            <p className="mt-2 max-w-[400px] text-body text-text-secondary">
+              {emptyText}
+            </p>
+          </div>
+        ) : (
+          rows.map((report) => (
+            <a
+              key={report.request_id}
+              href={`#/workspace/report/${report.request_id}`}
+              className="grid grid-cols-[1fr_120px_140px_120px] gap-3 border-b border-border px-4 py-3 text-body text-text-secondary transition-colors last:border-b-0 hover:bg-surface-overlay"
+            >
+              <span className="truncate text-text-primary">
+                {report.query_excerpt || 'Untitled report'}
+              </span>
+              <span>{report.project_code || '—'}</span>
+              <StatusPill status={statusForState(report.state)} label={labelForState(report.state)} />
+              <span>{report.created_at ? new Date(report.created_at).toLocaleDateString() : '—'}</span>
+            </a>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function statusForState(state: ReportState): StatusValue {
+  if (state === 'revision_requested') return 'needs_review';
+  if (state === 'cancelled') return 'rejected';
+  return state === 'failed' ? 'failed' : state;
+}
+
+function labelForState(state: ReportState): string {
+  return state.replace(/_/g, ' ');
 }
