@@ -17,8 +17,8 @@
     "Slice 9 — Error handling and polish",
     "Backend additions — read/status/cancel/upload endpoints (closes gap G12)"
   ],
-  "phase_2a_validation_gate_status": "DEFERRED",
-  "next_allowed_phase": "Phase 2A validation gate (E2E + U-01..U-16 manual QA)",
+  "phase_2a_validation_gate_status": "E2E_PASSED_U01_U16_PENDING",
+  "next_allowed_phase": "Phase 2A manual QA + closeout (U-01..U-16)",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -45,6 +45,7 @@
     "python3 scripts/check_doc_drift.py",
     "python3 scripts/check_ai_context.py",
     "cd frontend && npm run lint",
-    "cd frontend && npm run build"
+    "cd frontend && npm run build",
+    "make phase2a-e2e"
   ]
 }

@@ -1,5 +1,49 @@
 # Agent Handoff — DecisionCenter
 
+## Current Session Note — Phase 2A E2E Unblock
+
+Timestamp: `2026-05-14T08:46:53Z`.
+
+Scope: Phase 2A E2E unblock only. Phase 2B was not started. No deployment was
+performed. The quality gate was not weakened.
+
+Implemented a deterministic local validation harness:
+
+- `scripts/phase2a_e2e_validation.py` drives the public FastAPI API through
+  submit, status, pre-approval download denial, approval, publish, final status,
+  and final markdown download.
+- The harness patches only external connector calls and retrieval storage
+  side effects in-process, providing one valid controlled SharePoint
+  `EvidenceObject` with `evidence_id=ev_phase2a_local_sharepoint_001`.
+- `node_13_quality_gate.py` was not changed; the report passes because the
+  deterministic report builder cites the fixture evidence and the existing
+  quality gate validates those citations.
+- `Makefile` now exposes `make phase2a-e2e`.
+
+The E2E attempt exposed a real final-artifact blocker: MinIO copy was using a
+raw `bucket/key` string instead of the SDK `CopySource` object. Fixed in
+`apps/edr/persistence/minio_store.py` and covered by a regression in
+`apps/edr/tests/integration/test_phase1g.py`.
+
+Validation evidence from this session:
+
+- `make smoke`: 2 passed.
+- `make test`: 176 passed, 1 warning.
+- `make eval`: 64/64 passed, pass rate 100.00%, precision 92.19%.
+- `ruff check .`: clean.
+- `python3 -m compileall apps scripts`: clean.
+- `python3 scripts/check_doc_drift.py`: clean.
+- `python3 scripts/check_ai_context.py`: clean.
+- `cd frontend && npm run lint`: clean.
+- `cd frontend && npm run build`: success.
+- `make phase2a-e2e`: PASS; 18 workflow nodes visited; `quality_gate=passed`;
+  pre-approval staging download returned 403; approval published; final
+  markdown download returned 200 with 1443 bytes.
+
+Result: Phase 2A E2E blocker is removed. Phase 2A is not closed in this
+session. Phase 2B remains blocked until explicit Phase 2A closeout approval and
+explicit Phase 2B authorization.
+
 ## Current Session Note — Phase 2A Validation Gate Attempt
 
 Timestamp: `2026-05-14T07:54:30Z`.

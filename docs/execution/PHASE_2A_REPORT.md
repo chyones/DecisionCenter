@@ -5,10 +5,11 @@
 > **Status:** `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`
 > **Previous phase:** Phase 1I (Frontend Foundation & Static Admin Scaffolds)
 > **Phase 2A implementation slices:** 9 of 9 authored
-> **Phase 2A validation gate (E2E + U-01..U-16 manual QA):** DEFERRED — requires
-> explicit user approval and a running stack; not exercised by this closeout.
-> **Next safe phase:** Phase 2A validation gate (E2E + manual QA); Phase 2B may
-> not start until that gate closes. Both require explicit user approval.
+> **Phase 2A validation gate (E2E + U-01..U-16 manual QA):** PARTIAL — the
+> deterministic local E2E path passed after the E2E unblock slice; U-01..U-16
+> manual QA remains pending.
+> **Next safe phase:** Phase 2A manual QA + closeout; Phase 2B may not start
+> until that gate closes. Both require explicit user approval.
 
 ---
 
@@ -17,11 +18,12 @@
 Phase 2A authored the nine implementation slices defined in
 `docs/execution/PHASE_2A_PLAN.md` §I between commits `840e954` (Slice 1) and
 `e37b0c1` (Slice 9), all landing on `main`. Each slice was verified by a green
-GitHub Actions CI run on push. Phase 2A is **not** marked fully complete: the
-Phase 2A validation gate (end-to-end submit → processing → staging → approve →
-final → download flow, and U-01..U-16 manual QA against
-`docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised by this closeout and is
-recorded here as deferred under explicit approval.
+GitHub Actions CI run on push. Phase 2A is **not** marked fully complete. The
+deterministic local E2E path (submit → processing → quality_gate passed →
+approve → final → download MD) now passes through the existing workflow,
+quality gate, approval, publish, and download path without real external
+credentials. U-01..U-16 manual QA against `docs/design/UI_CONTRACT_v1.md` §9.1
+remains pending under explicit approval.
 
 This report also reconciles repository truth with the live `main` branch. The
 prior governance anchor at `35f561d` had become six commits stale because
@@ -51,12 +53,13 @@ All slices passed CI. Run URLs:
 
 ---
 
-## Live backend integration vs unavailable shells
+## Live backend integration vs unavailable shells (historical e37b0c1 snapshot)
 
-The Phase 2A workspace screens distinguish between routes wired to live backend
-endpoints and routes that render contract-correct "unavailable" shells because
-the required backend read/status endpoints are not present in `apps/edr/app.py`
-at HEAD. This was documented as a scope decision in
+At the original Slice 9 closeout anchor, the Phase 2A workspace screens
+distinguished between routes wired to live backend endpoints and routes that
+render contract-correct "unavailable" shells because the required backend
+read/status endpoints were not present in `apps/edr/app.py` at `e37b0c1`.
+This was documented as a scope decision in
 `docs/execution/PHASE_2A_PLAN.md` §F.2.
 
 | Screen | Backend integration |
@@ -98,11 +101,12 @@ linked from `docs/ai/agent-state.json.latest_verified_ci`.
 
 ## What was explicitly NOT done
 
-- The Phase 2A validation gate (end-to-end submit → processing → approve →
-  final → download flow and U-01..U-16 manual QA per
-  `docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised. It requires a
-  running stack and is deferred under explicit approval.
-- Backend endpoints required by remaining workspace shells were not added.
+- U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1 remains
+  pending. The deterministic local E2E path was exercised later by
+  `make phase2a-e2e` and passed, but this report does not close Phase 2A.
+- Backend endpoints required by remaining workspace shells were not added by
+  the original `e37b0c1` closeout; they were added later in the controlled G12
+  backend additions recorded below.
 - No production deployment; production stays `NOT_LIVE`.
 - No code, configuration, schema, contract, or workflow JSON was changed by
   the closeout reconciliation.
@@ -168,8 +172,7 @@ detectors on every push.
 
 | Item | Tracking | Required action to close |
 |---|---|---|
-| Phase 2A validation gate (E2E + U-01..U-16 manual QA) | This report | Stand up the stack, execute the gate, capture evidence, then a follow-up closeout pass may upgrade status to `PHASE_2A_COMPLETE_NOT_LIVE`. Requires explicit user approval. |
-| Backend read/status/cancel/upload endpoints | `PHASE_2A_PLAN.md` §F.2 | Add minimal `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload` in a controlled backend slice. Requires explicit user approval. |
+| Phase 2A validation gate (manual QA + closeout) | This report | Execute U-01..U-16 manual QA, capture evidence, then a follow-up closeout pass may upgrade status to `PHASE_2A_COMPLETE_NOT_LIVE`. Requires explicit user approval. |
 | Pip-audit hard CI gate (gap G11) | `docs/admin/CONTROL_PLANE_LOCK.md` | Promote `pip-audit` from advisory to gating after major-version dependency bumps regress-test clean. |
 | Arabic bidi/reshaping in PDF (gap G10b) | `docs/admin/FEATURE_MATRIX.md` | Integrate a bidi/reshaper library and remove the RTL disclaimer. |
 | Langfuse live dashboard validation (gap G9) | `docs/admin/FEATURE_MATRIX.md` | Exercise the tracer against a Langfuse project. |
@@ -208,11 +211,41 @@ Supporting changes:
 
 Validation evidence is captured in the closeout commit that lands this work. No production deployment; production stays `NOT_LIVE`. Phase 2A status remains `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE` per the user's instruction (no claim of Phase 2A completion until the validation gate runs).
 
+## Phase 2A E2E unblock validation
+
+After the backend additions and focused blocker fixes, a deterministic local
+validation harness was added to unblock the Phase 2A E2E path without real
+external credentials. The harness patches only the external connector boundary
+inside a local TestClient run and supplies a controlled SharePoint
+`EvidenceObject`; it does not change `node_13_quality_gate.py` or any
+quality-gate thresholds.
+
+Validated path:
+
+`submit → processing → quality_gate passed → approve → final → download MD`
+
+Latest local evidence:
+
+| Gate | Result |
+|---|---|
+| `make phase2a-e2e` | PASS |
+| Workflow nodes visited | 18 |
+| Quality gate | `passed` |
+| Pre-approval staging download | 403 (approval/security gate preserved) |
+| Approval state | `approved` |
+| Publish status | `published` |
+| Final state | `final` |
+| Final markdown download | 200, 1443 bytes |
+| Fixture evidence id | `ev_phase2a_local_sharepoint_001` |
+
+The E2E blocker is removed. Phase 2A is still not closed by this update because
+U-01..U-16 manual QA and explicit closeout approval remain pending.
+
 ## Next phase
 
-Phase 2A validation gate (E2E + U-01..U-16 manual QA) requires explicit user
-approval and a running stack. Until that gate closes, Phase 2A is not marked
-fully complete and Phase 2B may not start. Phase 2B itself requires explicit
-user approval and is gated on Phase 2A closure.
+Phase 2A manual QA + closeout requires explicit user approval and a running
+stack. Until that gate closes, Phase 2A is not marked fully complete and Phase
+2B may not start. Phase 2B itself requires explicit user approval and is gated
+on Phase 2A closure.
 
 This closeout authorizes nothing beyond the truth-reconciliation it performs.

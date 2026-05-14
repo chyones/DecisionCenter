@@ -470,6 +470,29 @@ async def test_final_download_succeeds_after_approval() -> None:
     )
 
 
+def test_minio_copy_to_final_uses_minio_copy_source() -> None:
+    from minio.commonconfig import CopySource
+
+    from apps.edr.persistence.minio_store import MinioStore
+
+    store = object.__new__(MinioStore)
+    store._bucket = "reports"
+    store._client = MagicMock()
+    store._ensure_bucket = MagicMock()
+    store.object_exists = MagicMock(return_value=False)
+
+    key = store.copy_to_final("req-1g-001", "executive-decision-report.md")
+
+    assert key == "final/req-1g-001/executive-decision-report.md"
+    store._client.copy_object.assert_called_once()
+    args = store._client.copy_object.call_args.args
+    assert args[0] == "reports"
+    assert args[1] == "final/req-1g-001/executive-decision-report.md"
+    assert isinstance(args[2], CopySource)
+    assert args[2].bucket_name == "reports"
+    assert args[2].object_name == "staging/req-1g-001/executive-decision-report.md"
+
+
 @pytest.mark.asyncio
 async def test_final_download_blocked_before_finalization() -> None:
     from apps.edr.app import download_final_report

@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from apps.edr.config import settings
@@ -124,7 +125,7 @@ class MinioStore:
         self._client.copy_object(
             self._bucket,
             dest,
-            f"{self._bucket}/{source}",
+            CopySource(self._bucket, source),
         )
         return dest
 
