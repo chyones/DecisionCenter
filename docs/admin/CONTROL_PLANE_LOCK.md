@@ -1,6 +1,6 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-14
+> **Date:** 2026-05-14 (updated for Phase 2A backend additions)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete at HEAD `e37b0c1`; the Phase 2A validation gate is the next safe work item | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete; Phase 2A backend read/status/cancel/upload endpoints landed in a follow-on backend slice (closes gap G12); the Phase 2A validation gate is the next safe work item | This document |
 
 ## Authoritative Environment Baseline
 
@@ -110,6 +110,14 @@ U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1) was not
 exercised at the Slice 9 closeout and is deferred under explicit approval;
 see `docs/execution/PHASE_2A_REPORT.md`.
 
+In a follow-on Phase 2A backend slice, the missing read/status/cancel/upload
+endpoints (`GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`,
+`DELETE /reports/{id}`, `POST /upload`) were added to `apps/edr/app.py` with
+role-scoped RBAC and mocked integration tests (`test_phase2a_backend.py`, 31
+cases). This closes gap G12. Frontend screens remain un-wired pending the
+validation gate, by design — the validation gate slice will exercise both
+ends together.
+
 | Slice | Status | Evidence |
 |---|---|---|
 | 1 — API client foundation and auth wiring | Complete | `frontend/src/api/*`; controlled `fetch` usage is contained in the API client. Commit `840e954`. |
@@ -121,6 +129,7 @@ see `docs/execution/PHASE_2A_REPORT.md`.
 | 7 — Upload Zone | Complete | `frontend/src/screens/UploadZone.tsx`; drag-and-drop + client-side validation; submission disabled because `POST /upload` is absent. Commit `52b8a02`. |
 | 8 — Routing integration + role guards | Complete | `frontend/src/layout/Sidebar.tsx`, `Topbar.tsx`, `routing/guards.ts`. Commit `a5aedfc`. |
 | 9 — Error handling and polish | Complete | `frontend/src/components/ToastProvider.tsx`; error surfaces unified across workspace screens. Commit `e37b0c1`. |
+| Phase 2A backend additions (gap G12) | Complete | Five backend endpoints added to `apps/edr/app.py`: `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload`. RBAC enforced server-side; 31 mocked integration cases in `test_phase2a_backend.py`. Frontend shells remain un-wired pending the validation gate. |
 | Phase 2A validation gate | Deferred | E2E + U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1; requires explicit user approval and a running stack. |
 
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)

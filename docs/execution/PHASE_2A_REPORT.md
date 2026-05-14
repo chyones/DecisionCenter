@@ -177,6 +177,37 @@ detectors on every push.
 
 ---
 
+## Phase 2A backend additions (gap G12 closed)
+
+After this closeout was filed, the five backend endpoints flagged as missing in
+`docs/execution/PHASE_2A_PLAN.md` §F.2 — `GET /reports`, `GET /reports/{id}`,
+`GET /reports/{id}/status`, `DELETE /reports/{id}`, and `POST /upload` — were
+added to `apps/edr/app.py` in a controlled backend slice with explicit user
+approval. The change is scoped to the backend and the API client's TypeScript
+contract types; no Phase 2A screen wiring was changed and no new phase was
+started.
+
+Endpoints (all under JWT in production, X-User-Role bypass in dev):
+
+| Endpoint | Purpose | RBAC |
+|---|---|---|
+| `GET /reports` | Paginated report list with optional `state`, `project_code`, `date_from`, `date_to` filters | Own `user_id_hash` for normal roles; auditor sees all; admin denied (403) |
+| `GET /reports/{id}` | Report metadata + review-decision history (no evidence content) | Owner or auditor; admin denied |
+| `GET /reports/{id}/status` | Processing-state snapshot for the Phase 2A Processing View polling loop | Owner or auditor; admin denied |
+| `DELETE /reports/{id}` | Soft-cancel a non-terminal report (writes a `cancelled` review decision and flips `review_state`) | Requester only; 409 on `final`/`rejected`/`cancelled` |
+| `POST /upload` | Persist a single attachment under `uploads/{user_id_hash}/{upload_id}/{filename}` in MinIO | Authenticated; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML); per-file ≤10 MB |
+
+Supporting changes:
+
+- `apps/edr/persistence/postgres_store.py` — added `list_audits` (role-scoped, paginated, with `state`/`project_code`/`date_from`/`date_to` filters; safe parameterised SQL).
+- `apps/edr/persistence/minio_store.py` — added `put_upload` for the `uploads/` prefix.
+- `apps/edr/app.py` — new Pydantic response models (`ReportSummary`, `ReportListResponse`, `ReportDetail`, `ReviewDecisionView`, `ReportStatusResponse`, `CancelReportResponse`, `UploadResponse`), helper functions (`_validated_role`, `_derive_external_state`, `_query_excerpt`, `_exported_formats`, `_check_can_read_own_report`, `_safe_filename`, `_validate_upload_type`), and the five endpoint handlers.
+- `pyproject.toml` — `python-multipart==0.0.20` added (required by FastAPI to parse `multipart/form-data` for `POST /upload`).
+- `frontend/src/api/types.ts` and `frontend/src/api/index.ts` — added `ReportState`, `ReportSummary`, `ReportListResponse`, `ReviewDecisionView`, `ReportDetail`, `ReportStatusResponse`, `CancelReportResponse`, `UploadResponse`, `ListReportsParams` types and re-exports. **No screen wiring changed**; the existing 'unavailable shell' UI is unchanged because the Phase 2A validation gate slice will wire and exercise the screens together.
+- `apps/edr/tests/integration/test_phase2a_backend.py` — 31 mocked integration cases covering RBAC scoping, state derivation, filter pass-through, terminal-state blocking, owner-only cancellation, MIME/size validation on uploads, and safe filename handling.
+
+Validation evidence is captured in the closeout commit that lands this work. No production deployment; production stays `NOT_LIVE`. Phase 2A status remains `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE` per the user's instruction (no claim of Phase 2A completion until the validation gate runs).
+
 ## Next phase
 
 Phase 2A validation gate (E2E + U-01..U-16 manual QA) requires explicit user

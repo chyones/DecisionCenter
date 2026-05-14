@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `e37b0c12c2ecfa86c2f0727338f238d988f923ee`
+- Current verified commit (anchor): `4901f66d4eb9f04d59d32c949671a53ad4872246`
 - Current status: `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 1I
@@ -22,16 +22,21 @@ only), Source Mapping (read-only), and the initial Query Composer shell.
 Frontend lint and build are wired into CI.
 
 Phase 2A implementation Slices 1–9 are complete and CI-green at HEAD
-`e37b0c1` (CI run `25799899473`). The frontend now has an API client
+`e37b0c1` (CI run `25799899473`). The frontend has an API client
 foundation, Query Composer submit wired to `POST /reports/staging`, Reports
 List read-only shell, Processing View shell, Report View shell, Evidence
 Panel shell, Export Panel wired to the existing download endpoints, Upload
-Zone (client-side validation only — `POST /upload` is absent), routing and
-role-guard updates, and an error-handling polish pass. The Query Composer
-project dropdown remains fixture-backed because no project-list endpoint
-exists; Reports List, Processing View, Report View, and Evidence Panel
-remain contract-correct unavailable/static shells where the required
-backend read/status endpoints are absent.
+Zone (client-side validation), routing/role-guard updates, and an error-
+handling polish pass. The Query Composer project dropdown remains
+fixture-backed because no project-list endpoint exists. The Phase 2A
+backend additions slice landed the previously missing endpoints
+(`GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`,
+`DELETE /reports/{id}`, `POST /upload`) in `apps/edr/app.py` with
+role-scoped RBAC and a 31-case mocked integration test file. Frontend
+screens are intentionally un-wired against the new endpoints — Reports
+List, Processing View, Report View, and Evidence Panel still render the
+same unavailable shells. The Phase 2A validation gate slice will wire and
+exercise both ends together.
 
 Phase 2A is not fully closed: the Phase 2A validation gate (end-to-end
 submit → processing → approve → final → download flow and U-01..U-16

@@ -1,5 +1,5 @@
 /**
- * API layer — Phase 2A Slice 1.
+ * API layer — Phase 2A.
  */
 
 export { ApiClient } from './client';
@@ -15,4 +15,13 @@ export {
   type RejectRequest,
   type RequestRevisionRequest,
   type ApiHealthResponse,
+  type ReportState,
+  type ReportSummary,
+  type ReportListResponse,
+  type ReviewDecisionView,
+  type ReportDetail,
+  type ReportStatusResponse,
+  type CancelReportResponse,
+  type UploadResponse,
+  type ListReportsParams,
 } from './types';

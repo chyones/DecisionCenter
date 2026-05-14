@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 import asyncpg
@@ -124,6 +125,90 @@ class PostgresStore:
             if row is None:
                 return None
             return dict(row)
+
+    async def list_audits(
+        self,
+        *,
+        user_id_hash: str | None = None,
+        state: str | None = None,
+        project_code: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List audit rows filtered by RBAC scope and query params.
+
+        When ``user_id_hash`` is provided, results are scoped to that requester
+        (typical for non-auditor roles). When it is ``None``, results span all
+        users (auditor scope). The total row count for the filter is returned
+        alongside the page so the API can present pagination.
+
+        ``state`` is the *external* state name (``staging``, ``needs_review``,
+        ``approved``, ``rejected``, ``revision_requested``, ``final``,
+        ``cancelled``, ``failed``). It maps to the underlying ``review_state``
+        and ``quality_gate_status`` columns.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        def _add(clause: str, value: Any) -> None:
+            params.append(value)
+            clauses.append(clause.replace("?", f"${len(params)}"))
+
+        if user_id_hash is not None:
+            _add("user_id_hash = ?", user_id_hash)
+        if project_code is not None:
+            _add("project_code = ?", project_code)
+        if state is not None:
+            if state == "failed":
+                _add("quality_gate_status = ?", "failed")
+            elif state == "needs_review":
+                _add("quality_gate_status = ?", "needs_review")
+                _add("review_state = ?", "staging")
+            elif state in {
+                "approved",
+                "rejected",
+                "revision_requested",
+                "final",
+                "cancelled",
+            }:
+                _add("review_state = ?", state)
+            elif state == "staging":
+                # External "staging" means: workflow done, awaiting decision, gate not failed
+                _add("review_state = ?", "staging")
+                _add("quality_gate_status <> ?", "failed")
+            else:
+                # Unknown state filter — return empty.
+                return ([], 0)
+        if date_from is not None:
+            _add("created_at >= ?", date_from)
+        if date_to is not None:
+            _add("created_at <= ?", date_to)
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                f"SELECT COUNT(*) AS n FROM audit_log {where}",
+                *params,
+            )
+            total = int(count_row["n"]) if count_row else 0
+
+            rows = await conn.fetch(
+                f"""
+                SELECT *
+                FROM audit_log
+                {where}
+                ORDER BY created_at DESC
+                LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+                """,
+                *params,
+                limit,
+                offset,
+            )
+            return ([dict(r) for r in rows], total)
 
     async def update_review_state(
         self, request_id: str, review_state: str

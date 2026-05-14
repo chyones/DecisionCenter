@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "e37b0c12c2ecfa86c2f0727338f238d988f923ee",
+  "current_commit": "4901f66d4eb9f04d59d32c949671a53ad4872246",
   "status": "PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 1I",
@@ -14,7 +14,8 @@
     "Slice 6 — Export Panel",
     "Slice 7 — Upload Zone",
     "Slice 8 — Routing integration and role guards",
-    "Slice 9 — Error handling and polish"
+    "Slice 9 — Error handling and polish",
+    "Backend additions — read/status/cancel/upload endpoints (closes gap G12)"
   ],
   "phase_2a_validation_gate_status": "DEFERRED",
   "next_allowed_phase": "Phase 2A validation gate (E2E + U-01..U-16 manual QA)",
@@ -27,11 +28,11 @@
   "latest_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
-    "commit": "e37b0c12c2ecfa86c2f0727338f238d988f923ee",
-    "run_id": 25799899473,
+    "commit": "4901f66d4eb9f04d59d32c949671a53ad4872246",
+    "run_id": 25844350960,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25799899473"
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25844350960"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,

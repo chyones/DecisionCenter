@@ -66,6 +66,32 @@ class MinioStore:
         )
         return object_name
 
+    def put_upload(
+        self,
+        *,
+        user_id_hash: str,
+        upload_id: str,
+        filename: str,
+        data: bytes,
+        content_type: str,
+    ) -> str:
+        """Store a user-uploaded file under ``uploads/{user_id_hash}/{upload_id}/{filename}``.
+
+        Returns the resulting object key. Bucket creation is idempotent.
+        """
+        self._ensure_bucket()
+        object_name = f"uploads/{user_id_hash}/{upload_id}/{filename}"
+        from io import BytesIO
+
+        self._client.put_object(
+            self._bucket,
+            object_name,
+            data=BytesIO(data),
+            length=len(data),
+            content_type=content_type,
+        )
+        return object_name
+
     def get_object(self, request_id: str, filename: str, prefix: str = "staging") -> bytes:
         """Retrieve an artifact by request_id and filename."""
         object_name = self._object_name(prefix, request_id, filename)

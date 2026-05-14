@@ -1,7 +1,7 @@
 # DecisionCenter — Current Project State
 
 > **Audited HEAD:** `e37b0c1` (post-Slice-9 truth-reconciliation closeout).
-> **Audit date:** 2026-05-14
+> **Audit date:** 2026-05-14 (updated for Phase 2A backend additions)
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
 > 1I, and Phase 2A implementation Slices 1–9 — verified against live repo
 > files, CI evidence on HEAD (run `25799899473`), and local validation
@@ -36,15 +36,19 @@ The frontend now contains the full Phase 2A workspace implementation. Query
 Composer submits to live `POST /reports/staging` through the approved API
 client; its project dropdown is fixture-backed because no project-list
 endpoint exists. Reports List, Processing View, Report View, and Evidence
-Panel remain contract-correct unavailable/static shells where the required
-read/status endpoints are absent (`GET /reports`, `GET /reports/{id}`,
-`GET /reports/{id}/status`, and `DELETE /reports/{id}`). Export Panel is
-wired to the existing `GET /reports/{staging,final}/{id}/download/{fmt}`
-endpoints; artifact rows (`evidence-pack.json`, `audit-log.json`) are
-disabled because no artifact-fetch endpoint exists. Upload Zone provides
-drag-and-drop and client-side validation; submission is disabled because
-`POST /upload` is absent. Routing/guards and a unified error-handling pass
-landed in Slices 8 and 9.
+Panel render contract-correct unavailable/static shells; the corresponding
+backend endpoints (`GET /reports`, `GET /reports/{id}`,
+`GET /reports/{id}/status`, and `DELETE /reports/{id}`) are now present in
+`apps/edr/app.py` (Phase 2A backend additions, closes gap G12) but the
+screens are not yet wired to consume them — wiring is intentionally deferred
+to the Phase 2A validation gate slice so both ends can be exercised
+together. Export Panel is wired to the existing
+`GET /reports/{staging,final}/{id}/download/{fmt}` endpoints; artifact rows
+(`evidence-pack.json`, `audit-log.json`) remain disabled because no
+artifact-fetch endpoint exists. Upload Zone provides drag-and-drop and
+client-side validation; the new `POST /upload` backend endpoint is
+available, but client-side submission is not yet wired to it. Routing/guards
+and a unified error-handling pass landed in Slices 8 and 9.
 
 Production is `NOT_LIVE`. Phase 2A is the safe next phase and is in
 progress; within it, the Phase 2A validation gate is the next safe work
@@ -83,6 +87,7 @@ validation gate closure and also requires explicit user approval.
 | Phase 2A Slice 7 — Upload Zone | Complete | `frontend/src/screens/UploadZone.tsx`; drag-and-drop, file picker, per-file (10 MB) and total-size (30 MB) limits, count limit (5), preview list with remove action; submission disabled because `POST /upload` is absent. Commit `52b8a02`; CI run `25796533185` success. |
 | Phase 2A Slice 8 — Routing integration and role guards | Complete | `frontend/src/layout/Sidebar.tsx`, `Topbar.tsx`, `frontend/src/routing/guards.ts` updated for the new workspace screens. Commit `a5aedfc`; CI run `25798446018` success. |
 | Phase 2A Slice 9 — Error handling and polish | Complete | `frontend/src/components/ToastProvider.tsx`; unified error surfaces and retry paths across `QueryComposerScreen`, `ReportsListScreen`, `ProcessingScreen`, `ReportViewScreen`, `EvidencePanel`, `ExportPanel`, and `UploadZone`. Commit `e37b0c1`; CI run `25799899473` success. |
+| Phase 2A backend additions — read/status/cancel/upload endpoints | Complete | `apps/edr/app.py` gains `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload` with server-enforced RBAC. `PostgresStore.list_audits` and `MinioStore.put_upload` helpers added. 31 mocked integration cases in `test_phase2a_backend.py`. Frontend shells are not re-wired in this slice. Closes gap G12. |
 | Phase 2A validation gate — E2E + U-01..U-16 manual QA | Deferred | Requires running stack and explicit user approval; deferred at the Slice 9 closeout per `docs/execution/PHASE_2A_REPORT.md`. |
 
 ---
@@ -113,6 +118,7 @@ validation gate closure and also requires explicit user approval.
 | PyJWT and cryptography CVEs (initial set) | Upgraded to PyJWT 2.10.1 and cryptography 44.0.0. Newer advisories on these and other pinned packages are tracked under Phase 1H triage. |
 | Missing MinIO bucket initialization | `scripts/init_minio.py` performs an explicit idempotent create; runtime `_ensure_bucket()` covers any missed init. |
 | Governance anchor drift after Phase 2A Slices 6–9 | Slice 9 closeout (this audit) re-anchored governance at HEAD `e37b0c1`; extended `scripts/check_ai_context.py` to recognize Slice 6–9 statuses and added an anchor-currency invariant to `scripts/check_doc_drift.py`. |
+| Phase 2A backend read/status/cancel/upload endpoints absent (gap G12) | Closed in the Phase 2A backend additions slice: 5 endpoints in `apps/edr/app.py` with role-scoped RBAC and mocked integration tests (`apps/edr/tests/integration/test_phase2a_backend.py`, 31 cases). Frontend wiring intentionally deferred to the validation gate. |
 
 ### Remaining
 

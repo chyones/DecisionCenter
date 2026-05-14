@@ -31,6 +31,8 @@ dependencies = [
   "anthropic==0.42.0",
   # Phase 1F — Persistence & Audit
   "asyncpg==0.29.0",
+  # Phase 2A backend additions — required by POST /upload (FastAPI multipart parsing)
+  "python-multipart==0.0.20",
 ]
 
 [project.optional-dependencies]

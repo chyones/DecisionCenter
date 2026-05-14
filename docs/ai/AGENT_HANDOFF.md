@@ -62,6 +62,41 @@ detectors so this failure mode is caught in CI going forward.
     across `QueryComposerScreen`, `ReportsListScreen`, `ProcessingScreen`,
     `ReportViewScreen`, `EvidencePanel`, `ExportPanel`, and `UploadZone`.
 
+### Phase 2A backend additions (gap G12 closed, this session)
+
+Five backend endpoints required by `docs/execution/PHASE_2A_PLAN.md` §F.2
+were added to `apps/edr/app.py` with explicit user approval, closing gap
+G12. No screen wiring was changed; the validation gate slice will wire
+both ends together.
+
+- `GET /reports` — paginated list with optional `state`, `project_code`,
+  `date_from`, `date_to` filters. RBAC: own `user_id_hash` for normal
+  roles; auditor sees all; admin denied (403).
+- `GET /reports/{id}` — metadata + review-decision history. RBAC: owner or
+  auditor; admin denied.
+- `GET /reports/{id}/status` — terminal-state snapshot for the Processing
+  View polling loop. RBAC: owner or auditor; admin denied.
+- `DELETE /reports/{id}` — soft-cancel; writes a `cancelled` review
+  decision, flips `review_state`. RBAC: requester only; 409 on
+  `final`/`rejected`/`cancelled`.
+- `POST /upload` — multipart/form-data, stores under
+  `uploads/{user_id_hash}/{upload_id}/{filename}` in MinIO. Type allowlist
+  (PDF/DOCX/XLSX/TXT/MSG/EML); per-file ≤10 MB.
+
+Supporting changes:
+- `apps/edr/persistence/postgres_store.py` — `list_audits` helper (role-scoped, filtered, paginated).
+- `apps/edr/persistence/minio_store.py` — `put_upload` helper.
+- `pyproject.toml` — `python-multipart==0.0.20` pinned (FastAPI requires
+  it for multipart parsing).
+- `frontend/src/api/types.ts` / `frontend/src/api/index.ts` — new
+  TypeScript contract types (`ReportSummary`, `ReportListResponse`,
+  `ReportDetail`, `ReviewDecisionView`, `ReportStatusResponse`,
+  `CancelReportResponse`, `UploadResponse`, `ListReportsParams`,
+  `ReportState`). **No screen wiring changed.**
+- `apps/edr/tests/integration/test_phase2a_backend.py` — 31 mocked
+  integration cases covering RBAC, state derivation, filters, terminal-state
+  blocking, owner-only cancel, upload validation and safe filenames.
+
 ### Phase 2A truth reconciliation (this session)
 
 - Authored `docs/execution/PHASE_2A_REPORT.md`.
@@ -152,7 +187,7 @@ detectors so this failure mode is caught in CI going forward.
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit (anchor): `e37b0c12c2ecfa86c2f0727338f238d988f923ee`
+- Current verified commit (anchor): `4901f66d4eb9f04d59d32c949671a53ad4872246`
 - Status: `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Latest report: `docs/execution/PHASE_2A_REPORT.md`

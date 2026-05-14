@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-14
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete at HEAD `e37b0c1`; the Phase 2A validation gate is the safe next work item and is deferred pending explicit user approval. Production is `NOT_LIVE`.
+> **Date:** 2026-05-14 (updated)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete and the missing Phase 2A backend read/status/cancel/upload endpoints landed in a follow-on backend slice (closes gap G12). The Phase 2A validation gate is the safe next work item and is deferred pending explicit user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -56,6 +56,11 @@
 | Reject report | 27, 16.16 | `POST /reports/staging/{id}/reject` | Approval roles per `docs/security/rbac_matrix.md`; auditor blocked; self-rejection blocked | Rejection record (reason required) | `rejection` event | `test_phase1g.py` | implemented |
 | Request revision | 27, 16.16 | `POST /reports/staging/{id}/request-revision` | Approval roles per `docs/security/rbac_matrix.md`; auditor blocked; self-request blocked | Revision record (reason required, optional comment) | `revision_requested` event | `test_phase1g.py` | implemented |
 | Download final report | 27 | `GET /reports/final/{id}/download/{fmt}` | Request owner + admin/auditor; only when `review_state == final` | MIME type response | `download` event | `test_phase1g.py` | implemented |
+| List reports | 27, PHASE_2A_PLAN §F.2 | `GET /reports` | Own `user_id_hash` for normal roles; auditor sees all (read-only); admin denied | `ReportListResponse` (paginated `ReportSummary`) | None (read-only) | `test_phase2a_backend.py` (6 cases) | implemented |
+| Get report metadata | 27, PHASE_2A_PLAN §F.2 | `GET /reports/{id}` | Owner or auditor; admin denied | `ReportDetail` + `ReviewDecisionView` history | None (read-only) | `test_phase2a_backend.py` (5 cases) | implemented |
+| Get report status | 27, PHASE_2A_PLAN §F.2 | `GET /reports/{id}/status` | Owner or auditor; admin denied | `ReportStatusResponse` (state + node progress) | None (read-only) | `test_phase2a_backend.py` (3 cases) | implemented |
+| Cancel report | 27, PHASE_2A_PLAN §F.2 | `DELETE /reports/{id}` | Requester only; blocked on terminal states (final/rejected/cancelled) | `CancelReportResponse`; writes `cancelled` review_decision | `cancelled` event | `test_phase2a_backend.py` (4 cases) | implemented |
+| Upload attachment | 27, PHASE_2A_PLAN §F.2 | `POST /upload` | Authenticated; per-file ≤10 MB; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML) | `UploadResponse` (upload_id, sha256 hash); persisted under `uploads/{user_id_hash}/{upload_id}/{filename}` | None (storage only) | `test_phase2a_backend.py` (5 cases) | implemented |
 
 ---
 
@@ -198,12 +203,12 @@ validation gate.
 | Frontend foundation | `frontend/` | N/A | Phase 1I CI closeout | implemented |
 | API client foundation | `frontend/src/api/*` | Controlled `fetch` wrapper with dev role header wiring | Commit `840e954`; CI green | implemented |
 | Query Composer submit | `/workspace/new` | Live `POST /reports/staging`; project dropdown fixture-backed because no project-list endpoint exists | Commit `38f7b58`; CI green | partial |
-| Reports List | `/workspace/reports` | No live list endpoint; `GET /reports` is absent | Commit `89a4e49`; CI green | partial |
-| Processing View | `/workspace/report/{request_id}/processing` | No status/cancel endpoint; `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent | Commit `5674581`; CI green | partial |
-| Report View | `/workspace/report/{request_id}` | No live report-detail endpoint; `GET /reports/{id}` is absent | Commit `35f561d`; CI run `25788830982` success | partial |
+| Reports List | `/workspace/reports` | Backend `GET /reports` available (role-scoped, paginated); frontend shell un-wired pending validation gate | Commit `89a4e49` (shell) + Phase 2A backend additions (endpoint); CI green | partial |
+| Processing View | `/workspace/report/{request_id}/processing` | Backend `GET /reports/{id}/status` and `DELETE /reports/{id}` available; frontend shell un-wired pending validation gate | Commit `5674581` (shell) + Phase 2A backend additions (endpoints); CI green | partial |
+| Report View | `/workspace/report/{request_id}` | Backend `GET /reports/{id}` available (metadata + review-decision history); frontend shell un-wired pending validation gate | Commit `35f561d` (shell) + Phase 2A backend additions (endpoint); CI run `25788830982` success | partial |
 | Evidence Panel | Slide-in from Report View | No live evidence endpoint available through report detail | Commit `35f561d`; CI run `25788830982` success | partial |
 | Export Panel | Slide-in from Report View | Live downloads via `GET /reports/{staging,final}/{id}/download/{fmt}`; `evidence-pack.json`/`audit-log.json` rows disabled because no artifact-fetch endpoint exists | Commit `96ec4b9`; CI run `25795083507` success | partial |
-| Upload Zone | Query Composer | Client-side drag/drop, type/size/count validation, preview list; submission disabled because `POST /upload` is absent | Commit `52b8a02`; CI run `25796533185` success | partial |
+| Upload Zone | Query Composer | Backend `POST /upload` available (10 MB limit, PDF/DOCX/XLSX/TXT/MSG/EML allowlist); frontend client-side validation and preview list operate; submission un-wired pending validation gate | Commit `52b8a02` (shell) + Phase 2A backend additions (endpoint); CI run `25796533185` success | partial |
 | Routing integration + role guards | `frontend/src/routing/*`, `Sidebar`, `Topbar` | UX-only guards; server enforces RBAC | Commit `a5aedfc`; CI run `25798446018` success | implemented |
 | Error handling polish | `frontend/src/components/ToastProvider.tsx` + workspace screens | Network-error and inline-error surfaces unified | Commit `e37b0c1`; CI run `25799899473` success | implemented |
 | Phase 2A validation gate | E2E + U-01..U-16 manual QA | Deferred under explicit approval; requires running stack | `docs/execution/PHASE_2A_REPORT.md` | documented-only |
@@ -247,7 +252,7 @@ reflects the versions in effect when the triage was performed.
 | G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
 | G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |
 | G11 | `pip-audit` not promoted to a hard CI gate | `.github/workflows/ci.yml` | 19 advisories on 9 packages accepted as deferred; gate stays `continue-on-error` | Later phase (2+) |
-| G12 | Phase 2A backend read/status endpoints absent | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel render unavailable shells | Follow-on Phase 2A work; requires explicit user approval |
+| G12 | Phase 2A backend read/status/cancel/upload endpoints absent | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel, Upload Zone rendered unavailable shells | Closed in Phase 2A backend additions: `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload` added with RBAC and tests; frontend shells remain un-wired pending the Phase 2A validation gate |
 | G13 | Phase 2A validation gate (E2E + U-01..U-16 manual QA) not exercised | Manual QA / running stack | Phase 2A cannot be marked fully complete until the gate is run | Phase 2A validation gate; requires explicit user approval |
 
 Closed gaps:
@@ -258,3 +263,4 @@ Closed gaps:
 - G7 (cost cap not load-tested) — closed in Phase 1H: `load_test.py` exercises the deterministic path; baseline recorded.
 - G8 (pip-audit advisories untriaged) — closed in Phase 1H: triage completed, safe pins upgraded; hard-gate promotion tracked as G11 above.
 - G10 (Arabic RTL PDF render not validated) — closed in Phase 1H: Amiri font, Arabic auto-detection, RTL disclaimer, `test_pdf_arabic.py`; remaining bidi-shaping work tracked as G10b above.
+- G12 (Phase 2A backend read/status/cancel/upload endpoints) — closed in Phase 2A backend additions: five endpoints added to `apps/edr/app.py` with RBAC, mocked integration tests (`test_phase2a_backend.py`, 31 cases), and TypeScript API contract types in `frontend/src/api/types.ts`. Frontend screens remain un-wired pending the Phase 2A validation gate.
