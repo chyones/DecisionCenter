@@ -27,6 +27,11 @@ ALLOWED_STATUSES = {
     "PHASE_2A_SLICE_3_COMPLETE_NOT_LIVE",
     "PHASE_2A_SLICE_4_COMPLETE_NOT_LIVE",
     "PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE",
+    "PHASE_2A_SLICE_6_COMPLETE_NOT_LIVE",
+    "PHASE_2A_SLICE_7_COMPLETE_NOT_LIVE",
+    "PHASE_2A_SLICE_8_COMPLETE_NOT_LIVE",
+    "PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE",
+    "PHASE_2A_COMPLETE_NOT_LIVE",
 }
 
 REQUIRED_FILES = [
@@ -54,6 +59,17 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _commit_is_in_history(root: Path, commit: str) -> bool:
+    head = _git(root, "rev-parse", "HEAD")
+    if head.returncode != 0:
+        return False
+    if head.stdout.strip() == commit:
+        return True
+
+    result = _git(root, "merge-base", "--is-ancestor", commit, "HEAD")
+    return result.returncode == 0
+
+
 def _load_state(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -64,17 +80,6 @@ def _load_state(path: Path) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return state
-
-
-def _commit_is_in_history(root: Path, commit: str) -> bool:
-    head = _git(root, "rev-parse", "HEAD")
-    if head.returncode != 0:
-        return False
-    if head.stdout.strip() == commit:
-        return True
-
-    result = _git(root, "merge-base", "--is-ancestor", commit, "HEAD")
-    return result.returncode == 0
 
 
 def main() -> int:

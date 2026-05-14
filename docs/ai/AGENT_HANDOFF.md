@@ -3,11 +3,22 @@
 ## What Was Done
 
 Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 2A
-(User Chat Workspace Implementation) is in progress through Slice 5 at verified
-commit `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`; GitHub Actions run
-`25788830982` completed successfully. Production remains `NOT_LIVE`.
+(User Chat Workspace Implementation) implementation slices 1–9 are complete
+at verified commit `e37b0c12c2ecfa86c2f0727338f238d988f923ee`; GitHub Actions
+run `25799899473` completed successfully. The Phase 2A validation gate
+(end-to-end submit → processing → approve → final → download flow and
+U-01..U-16 manual QA) was not exercised at the Slice 9 closeout and is
+recorded as deferred in `docs/execution/PHASE_2A_REPORT.md`. Production
+remains `NOT_LIVE`.
 
-### Phase 2A — User Chat Workspace Implementation (Slices 1-5 Complete)
+This handoff also reflects a truth-reconciliation closeout: at the time
+Slices 6–9 landed on `main`, the governance anchor (`agent-state.json` plus
+the surrounding truth docs) was not refreshed and grew six commits stale.
+The reconciliation re-anchored governance at HEAD `e37b0c1`, authored
+`docs/execution/PHASE_2A_REPORT.md`, and extended the two governance
+detectors so this failure mode is caught in CI going forward.
+
+### Phase 2A — User Chat Workspace Implementation (Slices 1–9 Complete)
 
 - Slice 1 — API client foundation and auth wiring:
   - `frontend/src/api/client.ts` — typed `fetch` wrapper, base URL handling,
@@ -31,7 +42,41 @@ commit `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`; GitHub Actions run
   - `frontend/src/screens/ReportViewScreen.tsx` and
     `frontend/src/screens/EvidencePanel.tsx` render contract-correct
     unavailable/static shells because `GET /reports/{id}` is absent.
-  - Export button is disabled; Export Panel is Slice 6 and is not implemented.
+- Slice 6 — Export Panel:
+  - `frontend/src/screens/ExportPanel.tsx` wires the slide-in panel to the
+    existing `GET /reports/{staging,final}/{id}/download/{fmt}` endpoints.
+  - Report state and quality-gate gating implemented per
+    `docs/design/UI_CONTRACT_v1.md` §2.4.
+  - `evidence-pack.json` and `audit-log.json` rows are disabled because no
+    artifact-fetch endpoint exists at backend HEAD.
+- Slice 7 — Upload Zone:
+  - `frontend/src/screens/UploadZone.tsx` provides drag-and-drop, file picker,
+    per-file and total-size validation, preview list with remove action.
+  - Submission is disabled because `POST /upload` is absent at backend HEAD.
+- Slice 8 — Routing integration + role guards:
+  - `frontend/src/layout/Sidebar.tsx`, `frontend/src/layout/Topbar.tsx`,
+    `frontend/src/routing/guards.ts` updated for the new screens.
+- Slice 9 — Error handling and polish:
+  - `frontend/src/components/ToastProvider.tsx` added.
+  - Network-error surfaces, retry paths, and inline error states unified
+    across `QueryComposerScreen`, `ReportsListScreen`, `ProcessingScreen`,
+    `ReportViewScreen`, `EvidencePanel`, `ExportPanel`, and `UploadZone`.
+
+### Phase 2A truth reconciliation (this session)
+
+- Authored `docs/execution/PHASE_2A_REPORT.md`.
+- Updated `docs/ai/agent-state.json` to anchor at `e37b0c1`, status
+  `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`, latest verified CI run
+  `25799899473`, completed slices 1–9, validation gate marked deferred.
+- Updated `docs/ai/SHARED_CONTEXT.md`, this handoff, `README.md`,
+  `docs/admin/CONTROL_PLANE_LOCK.md`, `docs/admin/FEATURE_MATRIX.md`,
+  `docs/execution/CURRENT_PROJECT_STATE.md`, and
+  `docs/execution/IMPLEMENTATION_PHASES.md` to match.
+- Extended `scripts/check_ai_context.py` `ALLOWED_STATUSES` with the four
+  per-slice statuses 6–9 plus `PHASE_2A_COMPLETE_NOT_LIVE`.
+- Extended `scripts/check_doc_drift.py` with an anchor-currency invariant
+  (`current_commit` must be HEAD itself or no more than three commits behind
+  HEAD on the current branch).
 
 ### Phase 1I — Frontend Foundation & Static Admin Scaffolds
 
@@ -99,25 +144,32 @@ commit `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`; GitHub Actions run
 - `scripts/agent_preflight.py` / `scripts/agent_postflight.py` — read-only git +
   agent-state + doc/AI-context checks (preflight) and changed-file / blocked-pattern
   checks (postflight).
+- `scripts/check_ai_context.py` — extended in the Phase 2A truth reconciliation
+  to recognize per-slice statuses 6–9 plus `PHASE_2A_COMPLETE_NOT_LIVE`.
+- `scripts/check_doc_drift.py` — extended in the Phase 2A truth reconciliation
+  with an anchor-currency invariant.
 
 ## Current Branch And Commit
 
 - Branch: `main`
-- Current verified commit (anchor): `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`
-- Status: `PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `e37b0c12c2ecfa86c2f0727338f238d988f923ee`
+- Status: `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Latest Phase 2A plan: `docs/execution/PHASE_2A_PLAN.md`
-- Latest full-phase report: `docs/execution/PHASE_1I_REPORT.md`
+- Latest report: `docs/execution/PHASE_2A_REPORT.md`
+- Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
 
 ## What Was NOT Done
 
-- Phase 2A is not complete; Slice 6 requires explicit user approval before implementation.
-- Export Panel not implemented.
-- Upload Zone not implemented.
-- Phase 2A route/guard polish, error handling/polish, and closeout not complete.
+- The Phase 2A validation gate (end-to-end submit → processing → approve →
+  final → download flow and U-01..U-16 manual QA against
+  `docs/design/UI_CONTRACT_v1.md` §9.1) was not exercised. It is deferred
+  under explicit approval; tracked in `docs/execution/PHASE_2A_REPORT.md`.
 - No live list/status/report-detail endpoints are wired because those backend
-  endpoints are absent; only Query Composer submit is wired to live
-  `POST /reports/staging`.
+  endpoints are absent; only Query Composer submit and Export Panel
+  downloads use live backend endpoints. The missing endpoints are listed in
+  `docs/execution/PHASE_2A_PLAN.md` §F.2.
+- `POST /upload` is absent; Upload Zone client-side validation works but
+  submission is disabled.
 - No full Arabic bidirectional shaping/reshaping in PDF export.
 - No promptfoo CLI integration (config is placeholder only).
 - No permanent load-test p95 thresholds (baseline-only).
@@ -129,38 +181,38 @@ commit `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`; GitHub Actions run
 - `AGENTS.md`
 - `docs/ai/SHARED_CONTEXT.md`
 - `docs/ai/agent-state.json`
+- `docs/execution/PHASE_2A_REPORT.md`
 - `docs/execution/PHASE_2A_PLAN.md`
 - `docs/execution/IMPLEMENTATION_PHASES.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 
 ## Next Recommended Work
 
-Phase 2A Slice 6 — Export Panel — requires explicit user approval. When
-authorized, implement only the Export Panel slice, using existing backend
-download endpoints where they already exist and preserving unavailable/static
-states where backend support is absent.
+Phase 2A validation gate (end-to-end submit → processing → approve → final →
+download flow and U-01..U-16 manual QA per
+`docs/design/UI_CONTRACT_v1.md` §9.1). Requires explicit user approval and a
+running stack. Phase 2B (Admin Visual Control Plane) cannot start until that
+gate closes and itself requires explicit user approval.
 
-## Validation Proof (Phase 1I closeout)
+## Validation Proof (Phase 2A Slice 9 truth reconciliation)
 
-- `make smoke`: 2 passed.
-- `make test`: 143 passed.
-- `make eval`: 65/65 passed, 100.00% pass rate, 92.31% precision.
-- `ruff check .`: clean.
+- `ruff check apps scripts`: clean.
 - `python3 -m compileall apps scripts`: clean.
-- `python3 scripts/check_doc_drift.py`: clean.
-- `python3 scripts/check_ai_context.py`: clean.
+- `python3 scripts/check_doc_drift.py`: clean (including new anchor-currency
+  invariant).
+- `python3 scripts/check_ai_context.py`: clean (including extended status
+  whitelist).
+- `python3 scripts/agent_preflight.py`: clean.
+- `make smoke`: 2 passed.
+- `make test`: 143 passed (2 smoke + 141 integration).
+- `make eval`: 65/65 passed, pass-rate and precision thresholds met.
 - `cd frontend && npm run lint`: clean.
-- `cd frontend && npm run build`: clean.
-- Zero forbidden network APIs in `frontend/src/`.
-
-## Validation Proof (Phase 2A Slice 5)
-
-- GitHub Actions run `25788830982`: `completed` / `success`.
-- `frontend` job: success.
-- `smoke` job: success.
-- HEAD equals `origin/main` at `35f561d08bd5e6fb6c375127e08cb9e27e9d0bfa`.
+- `cd frontend && npm run build`: clean (273.88 kB JS / 78.87 kB gzip;
+  26.85 kB CSS / 5.72 kB gzip).
+- GitHub Actions HEAD run `25799899473`: completed / success.
 - Working tree was clean before this truth reconciliation.
 
 ## Final Status
 
-`PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE`
+`PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE` — Phase 2A implementation slices 1–9
+complete; Phase 2A validation gate deferred under explicit approval.

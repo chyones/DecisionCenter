@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase2a_slice5_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase2a_slice9_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -94,11 +94,13 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are
-complete. Phase 2A is active and in progress through Slice 5.
-Production is `NOT_LIVE`. Phase 2A Slice 6 (Export Panel) is the safe next work
-item and requires explicit user approval before it starts. Treat the files
-above as the current authority before changing code, workflows, schemas, or
-operational assumptions.
+complete. Phase 2A implementation slices 1–9 are complete at HEAD
+`e37b0c1`. Production is `NOT_LIVE`. The Phase 2A validation gate
+(end-to-end submit → processing → approve → final → download flow and
+U-01..U-16 manual QA) is deferred pending explicit user approval and a
+running stack. The phase-status table below is the authoritative marker
+for Phase 2A. Treat the files above as the current authority before
+changing code, workflows, schemas, or operational assumptions.
 
 ## AI Agent Operating Context
 
@@ -109,13 +111,16 @@ Read these files in order:
 2. [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md)
 3. [docs/ai/AGENT_HANDOFF.md](docs/ai/AGENT_HANDOFF.md)
 4. [docs/ai/agent-state.json](docs/ai/agent-state.json)
-5. [docs/execution/PHASE_2A_PLAN.md](docs/execution/PHASE_2A_PLAN.md) and the latest full-phase report named by `agent-state.json`
+5. [docs/execution/PHASE_2A_REPORT.md](docs/execution/PHASE_2A_REPORT.md) and the active phase plan named by `agent-state.json`
 
 The AI context is checked by `python3 scripts/check_ai_context.py` and
 `python3 scripts/check_doc_drift.py`, plus the read-only
 `python3 scripts/agent_preflight.py` / `python3 scripts/agent_postflight.py`
 helpers. These are guardrails against stale assumptions, duplicated work, and
-accidental phase or deployment drift.
+accidental phase or deployment drift. `check_doc_drift.py` enforces an
+anchor-currency invariant: the `current_commit` in `docs/ai/agent-state.json`
+must be HEAD itself or no more than three commits behind HEAD on the current
+branch.
 
 ## Repository map
 
@@ -143,7 +148,7 @@ Use [docs/README.md](docs/README.md) as the full documentation index. Key suppor
 | Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
 | Phase 1A scope | [docs/execution/PHASE_1A_SCOPE.md](docs/execution/PHASE_1A_SCOPE.md) |
 | Active Phase 2A plan | [docs/execution/PHASE_2A_PLAN.md](docs/execution/PHASE_2A_PLAN.md) |
-| Latest full-phase report | [docs/execution/PHASE_1I_REPORT.md](docs/execution/PHASE_1I_REPORT.md) |
+| Latest full-phase report | [docs/execution/PHASE_2A_REPORT.md](docs/execution/PHASE_2A_REPORT.md) |
 | Feature matrix | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | RBAC matrix | [docs/security/rbac_matrix.md](docs/security/rbac_matrix.md) |
 | API contracts | [docs/contracts/](docs/contracts/) |
@@ -208,7 +213,7 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1G — Human Review Gate | Complete |
 | 1H — Evaluation and Hardening | Complete |
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
-| 2A — User Chat Workspace Implementation | Safe next phase in progress: Slices 1-5 complete; Slice 6 next with explicit approval |
+| 2A — User Chat Workspace Implementation | Safe next phase in progress: implementation slices 1–9 complete at HEAD `e37b0c1`; Phase 2A validation gate deferred pending explicit user approval |
 | 2B–2C — Later UI phases | Not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.

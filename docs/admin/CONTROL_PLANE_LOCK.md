@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-13
+> **Date:** 2026-05-14
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2A_SLICE_5_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2A_SLICE_9_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 65-case executable golden set covers all 12 baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is in progress through Slice 5; Slice 6 is the next safe work item | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete at HEAD `e37b0c1`; the Phase 2A validation gate is the next safe work item | This document |
 
 ## Authoritative Environment Baseline
 
@@ -90,26 +90,38 @@ These hold for every phase, including the next one:
 - Service-account credentials must never be logged or transmitted via the
   webhook body.
 - CI must enforce: ruff, compileall, config coverage (40 keys), doc-drift
-  check, AI-context check, smoke tests, integration tests, the evaluation suite
-  (`make eval` thresholds), and `pip-audit` (non-blocking; see triage below).
+  check (including the anchor-currency invariant), AI-context check, smoke
+  tests, integration tests, the evaluation suite (`make eval` thresholds),
+  frontend lint and build, and `pip-audit` (non-blocking; see triage below).
+- The governance anchor (`docs/ai/agent-state.json.current_commit`) must be
+  HEAD itself or no more than three commits behind HEAD on the current
+  branch. `scripts/check_doc_drift.py` enforces this.
 - Production must remain `NOT_LIVE` until an operator runs the deployment
   steps in `docs/operations/runbook.md`. A push to `origin/main` is not a
   deployment.
 
 ## Phase 2A Progress Lock
 
-Phase 2A is not complete. The live repository and GitHub Actions evidence show
-that Slices 1-5 are complete at commit `35f561d`, with CI run `25788830982`
-completed successfully.
+Phase 2A is not fully complete. The live repository and GitHub Actions evidence
+show that implementation slices 1–9 are complete at commit `e37b0c1`, with CI
+run `25799899473` completed successfully. The Phase 2A validation gate
+(end-to-end submit → processing → approve → final → download flow and
+U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1) was not
+exercised at the Slice 9 closeout and is deferred under explicit approval;
+see `docs/execution/PHASE_2A_REPORT.md`.
 
 | Slice | Status | Evidence |
 |---|---|---|
-| 1 — API client foundation and auth wiring | Complete | `frontend/src/api/*`; controlled `fetch` usage is contained in the API client. |
-| 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx`; submit is wired to `POST /reports/staging`; project dropdown remains fixture-backed because no project-list endpoint exists. |
-| 3 — Reports List read-only listing | Complete | `frontend/src/screens/ReportsListScreen.tsx`; unavailable/empty state because `GET /reports` is absent. |
-| 4 — Processing View status shell | Complete | `frontend/src/screens/ProcessingScreen.tsx`; static status shell because `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent. |
-| 5 — Report View and Evidence Panel | Complete | `frontend/src/screens/ReportViewScreen.tsx` and `frontend/src/screens/EvidencePanel.tsx`; unavailable/static shell because `GET /reports/{id}` is absent. |
-| 6 — Export Panel | Next allowed work | Requires explicit user approval before implementation. |
+| 1 — API client foundation and auth wiring | Complete | `frontend/src/api/*`; controlled `fetch` usage is contained in the API client. Commit `840e954`. |
+| 2 — Query Composer submit | Complete | `frontend/src/screens/QueryComposerScreen.tsx`; submit is wired to `POST /reports/staging`; project dropdown remains fixture-backed because no project-list endpoint exists. Commit `38f7b58`. |
+| 3 — Reports List read-only listing | Complete | `frontend/src/screens/ReportsListScreen.tsx`; unavailable/empty state because `GET /reports` is absent. Commit `89a4e49`. |
+| 4 — Processing View status shell | Complete | `frontend/src/screens/ProcessingScreen.tsx`; static status shell because `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent. Commit `5674581`. |
+| 5 — Report View and Evidence Panel | Complete | `frontend/src/screens/ReportViewScreen.tsx` and `frontend/src/screens/EvidencePanel.tsx`; unavailable/static shell because `GET /reports/{id}` is absent. Commit `35f561d`. |
+| 6 — Export Panel | Complete | `frontend/src/screens/ExportPanel.tsx`; wired to existing `GET /reports/{staging,final}/{id}/download/{fmt}`; artifact rows disabled because no artifact-fetch endpoint exists. Commit `96ec4b9`. |
+| 7 — Upload Zone | Complete | `frontend/src/screens/UploadZone.tsx`; drag-and-drop + client-side validation; submission disabled because `POST /upload` is absent. Commit `52b8a02`. |
+| 8 — Routing integration + role guards | Complete | `frontend/src/layout/Sidebar.tsx`, `Topbar.tsx`, `routing/guards.ts`. Commit `a5aedfc`. |
+| 9 — Error handling and polish | Complete | `frontend/src/components/ToastProvider.tsx`; error surfaces unified across workspace screens. Commit `e37b0c1`. |
+| Phase 2A validation gate | Deferred | E2E + U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md` §9.1; requires explicit user approval and a running stack. |
 
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
@@ -149,6 +161,11 @@ regression-tested.
   Phase 1H.
 - Frontend / Admin UI foundation is complete in Phase 1I and is governed by the
   locked UI contract; any Admin UI beyond the locked contract is a spec change.
+- Backend read/status/cancel/upload endpoints required by remaining Phase 2A
+  workspace shells (`GET /reports`, `GET /reports/{id}`,
+  `GET /reports/{id}/status`, `DELETE /reports/{id}`, `POST /upload`) are
+  acknowledged-missing per `docs/execution/PHASE_2A_PLAN.md` §F.2 and remain
+  outside the Slice 1–9 closeout.
 
 ## Admin And Control-Plane Coverage
 
@@ -162,10 +179,10 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**READY FOR PHASE 2A SLICE 6 — production is NOT_LIVE.**
+**READY FOR PHASE 2A VALIDATION GATE — production is NOT_LIVE.**
 
-Phases 1A–1I plus the Phase 1D-fixup are complete, and Phase 2A Slices 1-5 are
-validated by CI on HEAD `35f561d`. The next safe step is Phase 2A Slice 6
-(Export Panel), and it requires explicit user approval before it starts. This
-does not authorize deployment, Phase 2A closeout, Phase 2B, Phase 2C, or any
-spec change.
+Phases 1A–1I plus the Phase 1D-fixup are complete, and Phase 2A implementation
+slices 1–9 are validated by CI on HEAD `e37b0c1` (run `25799899473`). The next
+safe step is the Phase 2A validation gate (E2E + U-01..U-16 manual QA), which
+requires explicit user approval and a running stack. This does not authorize
+deployment, Phase 2A completion claims, Phase 2B, Phase 2C, or any spec change.

@@ -8,11 +8,16 @@ every CI run must satisfy.
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
    FEATURE_MATRIX.md, and README.md must all reference the same "safe next
-   phase" (currently Phase 1I).
+   phase" (currently Phase 2A).
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
    must reference the Phase 1D-fixup so its closure is visible.
+4. The governance anchor (`docs/ai/agent-state.json.current_commit`) must be
+   HEAD itself or no more than ``MAX_ANCHOR_DRIFT_COMMITS`` commits behind
+   HEAD on the current branch. This catches the failure mode where feature
+   commits land on `main` without a corresponding governance refresh, which
+   silently rots every truth doc that quotes the anchor.
 
 Failures are printed with a short hint and the script exits non-zero so CI
 fails. Pass `--verbose` for the parsed counts.
@@ -21,13 +26,16 @@ fails. Pass `--verbose` for the parsed counts.
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 EXPECTED_NEXT_PHASE = "2A"
 EXPECTED_NEXT_PHASE_TITLE = "User Chat Workspace Implementation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
+MAX_ANCHOR_DRIFT_COMMITS = 3
 
 
 def _resolve_root(explicit: Path | None) -> Path:
@@ -97,6 +105,71 @@ def _doc_marks_fixup_complete(docs: dict[str, Path], name: str) -> bool:
     return PHASE_FIXUP_MARKER in _read(docs[name])
 
 
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def _anchor_drift(root: Path, anchor_commit: str) -> int | None:
+    """Return the number of commits HEAD is ahead of ``anchor_commit``.
+
+    Returns ``None`` if the anchor is not an ancestor of HEAD (i.e. lives on a
+    different branch) or if git is not available in this checkout.
+    """
+    head = _git(root, "rev-parse", "HEAD")
+    if head.returncode != 0:
+        return None
+    head_sha = head.stdout.strip()
+    if head_sha == anchor_commit:
+        return 0
+
+    ancestor = _git(root, "merge-base", "--is-ancestor", anchor_commit, "HEAD")
+    if ancestor.returncode != 0:
+        return None
+
+    count = _git(root, "rev-list", "--count", f"{anchor_commit}..HEAD")
+    if count.returncode != 0:
+        return None
+    try:
+        return int(count.stdout.strip())
+    except ValueError:
+        return None
+
+
+def _check_anchor_currency(root: Path) -> str | None:
+    """Return a failure message if the governance anchor lags HEAD too far."""
+    state_path = root / "docs/ai/agent-state.json"
+    if not state_path.exists():
+        return None  # check_ai_context.py owns the missing-file failure
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None  # check_ai_context.py owns the malformed-JSON failure
+    if not isinstance(state, dict):
+        return None
+    anchor = state.get("current_commit")
+    if not isinstance(anchor, str) or not anchor:
+        return None  # check_ai_context.py owns the missing-field failure
+
+    drift = _anchor_drift(root, anchor)
+    if drift is None:
+        return None  # not an ancestor / unable to compute — leave it to check_ai_context.py
+    if drift > MAX_ANCHOR_DRIFT_COMMITS:
+        return (
+            f"docs/ai/agent-state.json current_commit ({anchor[:7]}) is "
+            f"{drift} commits behind HEAD; max allowed is "
+            f"{MAX_ANCHOR_DRIFT_COMMITS}. Refresh the governance anchor and "
+            "the truth docs before merging more work."
+        )
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true")
@@ -140,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
             failures.append(
                 f"{docs[name].relative_to(root)} does not reference '{PHASE_FIXUP_MARKER}'."
             )
+
+    anchor_failure = _check_anchor_currency(root)
+    if anchor_failure is not None:
+        failures.append(anchor_failure)
 
     if failures:
         for msg in failures:

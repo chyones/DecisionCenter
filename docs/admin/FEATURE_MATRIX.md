@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-13
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress through Slice 5; Slice 6 is the safe next work item. Production is `NOT_LIVE`.
+> **Date:** 2026-05-14
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup are complete. Phase 2A is the safe next phase and is in progress; implementation slices 1–9 are complete at HEAD `e37b0c1`; the Phase 2A validation gate is the safe next work item and is deferred pending explicit user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -122,7 +122,7 @@
 |---------|--------------|-----------|-----------|---------------|-------------|------------------|--------|
 | Configuration loading | 20 | `apps/edr/config.py` | N/A | `Settings` (Pydantic) | None | field count = 40 (CI asserts) | implemented |
 | Dependency version pins | 20 | `pyproject.toml` | N/A | N/A | None | exact pins; PyJWT 2.12.0, cryptography 44.0.1, python-dotenv 1.2.2, anthropic 0.42.0, asyncpg 0.29.0 | implemented |
-| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | ruff + compileall + config coverage + doc-drift + AI-context + smoke + integration + evaluation suite + pip-audit | implemented |
+| CI/CD pipeline | 26.4 | `.github/workflows/ci.yml` | N/A | N/A | None | ruff + compileall + config coverage + doc-drift (incl. anchor-currency invariant) + AI-context + smoke + integration + evaluation suite + frontend lint/build + pip-audit | implemented |
 | Async workflow runtime | 16 | `apps/edr/graph/runner.py`, all graph nodes | N/A | async `DecisionState` pipeline | None | tests invoke async runner/nodes with `asyncio.run()` | implemented |
 | Docker Compose stack | 23 | `docker-compose.yml` | N/A | 7 services with healthchecks | None | internal services on compose network only; public ports on 127.0.0.1 | implemented |
 | Reverse proxy | 23 | `Caddyfile` | N/A | Caddy config with HSTS | None | TLS via `PUBLIC_HOSTNAME`; `:80` fallback for local | implemented |
@@ -186,10 +186,12 @@
 ## Frontend & UI (Phases 1I–2C)
 
 Source of truth: `docs/design/UI_CONTRACT_v1.md`. Frontend foundation and
-static scaffolds are complete in Phase 1I. Phase 2A user workspace work is in
-progress; this table distinguishes live backend integration from
-contract-correct static/unavailable shells. See
-`docs/execution/IMPLEMENTATION_PHASES.md` for the full phase scope.
+static scaffolds are complete in Phase 1I. Phase 2A user workspace
+implementation slices 1–9 are complete; this table distinguishes live backend
+integration from contract-correct static/unavailable shells. See
+`docs/execution/IMPLEMENTATION_PHASES.md` for the full phase scope and
+`docs/execution/PHASE_2A_REPORT.md` for the closeout report and deferred
+validation gate.
 
 | Feature | Route / Component | Backend integration | Validation proof | Status |
 |---|---|---|---|---|
@@ -200,8 +202,11 @@ contract-correct static/unavailable shells. See
 | Processing View | `/workspace/report/{request_id}/processing` | No status/cancel endpoint; `GET /reports/{id}/status` and `DELETE /reports/{id}` are absent | Commit `5674581`; CI green | partial |
 | Report View | `/workspace/report/{request_id}` | No live report-detail endpoint; `GET /reports/{id}` is absent | Commit `35f561d`; CI run `25788830982` success | partial |
 | Evidence Panel | Slide-in from Report View | No live evidence endpoint available through report detail | Commit `35f561d`; CI run `25788830982` success | partial |
-| Export Panel | Slide-in from Report View | Not started; may use existing download endpoints in Slice 6 if approved | Not yet implemented | documented-only |
-| Upload Zone | Query Composer / future upload flow | Not started | Not yet implemented | documented-only |
+| Export Panel | Slide-in from Report View | Live downloads via `GET /reports/{staging,final}/{id}/download/{fmt}`; `evidence-pack.json`/`audit-log.json` rows disabled because no artifact-fetch endpoint exists | Commit `96ec4b9`; CI run `25795083507` success | partial |
+| Upload Zone | Query Composer | Client-side drag/drop, type/size/count validation, preview list; submission disabled because `POST /upload` is absent | Commit `52b8a02`; CI run `25796533185` success | partial |
+| Routing integration + role guards | `frontend/src/routing/*`, `Sidebar`, `Topbar` | UX-only guards; server enforces RBAC | Commit `a5aedfc`; CI run `25798446018` success | implemented |
+| Error handling polish | `frontend/src/components/ToastProvider.tsx` + workspace screens | Network-error and inline-error surfaces unified | Commit `e37b0c1`; CI run `25799899473` success | implemented |
+| Phase 2A validation gate | E2E + U-01..U-16 manual QA | Deferred under explicit approval; requires running stack | `docs/execution/PHASE_2A_REPORT.md` | documented-only |
 
 ---
 
@@ -242,6 +247,8 @@ reflects the versions in effect when the triage was performed.
 | G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
 | G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |
 | G11 | `pip-audit` not promoted to a hard CI gate | `.github/workflows/ci.yml` | 19 advisories on 9 packages accepted as deferred; gate stays `continue-on-error` | Later phase (2+) |
+| G12 | Phase 2A backend read/status endpoints absent | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel render unavailable shells | Follow-on Phase 2A work; requires explicit user approval |
+| G13 | Phase 2A validation gate (E2E + U-01..U-16 manual QA) not exercised | Manual QA / running stack | Phase 2A cannot be marked fully complete until the gate is run | Phase 2A validation gate; requires explicit user approval |
 
 Closed gaps:
 - G1 (nodes 11–17 stubs) — closed by Phase 1E/1F/1G.
