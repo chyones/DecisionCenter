@@ -1,5 +1,61 @@
 # Agent Handoff — DecisionCenter
 
+## Current Session Note — Phase 2A Validation Gate Attempt
+
+Timestamp: `2026-05-14T07:54:30Z`.
+
+The Phase 2A validation gate was explicitly authorized and attempted from
+`main` at `44b7bcf5676d6ed7253cf51d79d6df86ccb85c3c`.
+
+Automated gates after focused validation fixes:
+
+- `make smoke`: 2 passed.
+- `make test`: 175 passed, 1 warning.
+- `make eval`: 64/64 passed, pass rate 100.00%, precision 92.19%.
+- `ruff check .`: clean.
+- `python3 -m compileall apps scripts`: clean.
+- `python3 scripts/check_doc_drift.py`: clean.
+- `python3 scripts/check_ai_context.py`: clean.
+- `cd frontend && npm run lint`: clean.
+- `cd frontend && npm run build`: success.
+- `python3 scripts/agent_postflight.py --allow-no-evidence`: clean.
+
+Focused fixes made in the working tree during the validation attempt:
+
+- `apps/edr/persistence/postgres_store.py` now applies idempotent
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for `review_state` and
+  `requires_approval`, so existing Postgres volumes can use the Phase 2A
+  backend endpoints.
+- `scripts/check_doc_drift.py` now handles a missing `git` executable without
+  crashing in Docker/container test contexts.
+- `apps/edr/app.py` now accepts `X-User-Id` in local bypass mode, invokes the
+  publish node after approval, and rejects unsafe upload extensions even when
+  clients send `application/octet-stream`.
+- `frontend/src/api/client.ts` and `frontend/src/api/useApi.ts` carry the
+  local bypass user identity header.
+- `apps/edr/tests/integration/test_phase2a_backend.py` adds a regression case
+  for CAD upload rejection.
+
+Live API evidence after the fixes:
+
+- `POST /reports/staging` writes a row and `GET /reports/{id}/status` returns
+  HTTP 200 for the submitted request.
+- The submitted local request returns `quality_gate: "failed"` because the
+  local `.env` has placeholder external credentials and no evidence is
+  retrieved.
+- `GET /reports/staging/{id}/download/md` correctly returns HTTP 403 with
+  `Download blocked: quality gate failed.`
+- `POST /upload` rejects `.dwg` sent as `application/octet-stream` with HTTP
+  400.
+
+Final validation gate result: **BLOCKED / NOT CLOSED**. The required E2E
+submit → processing → staging → approve → final → download flow cannot be
+truthfully completed from this local environment because submitted reports have
+no retrieved evidence and fail the quality gate. Do not mark Phase 2A complete,
+do not start Phase 2B, and do not commit/push these working-tree fixes unless
+the validation gate is completed or the user explicitly revises the commit
+instruction.
+
 ## What Was Done
 
 Phase 1I (Frontend Foundation & Static Admin Scaffolds) is complete. Phase 2A

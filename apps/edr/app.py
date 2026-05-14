@@ -17,6 +17,7 @@ from apps.edr.config import settings
 from apps.edr.exporters.base import MIME_TYPES
 from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
+from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.rbac.project_mapping import RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
@@ -142,6 +143,7 @@ _MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024  # 10 MB per file, matches UploadZone
 def _extract_claims(
     authorization: Annotated[str | None, Header()] = None,
     x_user_role: Annotated[str | None, Header()] = None,
+    x_user_id: Annotated[str | None, Header()] = None,
 ) -> JWTClaims | None:
     """Returns JWTClaims from a real Entra Bearer token, or None in bypass mode.
 
@@ -160,7 +162,7 @@ def _extract_claims(
     # Bypass mode — Entra not configured
     if settings.app_env == "production":
         raise HTTPException(status_code=500, detail="ENTRA_CLIENT_ID not configured in production")
-    return JWTClaims(user_id="", role=x_user_role)
+    return JWTClaims(user_id=x_user_id or "", role=x_user_role)
 
 
 def _require_claims(
@@ -669,6 +671,13 @@ def _validate_upload_type(filename: str, content_type: str | None) -> None:
     ext = os.path.splitext(filename)[1].lower()
     if ext in _ACCEPTED_UPLOAD_EXTENSIONS:
         return
+    if ext:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported file type. Accepted: PDF, DOCX, XLSX, TXT, MSG, EML."
+            ),
+        )
     if content_type and content_type.lower() in _ACCEPTED_UPLOAD_CONTENT_TYPES:
         return
     raise HTTPException(
@@ -779,7 +788,22 @@ async def approve_report(
     )
     await pg.update_review_state(request_id, "approved")
 
-    return {"request_id": request_id, "action": action, "new_state": "approved"}
+    publish_state = await node_17_publish.run(
+        DecisionState(
+            request_id=request_id,
+            user_id=claims.user_id,
+            role=claims.role,
+            project_code=audit.get("project_code"),
+            query=audit.get("query") or "",
+        )
+    )
+
+    return {
+        "request_id": request_id,
+        "action": action,
+        "new_state": "approved",
+        "publish_status": publish_state.outputs.get("publish_status"),
+    }
 
 
 @app.post("/reports/staging/{request_id}/reject")

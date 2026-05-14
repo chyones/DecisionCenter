@@ -12,6 +12,8 @@ export interface AuthHeaders {
   authorization?: string;
   /** Dev bypass role header */
   'x-user-role'?: string;
+  /** Dev bypass user identity header */
+  'x-user-id'?: string;
 }
 
 export interface ClientOptions {

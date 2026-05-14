@@ -19,6 +19,7 @@ export function useApi(): ApiClient {
         getAuthHeaders: () => ({
           // Dev bypass mode: backend accepts X-User-Role when Entra is not configured.
           'x-user-role': role,
+          'x-user-id': 'frontend-user',
         }),
       }),
     [role],

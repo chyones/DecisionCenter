@@ -553,6 +553,22 @@ async def test_upload_rejects_unknown_type() -> None:
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_cad_even_with_octet_stream_content_type() -> None:
+    upload = UploadFile(
+        file=io.BytesIO(b"cad"),
+        filename="drawing.dwg",
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    mock_minio = MagicMock()
+    with patch("apps.edr.app.get_minio_store", return_value=mock_minio):
+        with pytest.raises(HTTPException) as exc:
+            await upload_file(claims=_claims(), file=upload)
+    assert exc.value.status_code == 400
+    assert not mock_minio.put_upload.called
+
+
+@pytest.mark.asyncio
 async def test_upload_rejects_empty_body() -> None:
     upload = UploadFile(file=io.BytesIO(b""), filename="empty.pdf")
     mock_minio = MagicMock()

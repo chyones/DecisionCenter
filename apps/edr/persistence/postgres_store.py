@@ -54,6 +54,18 @@ class PostgresStore:
             )
             await conn.execute(
                 """
+                ALTER TABLE audit_log
+                ADD COLUMN IF NOT EXISTS review_state TEXT DEFAULT 'staging'
+                """
+            )
+            await conn.execute(
+                """
+                ALTER TABLE audit_log
+                ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN DEFAULT TRUE
+                """
+            )
+            await conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS review_decisions (
                     id SERIAL PRIMARY KEY,
                     request_id TEXT NOT NULL,

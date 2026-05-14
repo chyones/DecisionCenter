@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -106,6 +107,13 @@ def _doc_marks_fixup_complete(docs: dict[str, Path], name: str) -> bool:
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    if shutil.which("git") is None:
+        return subprocess.CompletedProcess(
+            args=["git", *args],
+            returncode=127,
+            stdout="",
+            stderr="git executable not found",
+        )
     return subprocess.run(
         ["git", *args],
         cwd=root,
