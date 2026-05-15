@@ -3,14 +3,15 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `0a19bae781b78cceb57a4cca99197cb9af8eed6c`
-- Current status: `PHASE_2A_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `8f7d4e23b8154d660261b1263b2a1caa182a3084`
+- Current status: `PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: none; awaiting explicit Phase 2B authorization.
-- Current allowed next work: Phase 2B — Admin Visual Control Plane
-  Implementation. Requires explicit user authorization before any work begins.
-- Latest report (full-phase closeout): `docs/execution/PHASE_2A_REPORT.md`
+- Active phase: Phase 2B — Slice 1 (admin RBAC base) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 2 (Connectors & APIs, read +
+  probe). Requires explicit per-slice user approval before implementation.
+- Latest plan: `docs/execution/PHASE_2B_PLAN.md`
+- Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -38,6 +39,15 @@ The Phase 2A closeout gate passed locally on 2026-05-14:
 - `ruff check .`, `python3 -m compileall apps scripts`, frontend lint/build,
   doc drift, AI context, and postflight checks are required before closeout
   commit.
+
+
+Phase 2B is in progress. Slice 1 adds the admin RBAC base: a shared
+`_require_admin(claims)` helper in `apps/edr/app.py` plus a `GET
+/admin/_authcheck` stub used by integration tests and ops smoke probes.
+The helper raises HTTP 401 when claims are absent and HTTP 403 for every
+non-admin canonical role. 13 integration cases in
+`apps/edr/tests/integration/test_phase2b_admin_rbac.py` lock the contract
+before any other admin endpoint lands.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -71,7 +81,10 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start Phase 2B without explicit user authorization.
+- Do not start any Phase 2B slice past Slice 1 without explicit per-slice
+  user approval.
+- Do not weaken `_require_admin`; non-admin roles must continue to receive
+  HTTP 403 from every `/admin/*` endpoint.
 - Do not deploy.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or

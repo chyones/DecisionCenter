@@ -270,6 +270,26 @@ def _role_permissions(role: Role):
     return ROLE_PERMISSIONS[role]
 
 
+def _require_admin(claims: JWTClaims | None) -> JWTClaims:
+    """Authorise the caller as ``admin`` for every ``/admin/*`` endpoint.
+
+    Returns the validated ``JWTClaims`` on success. Raises ``HTTPException``
+    with the matching status code on failure:
+
+    - 401 when ``claims`` is ``None`` (production mode without a token).
+    - 403 when the role is missing, not a canonical role, or not ``admin``.
+
+    Phase 2B Slice 1: this helper is the shared gate that every admin
+    endpoint added in subsequent slices will use. UI client guards in
+    ``frontend/src/routing/guards.ts`` are cosmetic; this is authoritative.
+    """
+    claims = _require_claims(claims)
+    role_enum = _validated_role(claims)
+    if role_enum != Role.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
+    return claims
+
+
 def _derive_external_state(audit: dict[str, Any]) -> str:
     """Map audit_log columns onto the external state name used by the UI.
 
@@ -1244,3 +1264,27 @@ async def download_final_report(
 ) -> Response:
     """Download a specific format of a finalized report from MinIO."""
     return await _download_artifact(request_id, fmt, claims, prefix="final")
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 1 — Admin RBAC base
+#
+# Self-test endpoint that exercises ``_require_admin`` end-to-end. Used by
+# integration tests in ``apps/edr/tests/integration/test_phase2b_admin_rbac.py``
+# and by future ops smoke probes. It returns no business data and no
+# credential values; it confirms only that the caller is authenticated as
+# ``admin``.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/admin/_authcheck")
+async def admin_authcheck(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> dict[str, object]:
+    """Return ``{\"ok\": true, \"role\": \"admin\"}`` when the caller is admin.
+
+    Returns 403 for every other canonical role and 403/401 for missing/invalid
+    role or claims. No business-data fields are returned.
+    """
+    claims = _require_admin(claims)
+    return {"ok": True, "role": claims.role}

@@ -121,6 +121,25 @@ U-01..U-16 manual QA are complete. See
 | Phase 2A backend additions (gap G12) | Complete | Backend endpoints in `apps/edr/app.py`: `GET /workspace/context`, `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/status`, `GET /reports/{id}/content`, `DELETE /reports/{id}`, `POST /upload`. RBAC enforced server-side; QA regressions in `test_phase2a_backend.py`. |
 | Phase 2A validation gate | Complete | `make phase2a-e2e` passed; U-01..U-16 manual QA passed; `make smoke`, `make test`, `make eval`, ruff, compileall, frontend lint/build, doc drift, AI context, and postflight form the closeout gate. |
 
+## Phase 2B Progress Lock
+
+Phase 2B is in progress. Slice 1 (admin RBAC base) is complete. Subsequent
+slices are gated on explicit per-slice user approval, as documented in
+`docs/execution/PHASE_2B_PLAN.md`.
+
+| Slice | Status | Evidence |
+|---|---|---|
+| 1 — Plan ratification and admin RBAC base | Complete | `apps/edr/app.py` `_require_admin` helper + `GET /admin/_authcheck` stub; 13 RBAC integration cases in `apps/edr/tests/integration/test_phase2b_admin_rbac.py` (admin allowed, 8 non-admin roles denied, missing role 403, unknown role 403, missing claims 401, helper-level invariants); `docs/execution/PHASE_2B_PLAN.md` ratified. |
+| 2 — Connectors & APIs (read + probe) | Pending | Requires explicit user approval. |
+| 3 — System Health + cost monitor | Pending | Requires explicit user approval. |
+| 4 — Audit Log screen | Pending | Requires explicit user approval. |
+| 5 — Permissions & Roles | Pending | Requires explicit user approval. |
+| 6 — Project Source Mapping | Pending | Requires explicit user approval. |
+| 7 — Approval Queue + admin override | Pending | Requires explicit user approval. |
+| 8 — Dashboard | Pending | Requires explicit user approval. |
+| 9 — Routing + admin nav | Pending | Requires explicit user approval. |
+| 10 — Phase 2B closeout | Pending | Requires explicit user approval. |
+
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
 `pip-audit` is wired into CI as `continue-on-error: true`. Phase 1H triaged the
@@ -174,8 +193,10 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**PHASE_2A_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
+**PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
 
-Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. The next safe
-phase is Phase 2B, but it requires explicit user authorization. This does not
-authorize deployment, Phase 2B implementation, Phase 2C, or any spec change.
+Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is
+in progress: Slice 1 (admin RBAC base) is complete and CI-green. The next
+safe step is Phase 2B Slice 2 (Connectors & APIs, read + probe), and it
+requires explicit user authorization. This does not authorize deployment,
+Phase 2B Slice 2 implementation, Phase 2C, or any spec change.

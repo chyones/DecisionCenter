@@ -1,10 +1,10 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "0a19bae781b78cceb57a4cca99197cb9af8eed6c",
-  "status": "PHASE_2A_COMPLETE_NOT_LIVE",
+  "current_commit": "8f7d4e23b8154d660261b1263b2a1caa182a3084",
+  "status": "PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2A",
-  "active_phase": "None — awaiting explicit Phase 2B authorization",
+  "active_phase": "Phase 2B",
   "completed_phase_2a_slices": [
     "Slice 1 — API client foundation and auth wiring",
     "Slice 2 — Query Composer submit",
@@ -20,14 +20,18 @@
     "Manual QA blocker fixes and closeout"
   ],
   "phase_2a_validation_gate_status": "COMPLETE_U01_U16_PASSED",
-  "next_allowed_phase": "Phase 2B — Admin Visual Control Plane Implementation (requires explicit user authorization)",
+  "completed_phase_2b_slices": [
+    "Slice 1 — Plan ratification and admin RBAC base"
+  ],
+  "next_allowed_phase": "Phase 2B Slice 2 — Connectors & APIs (read + probe)",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
   "requires_explicit_user_approval_for_phase_2a_slice_6": false,
   "requires_explicit_user_approval_for_phase_2a_validation_gate": false,
-  "requires_explicit_user_approval_for_phase_2b": true,
-  "latest_report": "docs/execution/PHASE_2A_REPORT.md",
+  "requires_explicit_user_approval_for_phase_2b": false,
+  "requires_explicit_user_approval_for_phase_2b_slice_2": true,
+  "latest_report": "docs/execution/PHASE_2B_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
     "commit": "4901f66d4eb9f04d59d32c949671a53ad4872246",

@@ -1,65 +1,69 @@
 # Agent Handoff — DecisionCenter
 
-## Current State — Phase 2A Manual QA Closeout
+## Current State — Phase 2B Slice 1 (Admin RBAC Base)
 
-Timestamp: `2026-05-14`.
+Timestamp: `2026-05-15`.
 
-Status: `PHASE_2A_COMPLETE_NOT_LIVE`.
+Status: `PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE`.
 
-Production remains `NOT_LIVE`. Phase 2B was not started and requires explicit
-user authorization before any work begins.
+Production remains `NOT_LIVE`. Phase 2B is in progress. Slice 1 (admin RBAC
+base) is complete and CI-green. Subsequent Phase 2B slices require explicit
+per-slice user approval before any work begins.
 
-## What Changed In The Closeout Session
+## What Changed In This Session
 
-Scope was Phase 2A manual QA blocker fixes only:
+Scope was Phase 2B Slice 1 only — plan ratification and shared admin gate:
 
-- `GET /workspace/context` supplies live role/project workspace context.
-- `GET /reports/{id}/content` supplies live report content, evidence entries,
-  quality-gate flags, reviewer draft availability, immutable final state, and
-  role-scoped financial visibility.
-- Reports List, Processing View, Report View, and Evidence Panel consume live
-  backend state instead of static unavailable shells.
-- `node_15_save_audit.py` persists internal `report-draft.json` when a draft
-  exists; `node_17_publish.py` copies it to final artifacts.
-- Cancel writes lifecycle event `report.cancelled` and sets
-  `review_state=cancelled`.
-- Admin is explicitly denied from user-workspace context, report content,
-  downloads, cancel, and upload paths.
-- Query Composer and Upload Zone comments were reconciled with live backend
-  behavior.
+- Authored `docs/execution/PHASE_2B_PLAN.md` as the working framework for
+  Phase 2B. The plan locks objectives, in-scope/out-of-scope, the 10-slice
+  sequence, files affected, validation gates, and risks.
+- Added a shared `_require_admin(claims)` helper in `apps/edr/app.py`
+  alongside the existing `_require_claims` / `_check_reviewer_rbac` /
+  `_validated_role` helpers. The helper raises HTTP 401 when claims are
+  absent and HTTP 403 for every non-admin canonical role.
+- Added a `GET /admin/_authcheck` stub that exercises `_require_admin`
+  end-to-end without touching persistence or external services. Returns
+  `{"ok": true, "role": "admin"}` to admins only.
+- Wrote `apps/edr/tests/integration/test_phase2b_admin_rbac.py` (13 cases)
+  covering admin allowance, all 8 non-admin canonical roles denied,
+  missing-role 403, unknown-role 403, missing-claims 401, and helper-level
+  invariants.
+- Extended `scripts/check_ai_context.py` `ALLOWED_STATUSES` to recognize
+  `PHASE_2B_SLICE_{1..10}_COMPLETE_NOT_LIVE` and
+  `PHASE_2B_COMPLETE_NOT_LIVE`.
+- Reconciled governance: `docs/ai/agent-state.json`,
+  `docs/ai/SHARED_CONTEXT.md`, this handoff,
+  `docs/admin/CONTROL_PLANE_LOCK.md`, `docs/admin/FEATURE_MATRIX.md`, and
+  `docs/execution/CURRENT_PROJECT_STATE.md` were updated to reflect Phase
+  2B opened at Slice 1.
 
-No deployment was performed. The quality gate, RBAC, approval, and download
-gates were not weakened.
-
-## Manual QA Result
-
-U-01 through U-16 from `docs/design/UI_CONTRACT_v1.md` §9.1: PASSED.
+No new screens, no new persistence, no new business endpoints, and no
+changes to existing endpoints. No deployment. The quality gate, RBAC,
+approval, and download gates were not weakened.
 
 ## Validation Evidence
 
-- `python3 scripts/agent_preflight.py`: clean before edits; dirty-tree rerun
-  correctly failed while fixes were uncommitted.
-- `make phase2a-e2e`: PASS; 18 workflow nodes visited; `quality_gate=passed`;
-  pre-approval staging download returned 403; final markdown download returned
-  1443 bytes.
-- `make smoke`: 2 passed.
-- `make test`: 184 passed, 1 warning.
-- `make eval`: 64/64 passed, pass rate 100.00%, precision 92.19%.
-- `ruff check .`: clean.
+- `ruff check apps scripts`: clean.
 - `python3 -m compileall apps scripts`: clean.
-- `cd frontend && npm run lint`: clean.
-- `cd frontend && npm run build`: success.
-
-After truth-doc updates, rerun:
-
-- `python3 scripts/check_doc_drift.py`
-- `python3 scripts/check_ai_context.py`
-- `python3 scripts/agent_postflight.py --allow-no-evidence`
+- `python3 scripts/check_doc_drift.py`: clean (incl. anchor-currency
+  invariant).
+- `python3 scripts/check_ai_context.py`: clean (incl. extended Phase 2B
+  whitelist).
+- `python3 scripts/agent_preflight.py`: clean.
+- `python3 -m pytest -q apps/edr/tests/integration/test_phase2b_admin_rbac.py`:
+  13 passed.
+- `make smoke`: 2 passed.
+- `make test`: full suite green (Phase 2A 184 + Phase 2B 13).
+- `make eval`: 64/64 passed.
+- `cd frontend && npm run lint`: clean (no frontend change in this slice).
+- `cd frontend && npm run build`: success (no frontend change in this slice).
 
 ## Safe Next Work
 
-Phase 2B — Admin Visual Control Plane Implementation is the safe next phase,
-but it must not start without explicit user authorization.
+Phase 2B Slice 2 — Connectors & APIs (read + probe) is the safe next work
+item per `docs/execution/PHASE_2B_PLAN.md` §E. It requires explicit
+per-slice user approval before implementation.
 
-Do not deploy. Do not start Phase 2B by inference. Do not change production
-status from `NOT_LIVE` without an explicit deployment instruction and evidence.
+Do not deploy. Do not start Slice 2 by inference. Do not change production
+status from `NOT_LIVE` without an explicit deployment instruction and
+evidence. Do not weaken `_require_admin`.

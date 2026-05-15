@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-14 (updated)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase after explicit user authorization. Production is `NOT_LIVE`.
+> **Date:** 2026-05-15 (Phase 2B Slice 1 — admin RBAC base)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase and is in progress: Slice 1 (admin RBAC base) is complete and CI-green. Subsequent slices are gated on explicit per-slice user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -63,6 +63,7 @@
 | Get report content | 27, UI_CONTRACT §2.3 | `GET /reports/{id}/content` | Owner, auditor, or authorized reviewer; admin denied; needs-review requester sees flags only | `ReportContentResponse` + evidence entries | None (read-only) | `test_phase2a_backend.py` | implemented |
 | Cancel report | 27, PHASE_2A_PLAN §F.2 | `DELETE /reports/{id}` | Requester only; admin denied; blocked on terminal states (final/rejected/cancelled) | `CancelReportResponse`; writes `report.cancelled` review_decision | `report.cancelled` event | `test_phase2a_backend.py` | implemented |
 | Upload attachment | 27, PHASE_2A_PLAN §F.2 | `POST /upload` | Authenticated non-admin; per-file ≤10 MB; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML) | `UploadResponse` (upload_id, sha256 hash); persisted under `uploads/{user_id_hash}/{upload_id}/{filename}` | None (storage only) | `test_phase2a_backend.py` | implemented |
+| Admin auth-check | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §4.3 | `GET /admin/_authcheck` | Admin only (`_require_admin`); 403 for all 8 other canonical roles; 401 when claims absent | `{"ok": true, "role": "admin"}` — no business data, no credential values | None (read-only) | `test_phase2b_admin_rbac.py` (13 cases) | implemented |
 
 ---
 
