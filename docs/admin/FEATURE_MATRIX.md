@@ -1,7 +1,7 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-15 (Phase 2B Slice 1 — admin RBAC base)
+> **Date:** 2026-05-15 (Phase 2B Slice 2 — Connectors & APIs read + probe)
 > **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase and is in progress: Slice 1 (admin RBAC base) is complete and CI-green. Subsequent slices are gated on explicit per-slice user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
@@ -64,6 +64,9 @@
 | Cancel report | 27, PHASE_2A_PLAN §F.2 | `DELETE /reports/{id}` | Requester only; admin denied; blocked on terminal states (final/rejected/cancelled) | `CancelReportResponse`; writes `report.cancelled` review_decision | `report.cancelled` event | `test_phase2a_backend.py` | implemented |
 | Upload attachment | 27, PHASE_2A_PLAN §F.2 | `POST /upload` | Authenticated non-admin; per-file ≤10 MB; type allowlist (PDF/DOCX/XLSX/TXT/MSG/EML) | `UploadResponse` (upload_id, sha256 hash); persisted under `uploads/{user_id_hash}/{upload_id}/{filename}` | None (storage only) | `test_phase2a_backend.py` | implemented |
 | Admin auth-check | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §4.3 | `GET /admin/_authcheck` | Admin only (`_require_admin`); 403 for all 8 other canonical roles; 401 when claims absent | `{"ok": true, "role": "admin"}` — no business data, no credential values | None (read-only) | `test_phase2b_admin_rbac.py` (13 cases) | implemented |
+| Admin connector list | 27, PHASE_2B_PLAN §C.2 | `GET /admin/services` | Admin only; 403 non-admin | `list[ServiceSummary]` — env key presence only, no values | None (read-only) | `test_phase2b_connectors.py` (45 cases) | implemented |
+| Admin connector detail | 27, PHASE_2B_PLAN §C.2 | `GET /admin/services/{name}` | Admin only; 404 unknown service | `ServiceDetail` — last probe, latency, workflow node count | None (read-only) | `test_phase2b_connectors.py` | implemented |
+| Admin connector probe | 27, PHASE_2B_PLAN §C.2 | `POST /admin/services/{name}/probe` | Admin only; 404 unknown service; read-only probe | `ProbeResult` — pass/fail + latency; writes `connector.probe_success` or `connector.error` | `connector.probe_success`, `connector.error`, `connector.latency_spike` | `test_phase2b_connectors.py` | implemented |
 
 ---
 

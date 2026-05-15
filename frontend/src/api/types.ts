@@ -182,6 +182,69 @@ export interface ListReportsParams {
   offset?: number;
 }
 
+
+// ---------------------------------------------------------------------------
+// Phase 2B Slice 2 — Connectors & APIs (read + probe). Derived from
+// `apps/edr/admin/services_catalog.py`.
+// ---------------------------------------------------------------------------
+
+export type ConnectorCategory = 'infrastructure' | 'workflow';
+export type ConnectorAuthMechanism =
+  | 'tcp'
+  | 'http'
+  | 'webhook_header_token'
+  | 'oauth_bearer'
+  | 'basic'
+  | 'none';
+export type ConnectorProbeStatus = 'pass' | 'fail';
+export type ConnectorLastProbeStatus = ConnectorProbeStatus | 'unknown';
+export type ConnectorEventType =
+  | 'connector.probe_success'
+  | 'connector.error'
+  | 'connector.latency_spike';
+export type WorkflowStatus = 'empty' | 'deployed';
+
+export interface EnvKeyStatus {
+  name: string;
+  present: boolean;
+}
+
+export interface ConnectorEventView {
+  ts: string;
+  event_type: ConnectorEventType;
+  latency_ms: number | null;
+  status_code: number | null;
+  detail: string;
+}
+
+export interface ServiceSummary {
+  name: string;
+  display_name: string;
+  category: ConnectorCategory;
+  auth_mechanism: ConnectorAuthMechanism;
+  hostname: string | null;
+  last_probe_status: ConnectorLastProbeStatus;
+  last_probe_at: string | null;
+  last_latency_ms: number | null;
+  workflow_status: WorkflowStatus | null;
+}
+
+export interface ServiceDetail extends ServiceSummary {
+  description: string;
+  env_keys: EnvKeyStatus[];
+  workflow_node_count: number | null;
+  recent_events: ConnectorEventView[];
+}
+
+export interface ProbeResult {
+  service: string;
+  status: ConnectorProbeStatus;
+  latency_ms: number;
+  status_code: number | null;
+  detail: string;
+  probed_at: string;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

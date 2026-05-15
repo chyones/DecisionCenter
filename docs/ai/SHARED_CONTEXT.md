@@ -3,13 +3,13 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `8f7d4e23b8154d660261b1263b2a1caa182a3084`
-- Current status: `PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `72e50612b307190d9587d9891dd68bc1d4d6208b`
+- Current status: `PHASE_2B_SLICE_2_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 1 (admin RBAC base) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 2 (Connectors & APIs, read +
-  probe). Requires explicit per-slice user approval before implementation.
+- Active phase: Phase 2B — Slice 2 (Connectors & APIs read + probe) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 3 (System Health + cost monitor).
+  Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
 
@@ -43,11 +43,12 @@ The Phase 2A closeout gate passed locally on 2026-05-14:
 
 Phase 2B is in progress. Slice 1 adds the admin RBAC base: a shared
 `_require_admin(claims)` helper in `apps/edr/app.py` plus a `GET
-/admin/_authcheck` stub used by integration tests and ops smoke probes.
-The helper raises HTTP 401 when claims are absent and HTTP 403 for every
-non-admin canonical role. 13 integration cases in
-`apps/edr/tests/integration/test_phase2b_admin_rbac.py` lock the contract
-before any other admin endpoint lands.
+/admin/_authcheck` stub. Slice 2 adds three admin endpoints (`GET
+/admin/services`, `GET /admin/services/{name}`, `POST
+/admin/services/{name}/probe`) backed by `apps/edr/admin/services_catalog.py`
+and the `connector_events` table, plus the `AdminConnectorsScreen` frontend.
+58 integration cases across `test_phase2b_admin_rbac.py` (13) and
+`test_phase2b_connectors.py` (45) lock the contract.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -81,7 +82,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 1 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 2 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

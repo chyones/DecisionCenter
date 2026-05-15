@@ -3,6 +3,7 @@ import {
   FileText,
   LayoutDashboard,
   Activity,
+  Plug,
   Shield,
   Map,
   ChevronLeft,
@@ -49,6 +50,12 @@ const navItems: NavItemDef[] = [
     icon: Activity,
     label: 'System Health',
     path: '/admin/health',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: Plug,
+    label: 'Connectors',
+    path: '/admin/connectors',
     visible: (r) => r === 'admin',
   },
   {

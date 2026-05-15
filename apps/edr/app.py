@@ -21,6 +21,7 @@ from apps.edr.graph.runner import NODE_COUNT, run_workflow
 from apps.edr.graph.state import DecisionState
 from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
+from apps.edr.admin import services_catalog
 from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
 
@@ -1288,3 +1289,168 @@ async def admin_authcheck(
     """
     claims = _require_admin(claims)
     return {"ok": True, "role": claims.role}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 2 — Connectors & APIs (read + probe)
+# Implements GET /admin/services, GET /admin/services/{name}, and
+# POST /admin/services/{name}/probe per docs/execution/PHASE_2B_PLAN.md §E
+# row 2. Admin-only via the shared ``_require_admin`` gate added in Slice 1.
+# ---------------------------------------------------------------------------
+
+
+def _service_or_404(name: str) -> services_catalog.ServiceDef:
+    service = services_catalog.SERVICE_REGISTRY.get(name)
+    if service is None:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {name}")
+    return service
+
+
+def _format_event_view(row: dict) -> services_catalog.ConnectorEventView:
+    ts = row.get("ts")
+    return services_catalog.ConnectorEventView(
+        ts=ts.isoformat() if hasattr(ts, "isoformat") else str(ts) if ts else "",
+        event_type=row["event_type"],
+        latency_ms=row.get("latency_ms"),
+        status_code=row.get("status_code"),
+        detail=services_catalog._sanitize_detail(row.get("detail") or ""),
+    )
+
+
+def _summary_from(
+    service: services_catalog.ServiceDef,
+    latest: dict | None,
+) -> services_catalog.ServiceSummary:
+    last_probe_status: str = "unknown"
+    last_probe_at: str | None = None
+    last_latency_ms: int | None = None
+    if latest is not None:
+        event_type = latest.get("event_type")
+        if event_type == "connector.probe_success":
+            last_probe_status = "pass"
+        elif event_type == "connector.error":
+            last_probe_status = "fail"
+        elif event_type == "connector.latency_spike":
+            last_probe_status = "pass"
+        ts = latest.get("ts")
+        last_probe_at = (
+            ts.isoformat() if hasattr(ts, "isoformat") else str(ts) if ts else None
+        )
+        last_latency_ms = latest.get("latency_ms")
+    return services_catalog.ServiceSummary(
+        name=service.name,
+        display_name=service.display_name,
+        category=service.category,
+        auth_mechanism=service.auth_mechanism,
+        hostname=service.hostname_source(),
+        last_probe_status=last_probe_status,  # type: ignore[arg-type]
+        last_probe_at=last_probe_at,
+        last_latency_ms=last_latency_ms,
+        workflow_status=services_catalog.workflow_status_for(service),
+    )
+
+
+@app.get("/admin/services")
+async def list_admin_services(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> list[services_catalog.ServiceSummary]:
+    """Admin-only service list with per-service status pills.
+
+    No credential values are returned — only key-presence is exposed via the
+    detail endpoint. Workflow status (``empty``/``deployed``) is computed
+    from the local n8n JSON files (A-05).
+    """
+    _require_admin(claims)
+    store = get_postgres_store()
+    try:
+        latest = await store.latest_connector_event_per_service()
+    except Exception:
+        latest = {}
+    return [
+        _summary_from(service, latest.get(service.name))
+        for service in services_catalog.SERVICE_REGISTRY.values()
+    ]
+
+
+@app.get("/admin/services/{name}")
+async def get_admin_service(
+    name: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> services_catalog.ServiceDetail:
+    """Admin-only service detail: env-key presence, last probe summary,
+    workflow node count (A-05), and recent events."""
+    _require_admin(claims)
+    service = _service_or_404(name)
+    store = get_postgres_store()
+    try:
+        latest_per = await store.latest_connector_event_per_service()
+    except Exception:
+        latest_per = {}
+    try:
+        events = await store.recent_connector_events(name, limit=10)
+    except Exception:
+        events = []
+    summary = _summary_from(service, latest_per.get(name))
+    return services_catalog.ServiceDetail(
+        **summary.model_dump(),
+        description=service.description,
+        env_keys=services_catalog.env_key_statuses(service),
+        workflow_node_count=services_catalog.workflow_node_count(service),
+        recent_events=[_format_event_view(row) for row in events],
+    )
+
+
+@app.post("/admin/services/{name}/probe")
+async def probe_admin_service(
+    name: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> services_catalog.ProbeResult:
+    """Admin-only read-only probe.
+
+    Behaviour:
+    - On success: writes one ``connector.probe_success`` event.
+    - On failure: writes one ``connector.error`` event; the HTTP response is
+      still 200 with ``status="fail"`` — pass/fail is in-band, like a
+      browser ``Test connection`` button (A-04).
+    - On latency >= ``LATENCY_SPIKE_THRESHOLD_MS``: writes a *second*
+      ``connector.latency_spike`` row in addition to the pass/fail row.
+
+    Event rows are written **before** the response is constructed, per
+    PHASE_2B_PLAN §C.6 "audit-before-side-effect" rule.
+    """
+    _require_admin(claims)
+    service = _service_or_404(name)
+    outcome = services_catalog.run_probe(service)
+
+    primary_event = (
+        "connector.probe_success" if outcome.status == "pass" else "connector.error"
+    )
+    store = get_postgres_store()
+    await store.insert_connector_event(
+        service=name,
+        event_type=primary_event,
+        latency_ms=outcome.latency_ms,
+        status_code=outcome.status_code,
+        detail=services_catalog._sanitize_detail(
+            outcome.detail, hostname=service.hostname_source()
+        ),
+    )
+    if outcome.latency_ms >= services_catalog.LATENCY_SPIKE_THRESHOLD_MS:
+        await store.insert_connector_event(
+            service=name,
+            event_type="connector.latency_spike",
+            latency_ms=outcome.latency_ms,
+            status_code=outcome.status_code,
+            detail=services_catalog._sanitize_detail(
+                f"latency_spike@{service.hostname_source() or service.name}"
+            ),
+        )
+
+    return services_catalog.ProbeResult(
+        service=name,
+        status=outcome.status,
+        latency_ms=outcome.latency_ms,
+        status_code=outcome.status_code,
+        detail=outcome.detail,
+        probed_at=services_catalog.now_iso(),
+    )

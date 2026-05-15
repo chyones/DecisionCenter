@@ -77,6 +77,25 @@ class PostgresStore:
                 )
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS connector_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    ts TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    service TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    latency_ms INTEGER,
+                    status_code INTEGER,
+                    detail TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS connector_events_service_ts_idx
+                    ON connector_events (service, ts DESC)
+                """
+            )
 
     async def insert_audit(
         self,
@@ -270,6 +289,77 @@ class PostgresStore:
                 ORDER BY created_at DESC
                 """,
                 request_id,
+            )
+            return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Phase 2B Slice 2 — connector events
+    # ------------------------------------------------------------------
+
+    async def insert_connector_event(
+        self,
+        *,
+        service: str,
+        event_type: str,
+        latency_ms: int | None,
+        status_code: int | None,
+        detail: str,
+    ) -> int:
+        """Insert a connector probe / latency-spike row and return its id.
+
+        ``detail`` is expected to be pre-sanitised by the caller
+        (``apps.edr.admin.services_catalog._sanitize_detail``); this method
+        does not redact further.
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO connector_events (
+                    service, event_type, latency_ms, status_code, detail
+                ) VALUES ($1, $2, $3, $4, $5)
+                RETURNING id
+                """,
+                service,
+                event_type,
+                latency_ms,
+                status_code,
+                detail,
+            )
+            return int(row["id"]) if row else 0
+
+    async def latest_connector_event_per_service(
+        self,
+    ) -> dict[str, dict[str, Any]]:
+        """Return the newest row per service keyed by service name."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT ON (service)
+                    service, ts, event_type, latency_ms, status_code, detail
+                FROM connector_events
+                ORDER BY service, ts DESC
+                """
+            )
+            return {r["service"]: dict(r) for r in rows}
+
+    async def recent_connector_events(
+        self, service: str, *, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Return up to ``limit`` most recent rows for one service."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT ts, event_type, latency_ms, status_code, detail
+                FROM connector_events
+                WHERE service = $1
+                ORDER BY ts DESC
+                LIMIT $2
+                """,
+                service,
+                limit,
             )
             return [dict(r) for r in rows]
 

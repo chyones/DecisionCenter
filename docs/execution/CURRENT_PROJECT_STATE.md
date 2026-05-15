@@ -84,7 +84,7 @@ deployment.
 | Slice | Status | Evidence |
 |---|---|---|
 | Phase 2B Slice 1 — Plan ratification and admin RBAC base | Complete | `docs/execution/PHASE_2B_PLAN.md` authored; `_require_admin` helper and `GET /admin/_authcheck` stub added to `apps/edr/app.py`; 13 RBAC integration cases in `apps/edr/tests/integration/test_phase2b_admin_rbac.py`. CI green. |
-| Phase 2B Slice 2 — Connectors & APIs (read + probe) | Pending | Requires explicit user approval. |
+| Phase 2B Slice 2 — Connectors & APIs (read + probe) | Complete | `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe`; `apps/edr/admin/services_catalog.py`; `connector_events` table; 45 integration cases in `test_phase2b_connectors.py`; `AdminConnectorsScreen.tsx` frontend. CI green. |
 
 ---
 

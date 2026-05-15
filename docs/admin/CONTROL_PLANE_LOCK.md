@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-14 (updated for Phase 2A manual QA closeout)
+> **Date:** 2026-05-15 (updated for Phase 2B Slice 2 closeout)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2A_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2B_SLICE_2_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -130,7 +130,7 @@ slices are gated on explicit per-slice user approval, as documented in
 | Slice | Status | Evidence |
 |---|---|---|
 | 1 — Plan ratification and admin RBAC base | Complete | `apps/edr/app.py` `_require_admin` helper + `GET /admin/_authcheck` stub; 13 RBAC integration cases in `apps/edr/tests/integration/test_phase2b_admin_rbac.py` (admin allowed, 8 non-admin roles denied, missing role 403, unknown role 403, missing claims 401, helper-level invariants); `docs/execution/PHASE_2B_PLAN.md` ratified. |
-| 2 — Connectors & APIs (read + probe) | Pending | Requires explicit user approval. |
+| 2 — Connectors & APIs (read + probe) | Complete | `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` in `apps/edr/app.py`; `apps/edr/admin/services_catalog.py` registry + probe logic; `connector_events` table in `postgres_store.py`; 45 integration cases in `test_phase2b_connectors.py` (RBAC, A-03, A-04, A-05, C-1, C-6, write-before-return); `AdminConnectorsScreen.tsx` frontend. |
 | 3 — System Health + cost monitor | Pending | Requires explicit user approval. |
 | 4 — Audit Log screen | Pending | Requires explicit user approval. |
 | 5 — Permissions & Roles | Pending | Requires explicit user approval. |
