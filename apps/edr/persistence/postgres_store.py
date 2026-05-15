@@ -363,6 +363,74 @@ class PostgresStore:
             )
             return [dict(r) for r in rows]
 
+    async def connector_events_24h_buckets(
+        self, service: str
+    ) -> list[dict[str, Any]]:
+        """Return 24 hourly latency averages for the service (last 24h)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    date_trunc('hour', ts) AS bucket,
+                    COALESCE(AVG(latency_ms), 0)::int AS avg_latency_ms
+                FROM connector_events
+                WHERE service = $1
+                  AND ts >= NOW() - INTERVAL '24 hours'
+                  AND latency_ms IS NOT NULL
+                GROUP BY date_trunc('hour', ts)
+                ORDER BY bucket ASC
+                """,
+                service,
+            )
+            return [dict(r) for r in rows]
+
+    async def monthly_cost_aggregate(self) -> float:
+        """Return the sum of cost_total_usd for the current calendar month."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COALESCE(SUM(cost_total_usd), 0)::float AS total
+                FROM audit_log
+                WHERE created_at >= date_trunc('month', NOW())
+                """
+            )
+            return float(row["total"]) if row else 0.0
+
+    async def monthly_llm_call_count(self) -> int:
+        """Return the count of audit_log rows for the current calendar month."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) AS n
+                FROM audit_log
+                WHERE created_at >= date_trunc('month', NOW())
+                """
+            )
+            return int(row["n"]) if row else 0
+
+    async def insert_cost_event(self, event_type: str, detail: str) -> int:
+        """Insert a cost warning or cap-exceeded event into connector_events.
+
+        Uses ``service='cost'`` so the Slice 4 audit read-model can filter
+        cost events uniformly.
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO connector_events (service, event_type, detail)
+                VALUES ($1, $2, $3)
+                RETURNING id
+                """,
+                "cost",
+                event_type,
+                detail,
+            )
+            return int(row["id"]) if row else 0
+
 
 _postgres_store: PostgresStore | None = None
 

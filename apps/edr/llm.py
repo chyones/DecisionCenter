@@ -126,6 +126,8 @@ class _CostTracker:
         self._daily_cost: float = 0.0
         self._last_reset: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         self._token_usage: dict[str, dict[str, int]] = {}
+        self._model_calls: dict[str, int] = {}
+        self._model_costs: dict[str, float] = {}
 
     def _check_reset(self) -> None:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -143,9 +145,12 @@ class _CostTracker:
                 f"(current: {self._daily_cost:.4f}, estimated add: {estimated_cost:.4f})"
             )
 
-    def record_cost(self, cost: float) -> None:
+    def record_cost(self, cost: float, model: str | None = None) -> None:
         self._check_reset()
         self._daily_cost += cost
+        if model:
+            self._model_calls[model] = self._model_calls.get(model, 0) + 1
+            self._model_costs[model] = self._model_costs.get(model, 0.0) + cost
 
     def record_tokens(self, request_id: str, input_tokens: int, output_tokens: int) -> None:
         if request_id not in self._token_usage:
@@ -160,6 +165,17 @@ class _CostTracker:
     def daily_cost(self) -> float:
         self._check_reset()
         return self._daily_cost
+
+    def get_model_breakdown(self) -> list[dict[str, object]]:
+        self._check_reset()
+        return [
+            {
+                "model": model,
+                "calls": self._model_calls.get(model, 0),
+                "cost_usd": round(self._model_costs.get(model, 0.0), 4),
+            }
+            for model in sorted(self._model_calls.keys())
+        ]
 
 
 _cost_tracker = _CostTracker()
@@ -288,7 +304,7 @@ async def call_llm(
     cost = _estimate_cost(model, input_tokens, output_tokens)
 
     # Record actual cost and tokens
-    _cost_tracker.record_cost(cost)
+    _cost_tracker.record_cost(cost, model=model)
     _cost_tracker.record_tokens(request_id, input_tokens, output_tokens)
 
     content = response.content[0].text if response.content else ""
@@ -333,7 +349,7 @@ def _fallback_result(
     input_tokens = _estimate_tokens_from_text(sanitized_prompt)
     output_tokens = _estimate_tokens_from_text(content)
     cost = _estimate_cost(model, input_tokens, output_tokens)
-    _cost_tracker.record_cost(cost)
+    _cost_tracker.record_cost(cost, model=model)
     _cost_tracker.record_tokens(request_id, input_tokens, output_tokens)
     return LLMResult(
         content=content,

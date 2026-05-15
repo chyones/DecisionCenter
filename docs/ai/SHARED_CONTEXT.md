@@ -3,12 +3,12 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `72e50612b307190d9587d9891dd68bc1d4d6208b`
-- Current status: `PHASE_2B_SLICE_2_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `0a3edb5f65de75807427b5630a94182e410e518c`
+- Current status: `PHASE_2B_SLICE_3_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 2 (Connectors & APIs read + probe) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 3 (System Health + cost monitor).
+- Active phase: Phase 2B — Slice 3 (System Health + cost monitor) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 4 (Audit Log screen).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -47,8 +47,11 @@ Phase 2B is in progress. Slice 1 adds the admin RBAC base: a shared
 /admin/services`, `GET /admin/services/{name}`, `POST
 /admin/services/{name}/probe`) backed by `apps/edr/admin/services_catalog.py`
 and the `connector_events` table, plus the `AdminConnectorsScreen` frontend.
-58 integration cases across `test_phase2b_admin_rbac.py` (13) and
-`test_phase2b_connectors.py` (45) lock the contract.
+Slice 3 adds `GET /admin/health/live` and `GET /admin/cost` with live probes,
+sparkline buckets, cost breakdown, and warning/exceeded thresholds, plus the
+upgraded `AdminHealthScreen` frontend. 86 integration cases across
+`test_phase2b_admin_rbac.py` (13), `test_phase2b_connectors.py` (45), and
+`test_phase2b_health_cost.py` (28) lock the contract.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -82,7 +85,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 2 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 3 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

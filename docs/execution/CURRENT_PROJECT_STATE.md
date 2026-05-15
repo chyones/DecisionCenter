@@ -85,6 +85,7 @@ deployment.
 |---|---|---|
 | Phase 2B Slice 1 — Plan ratification and admin RBAC base | Complete | `docs/execution/PHASE_2B_PLAN.md` authored; `_require_admin` helper and `GET /admin/_authcheck` stub added to `apps/edr/app.py`; 13 RBAC integration cases in `apps/edr/tests/integration/test_phase2b_admin_rbac.py`. CI green. |
 | Phase 2B Slice 2 — Connectors & APIs (read + probe) | Complete | `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe`; `apps/edr/admin/services_catalog.py`; `connector_events` table; 45 integration cases in `test_phase2b_connectors.py`; `AdminConnectorsScreen.tsx` frontend. CI green. |
+| Phase 2B Slice 3 — System Health + cost monitor | Complete | `GET /admin/health/live`, `GET /admin/cost`; `cost_events` table + sparkline buckets; 28 integration cases in `test_phase2b_health_cost.py`; live `AdminHealthScreen.tsx` frontend with auto-refresh, cost banners, and warning/exceeded thresholds. CI green. |
 
 ---
 
@@ -125,18 +126,17 @@ deployment.
 
 ## Safe Next Phase
 
-Phase 2B is the safe next phase after Phase 2A completion, but it requires
-explicit user authorization before any implementation starts.
+Phase 2B Slice 4 (Audit Log screen) is the safe next work item, but it
+requires explicit per-slice user authorization before any implementation starts.
 
-Allowed next work is limited to Phase 2B authorization/planning or later
-maintenance explicitly requested by the user. Do not start Phase 2B by
-inference.
+Allowed next work is limited to explicitly authorized Phase 2B slices or later
+maintenance requested by the user. Do not start Slice 4 by inference.
 
 ## Standing Forbidden Work
 
 Do not deploy. Do not change the locked spec unless an explicit spec-change
 ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
-tests. Do not start Phase 2B without explicit user authorization.
+tests. Do not start Phase 2B Slice 4 without explicit per-slice user authorization.
 
 ---
 

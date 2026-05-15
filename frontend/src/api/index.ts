@@ -39,4 +39,8 @@ export {
   type ServiceSummary,
   type ServiceDetail,
   type ProbeResult,
+  type HealthServiceStatus,
+  type HealthLiveResponse,
+  type LlmBreakdownItem,
+  type CostResponse,
 } from './types';

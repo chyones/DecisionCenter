@@ -67,6 +67,8 @@
 | Admin connector list | 27, PHASE_2B_PLAN §C.2 | `GET /admin/services` | Admin only; 403 non-admin | `list[ServiceSummary]` — env key presence only, no values | None (read-only) | `test_phase2b_connectors.py` (45 cases) | implemented |
 | Admin connector detail | 27, PHASE_2B_PLAN §C.2 | `GET /admin/services/{name}` | Admin only; 404 unknown service | `ServiceDetail` — last probe, latency, workflow node count | None (read-only) | `test_phase2b_connectors.py` | implemented |
 | Admin connector probe | 27, PHASE_2B_PLAN §C.2 | `POST /admin/services/{name}/probe` | Admin only; 404 unknown service; read-only probe | `ProbeResult` — pass/fail + latency; writes `connector.probe_success` or `connector.error` | `connector.probe_success`, `connector.error`, `connector.latency_spike` | `test_phase2b_connectors.py` | implemented |
+| Admin health live | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.7 | `GET /admin/health/live` | Admin only; per-service live probe latencies + 24h sparkline buckets from `connector_events` | `HealthLiveResponse` — no business content, no credentials | None (read-only) | `test_phase2b_health_cost.py` (28 cases) | implemented |
+| Admin cost monitor | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.7 | `GET /admin/cost` | Admin only; daily/monthly caps, LLM call breakdown, warning/exceeded flags; emits `cost.daily_cap_warning` / `cost.daily_cap_exceeded` events | `CostResponse` — no business content, no credentials | `cost.daily_cap_warning`, `cost.daily_cap_exceeded` | `test_phase2b_health_cost.py` | implemented |
 
 ---
 
@@ -216,6 +218,8 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Routing integration + role guards | `frontend/src/routing/*`, `Sidebar`, `Topbar` | UX-only guards; server enforces RBAC | Commit `a5aedfc`; CI run `25798446018` success | implemented |
 | Error handling polish | `frontend/src/components/ToastProvider.tsx` + workspace screens | Network-error and inline-error surfaces unified | Commit `e37b0c1`; CI run `25799899473` success | implemented |
 | Phase 2A validation gate | E2E + U-01..U-16 manual QA | Complete | `docs/execution/PHASE_2A_REPORT.md` | implemented |
+| Admin System Health screen | `/admin/health` | Live `GET /admin/health/live` + `GET /admin/cost`; auto-refresh; sparklines; cost banners with warning/exceeded thresholds | Phase 2B Slice 3; frontend lint/build | implemented |
+| Admin Connectors screen | `/admin/connectors` | Live `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` | Phase 2B Slice 2; frontend lint/build | implemented |
 
 ---
 

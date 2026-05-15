@@ -245,6 +245,42 @@ export interface ProbeResult {
   probed_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2B Slice 3 — System Health + cost monitor.
+// ---------------------------------------------------------------------------
+
+export interface HealthServiceStatus {
+  name: string;
+  display_name: string;
+  status: 'ok' | 'error' | 'unknown';
+  latency_ms: number;
+  sla_ms: number;
+  sparkline_24h: number[];
+}
+
+export interface HealthLiveResponse {
+  services: HealthServiceStatus[];
+  checked_at: string;
+}
+
+export interface LlmBreakdownItem {
+  model: string;
+  calls: number;
+  cost_usd: number;
+}
+
+export interface CostResponse {
+  daily_cost: number;
+  daily_cap: number;
+  daily_percent: number;
+  monthly_cost: number;
+  monthly_cap: number;
+  monthly_percent: number;
+  llm_breakdown: LlmBreakdownItem[];
+  warning: boolean;
+  exceeded: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

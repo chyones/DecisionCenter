@@ -3,6 +3,7 @@ import json
 import os
 import re
 import socket
+import time
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -1453,4 +1454,218 @@ async def probe_admin_service(
         status_code=outcome.status_code,
         detail=outcome.detail,
         probed_at=services_catalog.now_iso(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 3 — System Health + cost monitor
+# Implements GET /admin/health/live and GET /admin/cost per
+# docs/execution/PHASE_2B_PLAN.md §E row 3. Admin-only via _require_admin.
+# ---------------------------------------------------------------------------
+
+
+class HealthServiceStatus(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str
+    display_name: str
+    status: Literal["ok", "error", "unknown"]
+    latency_ms: int
+    sla_ms: int
+    sparkline_24h: list[int]
+
+
+class HealthLiveResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    services: list[HealthServiceStatus]
+    checked_at: str
+
+
+class LlmBreakdownItem(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    model: str
+    calls: int
+    cost_usd: float
+
+
+class CostResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    daily_cost: float
+    daily_cap: float
+    daily_percent: float
+    monthly_cost: float
+    monthly_cap: float
+    monthly_percent: float
+    llm_breakdown: list[LlmBreakdownItem]
+    warning: bool
+    exceeded: bool
+
+
+#: SLA targets in milliseconds for each service surfaced in System Health.
+#  Workflow services share the n8n/webhook SLA. Values are aligned with the
+#  UI contract §3.7 and the connector probe timeout budget.
+_HEALTH_SLA_MS: dict[str, int] = {
+    "postgres": 200,
+    "redis": 100,
+    "qdrant": 300,
+    "minio": 500,
+    "n8n": 500,
+    "sharepoint": 1000,
+    "microsoft_graph": 1000,
+    "owncloud": 500,
+    "odoo": 500,
+    "langfuse": 500,
+}
+
+
+def _probe_with_latency(name: str) -> tuple[str, int]:
+    """Run the registered health check for *name* and return (status, latency_ms).
+
+    Infrastructure services reuse the existing ``_check_*`` helpers.
+    Workflow services are probed via n8n reachability (same as Slice 2).
+    """
+    check_map = {
+        "postgres": _check_postgres,
+        "redis": _check_redis,
+        "qdrant": _check_qdrant,
+        "minio": _check_minio,
+        "n8n": lambda: _http_ok(
+            f"{settings.n8n_base_url.rstrip('/')}/healthz"
+        ),
+        "langfuse": lambda: _http_ok(
+            f"{settings.langfuse_host.rstrip('/')}/api/public/health"
+        ),
+    }
+    # Workflow services: probe n8n base URL (same lightweight check)
+    for wf_name in ("sharepoint", "microsoft_graph", "owncloud", "odoo"):
+        check_map[wf_name] = check_map["n8n"]
+
+    check = check_map.get(name)
+    if check is None:
+        return ("unknown", 0)
+
+    t0 = time.monotonic()
+    try:
+        check()
+        status = "ok"
+    except Exception:
+        status = "error"
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    return (status, latency_ms)
+
+
+@app.get("/admin/health/live")
+async def admin_health_live(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> HealthLiveResponse:
+    """Admin-only live health status with per-service latency and 24h sparkline.
+
+    Returns no business data (C-1) and no credential values (C-6).
+    """
+    _require_admin(claims)
+    store = get_postgres_store()
+    services: list[HealthServiceStatus] = []
+
+    for name in services_catalog.SERVICE_REGISTRY.keys():
+        status, latency_ms = _probe_with_latency(name)
+        sla_ms = _HEALTH_SLA_MS.get(name, 500)
+
+        # Fetch 24h sparkline buckets (up to 24 hourly averages)
+        sparkline: list[int] = []
+        try:
+            buckets = await store.connector_events_24h_buckets(name)
+            sparkline = [int(b.get("avg_latency_ms", 0)) for b in buckets]
+        except Exception:
+            sparkline = []
+
+        services.append(
+            HealthServiceStatus(
+                name=name,
+                display_name=services_catalog.SERVICE_REGISTRY[name].display_name,
+                status=status,  # type: ignore[arg-type]
+                latency_ms=latency_ms,
+                sla_ms=sla_ms,
+                sparkline_24h=sparkline,
+            )
+        )
+
+    return HealthLiveResponse(
+        services=services,
+        checked_at=datetime.now().isoformat(),
+    )
+
+
+@app.get("/admin/cost")
+async def admin_cost(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> CostResponse:
+    """Admin-only cost monitor: daily / monthly caps, LLM breakdown, warnings.
+
+    Emits ``cost.daily_cap_warning`` or ``cost.daily_cap_exceeded`` events
+    when thresholds are crossed.  No business content (C-1); no credentials
+    (C-6).
+    """
+    _require_admin(claims)
+
+    from apps.edr.llm import _cost_tracker
+
+    daily_cost = _cost_tracker.daily_cost
+    daily_cap = settings.daily_cost_cap_usd
+    daily_percent = round((daily_cost / daily_cap * 100), 2) if daily_cap > 0 else 0.0
+
+    store = get_postgres_store()
+    try:
+        monthly_cost = await store.monthly_cost_aggregate()
+    except Exception:
+        monthly_cost = 0.0
+    monthly_cap = settings.monthly_cost_target_usd
+    monthly_percent = (
+        round((monthly_cost / monthly_cap * 100), 2) if monthly_cap > 0 else 0.0
+    )
+
+    llm_breakdown = [
+        LlmBreakdownItem(
+            model=item["model"],
+            calls=item["calls"],
+            cost_usd=item["cost_usd"],
+        )
+        for item in _cost_tracker.get_model_breakdown()
+    ]
+
+    warning = daily_cost >= daily_cap * 0.8
+    exceeded = daily_cost >= daily_cap
+
+    # Emit threshold events (idempotent-ish: we emit on every poll when
+    # threshold is active; the audit read-model in Slice 4 will dedupe
+    # if needed).
+    if exceeded:
+        try:
+            await store.insert_cost_event(
+                "cost.daily_cap_exceeded",
+                f"daily_cost={daily_cost:.4f} cap={daily_cap:.2f}",
+            )
+        except Exception:
+            pass
+    elif warning:
+        try:
+            await store.insert_cost_event(
+                "cost.daily_cap_warning",
+                f"daily_cost={daily_cost:.4f} cap={daily_cap:.2f}",
+            )
+        except Exception:
+            pass
+
+    return CostResponse(
+        daily_cost=round(daily_cost, 4),
+        daily_cap=daily_cap,
+        daily_percent=daily_percent,
+        monthly_cost=round(monthly_cost, 4),
+        monthly_cap=monthly_cap,
+        monthly_percent=monthly_percent,
+        llm_breakdown=llm_breakdown,
+        warning=warning,
+        exceeded=exceeded,
     )
