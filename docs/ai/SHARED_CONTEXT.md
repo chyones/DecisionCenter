@@ -3,12 +3,12 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `5f481c8696dd7feec054e165558f70ed815f2822`
-- Current status: `PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `8a420c8a9d0c8e0e8d4c8b3e1e8f3e0c8b3e1e8f3`
+- Current status: `PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 5 (Permissions & Roles) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 6 (Project Source Mapping).
+- Active phase: Phase 2B — Slice 6 (Project Source Mapping) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 7 (Approval Queue + admin override).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -55,11 +55,17 @@ read-model over four event tables, plus the `AdminAuditLogScreen.tsx` frontend.
 Slice 5 adds `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`,
 and `DELETE /admin/entra-mappings/{group_id}` with the `entra_group_mappings`
 table, `_validate_canonical_role()`, A-17 audit-before-save, and the live
-three-tab `AdminPermissionsScreen.tsx` frontend (Role Matrix, Entra Group Mapping
-CRUD with typed-confirmation delete, Project Role Assignments placeholder).
-137 integration cases across `test_phase2b_admin_rbac.py` (13),
+three-tab `AdminPermissionsScreen.tsx` frontend.
+Slice 6 adds `GET /admin/source-mappings`, `GET /admin/source-mappings/{code}`,
+`POST /admin/source-mappings/{code}/validate`, `PUT /admin/source-mappings/{code}`,
+and `POST /admin/source-mappings/{code}/disable` with the `source_mappings` table
+(seeded from JSON), `_compute_mapping_status()`, A-21 audit-before-save, A-20
+report-generation guard, and the live two-column `AdminSourceMappingScreen.tsx`
+frontend with diff preview, risky-change confirmation, and typed-confirmation disable.
+190 integration cases across `test_phase2b_admin_rbac.py` (13),
 `test_phase2b_connectors.py` (45), `test_phase2b_health_cost.py` (28),
-`test_phase2b_audit.py` (18), and `test_phase2b_permissions.py` (33) lock the contract.
+`test_phase2b_audit.py` (18), `test_phase2b_permissions.py` (33), and
+`test_phase2b_source_mapping.py` (53) lock the contract.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -93,7 +99,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 5 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 6 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

@@ -330,6 +330,98 @@ export interface EntraGroupMappingListResponse {
   mappings: EntraGroupMapping[];
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2B Slice 6 — Project Source Mapping
+// ---------------------------------------------------------------------------
+
+export interface SourceMappingSharePoint {
+  site_id: string;
+  drive_id: string;
+  root_path: string;
+}
+
+export interface SourceMappingOwnCloud {
+  base_path: string;
+}
+
+export interface SourceMappingEmail {
+  shared_mailboxes: string[];
+  document_control_mailbox: string;
+  client_domains: string[];
+  consultant_domains: string[];
+  contractor_domains: string[];
+}
+
+export interface SourceMappingOdoo {
+  project_model: string;
+  cost_model: string;
+  project_external_id: string;
+  project_name: string;
+}
+
+export interface RelatedPeople {
+  project_manager: string;
+  commercial_manager: string;
+  finance_owner: string;
+  document_controller: string;
+  other: string[];
+}
+
+export interface SourceMappingSummary {
+  project_code: string;
+  project_name: string;
+  mapping_status: string;
+  contract_numbers: string[];
+}
+
+export interface SourceMappingDetail {
+  project_code: string;
+  project_name: string;
+  contract_numbers: string[];
+  sharepoint: SourceMappingSharePoint;
+  owncloud: SourceMappingOwnCloud;
+  email: SourceMappingEmail;
+  odoo: SourceMappingOdoo;
+  related_people: RelatedPeople;
+  enabled_sources: string[];
+  allowed_roles: string[];
+  mapping_status: string;
+  last_validation_result: Record<string, unknown> | null;
+  last_validated_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by_hash: string | null;
+  updated_by_hash: string | null;
+}
+
+export interface SourceMappingListResponse {
+  mappings: SourceMappingSummary[];
+}
+
+export interface SourceMappingUpsertRequest {
+  project_name: string;
+  contract_numbers: string[];
+  sharepoint: SourceMappingSharePoint;
+  owncloud: SourceMappingOwnCloud;
+  email: SourceMappingEmail;
+  odoo: SourceMappingOdoo;
+  related_people: RelatedPeople;
+  enabled_sources: string[];
+  allowed_roles: string[];
+}
+
+export interface ValidationFieldError {
+  field: string;
+  message: string;
+}
+
+export interface SourceMappingValidateResponse {
+  project_code: string;
+  valid: boolean;
+  status: string;
+  errors: ValidationFieldError[];
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

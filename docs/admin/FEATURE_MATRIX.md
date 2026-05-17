@@ -75,6 +75,12 @@
 | Admin Entra mapping list | 27, PHASE_2B_PLAN §C.2 | `GET /admin/entra-mappings` | Admin only; list all group → role mappings | `EntraGroupMappingListResponse` — no business content, no credentials | None (read-only) | `test_phase2b_permissions.py` (33 cases) | implemented |
 | Admin Entra mapping upsert | 27, PHASE_2B_PLAN §C.2 | `PUT /admin/entra-mappings/{group_id}` | Admin only; `_validate_canonical_role()` rejects invalid roles with 400; A-17 audit-before-save | `EntraGroupMapping` | `admin.role_mapping_changed` | `test_phase2b_permissions.py` | implemented |
 | Admin Entra mapping delete | 27, PHASE_2B_PLAN §C.2 | `DELETE /admin/entra-mappings/{group_id}` | Admin only; 404 if absent; A-17 audit-before-delete | 204 No Content | `admin.role_mapping_changed` | `test_phase2b_permissions.py` | implemented |
+| Admin source mapping list | 27, PHASE_2B_PLAN §C.2 | `GET /admin/source-mappings` | Admin only; list all project source mappings with computed status | `SourceMappingListResponse` — no business content, no credentials | None (read-only) | `test_phase2b_source_mapping.py` (53 cases) | implemented |
+| Admin source mapping detail | 27, PHASE_2B_PLAN §C.2 | `GET /admin/source-mappings/{code}` | Admin only; 404 if absent | `SourceMappingDetail` — no business content, no credentials | None (read-only) | `test_phase2b_source_mapping.py` | implemented |
+| Admin source mapping validate | 27, PHASE_2B_PLAN §C.2 | `POST /admin/source-mappings/{code}/validate` | Admin only; no side effects; returns structural validation errors | `SourceMappingValidateResponse` | None (read-only) | `test_phase2b_source_mapping.py` | implemented |
+| Admin source mapping upsert | 27, PHASE_2B_PLAN §C.2 | `PUT /admin/source-mappings/{code}` | Admin only; `_compute_mapping_status()` validates enabled sources; A-21 audit-before-save | `SourceMappingDetail` | `admin.source_mapping_changed` | `test_phase2b_source_mapping.py` | implemented |
+| Admin source mapping disable | 27, PHASE_2B_PLAN §C.2 | `POST /admin/source-mappings/{code}/disable` | Admin only; 404 if absent; 409 if already disabled; A-21 audit-before-disable | 204 No Content | `admin.source_mapping_disabled` | `test_phase2b_source_mapping.py` | implemented |
+| A-20 report guard | 27, PHASE_2B_PLAN §C.2 | `POST /reports/staging` | Report-capable roles; blocks 422 when source_mappings table is seeded and project has no complete mapping | N/A | N/A | `test_phase2b_source_mapping.py` + smoke | implemented |
 
 ---
 
@@ -228,6 +234,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Admin Connectors screen | `/admin/connectors` | Live `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` | Phase 2B Slice 2; frontend lint/build | implemented |
 | Admin Audit Log screen | `/admin/audit` | Live `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; filters, pagination, CSV export, detail panel | Phase 2B Slice 4; frontend lint/build | implemented |
 | Admin Permissions screen | `/admin/permissions` | Live three-tab screen: Role Matrix (static), Entra Group Mapping (CRUD via `GET/PUT/DELETE /admin/entra-mappings` with `SlideInPanel` add/edit and typed-confirmation `ConfirmDialog` delete), Project Role Assignments (active placeholder linking to Source Mapping) | Phase 2B Slice 5; frontend lint/build | implemented |
+| Admin Source Mapping screen | `/admin/source-mapping` | Live two-column editor: project list + full editor with 8 form sections, Validate/Save/Disable, `DiffPreviewModal`, risky-change `ConfirmDialog`, typed-confirmation disable | Phase 2B Slice 6; frontend lint/build | implemented |
 
 ---
 

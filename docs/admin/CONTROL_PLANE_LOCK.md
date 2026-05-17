@@ -134,7 +134,8 @@ slices are gated on explicit per-slice user approval, as documented in
 | 3 — System Health + cost monitor | Complete | `GET /admin/health/live`, `GET /admin/cost`; `cost_events` table + sparkline buckets; 28 integration cases in `test_phase2b_health_cost.py`; live `AdminHealthScreen.tsx` frontend with auto-refresh, cost banners, and warning/exceeded thresholds. |
 | 4 — Audit Log screen | Complete | `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; `admin_events` table + UNION read-model; 18 integration cases in `test_phase2b_audit.py`; `AdminAuditLogScreen.tsx` frontend with filters, pagination, CSV export, and detail panel. |
 | 5 — Permissions & Roles | Complete | `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`, `DELETE /admin/entra-mappings/{group_id}`; `entra_group_mappings` table + `_validate_canonical_role()`; A-17 audit-before-save on upsert and delete; 33 integration cases in `test_phase2b_permissions.py` (RBAC, 401, happy paths, invalid role 400, A-17 order, 404 delete, C-1, C-6); live three-tab `AdminPermissionsScreen.tsx` frontend. |
-| 6 — Project Source Mapping | Pending | Requires explicit user approval. |
+| 6 — Project Source Mapping | Complete | `GET /admin/source-mappings`, `GET /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/validate`, `PUT /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/disable`; `source_mappings` table + JSON seeding + `_compute_mapping_status()`; A-21 audit-before-save; A-20 guard in `stage_report()`; 53 integration cases in `test_phase2b_source_mapping.py` (RBAC, 401, list, detail, validate, upsert, A-21, disable 204/404/409, C-1, C-6); live two-column `AdminSourceMappingScreen.tsx` frontend with diff preview and risky-change confirmation. |
+| 7 — Approval Queue + admin override | Pending | Requires explicit user approval. |
 | 7 — Approval Queue + admin override | Pending | Requires explicit user approval. |
 | 8 — Dashboard | Pending | Requires explicit user approval. |
 | 9 — Routing + admin nav | Pending | Requires explicit user approval. |
@@ -193,10 +194,10 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
+**PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
 
 Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is
-in progress: Slices 1–5 are complete and CI-green. The next safe step is
-Phase 2B Slice 6 (Project Source Mapping), and it requires explicit user
-authorization. This does not authorize deployment, Phase 2B Slice 6
+in progress: Slices 1–6 are complete and CI-green. The next safe step is
+Phase 2B Slice 7 (Approval Queue + admin override), and it requires explicit
+user authorization. This does not authorize deployment, Phase 2B Slice 7
 implementation, Phase 2C, or any spec change.

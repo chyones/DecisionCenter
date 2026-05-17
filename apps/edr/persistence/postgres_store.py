@@ -124,6 +124,30 @@ class PostgresStore:
                 )
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS source_mappings (
+                    project_code     TEXT PRIMARY KEY,
+                    project_name     TEXT NOT NULL DEFAULT '',
+                    contract_numbers JSONB NOT NULL DEFAULT '[]',
+                    sharepoint       JSONB NOT NULL DEFAULT '{}',
+                    owncloud         JSONB NOT NULL DEFAULT '{}',
+                    email            JSONB NOT NULL DEFAULT '{}',
+                    odoo             JSONB NOT NULL DEFAULT '{}',
+                    related_people   JSONB NOT NULL DEFAULT '{}',
+                    enabled_sources  JSONB NOT NULL DEFAULT '[]',
+                    allowed_roles    JSONB NOT NULL DEFAULT '[]',
+                    mapping_status   TEXT NOT NULL DEFAULT 'incomplete',
+                    last_validation_result JSONB,
+                    last_validated_at      TIMESTAMP WITH TIME ZONE,
+                    created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    created_by_hash  TEXT,
+                    updated_by_hash  TEXT
+                )
+                """
+            )
+            await self._seed_source_mappings(conn)
 
     async def insert_audit(
         self,
@@ -743,6 +767,168 @@ class PostgresStore:
                 entra_group_id,
             )
             return dict(row) if row else None
+
+    async def _seed_source_mappings(self, conn: Any) -> None:
+        """Seed source_mappings from project_source_mapping.json if table is empty."""
+        import json as _json
+        from pathlib import Path
+
+        count = await conn.fetchval("SELECT COUNT(*) FROM source_mappings")
+        if count != 0:
+            return
+        json_path = Path(__file__).parents[3] / "docs" / "config" / "project_source_mapping.json"
+        if not json_path.exists():
+            return
+        with open(json_path, encoding="utf-8") as f:
+            entries = _json.load(f)
+        for entry in entries:
+            code = entry["project_code"]
+            sp = entry.get("sharepoint", {})
+            oc = entry.get("owncloud", {})
+            em = entry.get("email", {})
+            od = entry.get("odoo", {})
+            await conn.execute(
+                """
+                INSERT INTO source_mappings
+                    (project_code, contract_numbers, sharepoint, owncloud,
+                     email, odoo, enabled_sources, mapping_status)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                ON CONFLICT (project_code) DO NOTHING
+                """,
+                code,
+                _json.dumps(entry.get("contract_numbers", [])),
+                _json.dumps({
+                    "site_id": sp.get("site_id", ""),
+                    "drive_id": sp.get("drive_id", ""),
+                    "root_path": sp.get("root_path", ""),
+                }),
+                _json.dumps({"base_path": oc.get("base_path", "")}),
+                _json.dumps({
+                    "shared_mailboxes": em.get("shared_mailboxes", []),
+                    "document_control_mailbox": em.get("document_control_mailbox", ""),
+                    "client_domains": [],
+                    "consultant_domains": [],
+                    "contractor_domains": [],
+                }),
+                _json.dumps({
+                    "project_model": od.get("project_model", ""),
+                    "cost_model": od.get("cost_model", ""),
+                    "project_external_id": od.get("project_external_id", ""),
+                    "project_name": "",
+                }),
+                _json.dumps(["sharepoint", "owncloud", "email", "odoo"]),
+                "complete",
+            )
+
+    async def list_source_mappings(self) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT project_code, project_name, mapping_status, contract_numbers
+                FROM source_mappings ORDER BY project_code ASC
+                """
+            )
+            return [dict(r) for r in rows]
+
+    async def get_source_mapping(self, project_code: str) -> dict[str, Any] | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM source_mappings WHERE project_code = $1", project_code
+            )
+            return dict(row) if row else None
+
+    async def upsert_source_mapping(
+        self,
+        *,
+        project_code: str,
+        project_name: str,
+        contract_numbers: list,
+        sharepoint: dict,
+        owncloud: dict,
+        email: dict,
+        odoo: dict,
+        related_people: dict,
+        enabled_sources: list,
+        allowed_roles: list,
+        mapping_status: str,
+        actor_hash: str | None,
+    ) -> None:
+        import json as _json
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO source_mappings
+                    (project_code, project_name, contract_numbers, sharepoint,
+                     owncloud, email, odoo, related_people, enabled_sources,
+                     allowed_roles, mapping_status, updated_at, updated_by_hash,
+                     created_by_hash)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+                ON CONFLICT (project_code) DO UPDATE SET
+                    project_name     = EXCLUDED.project_name,
+                    contract_numbers = EXCLUDED.contract_numbers,
+                    sharepoint       = EXCLUDED.sharepoint,
+                    owncloud         = EXCLUDED.owncloud,
+                    email            = EXCLUDED.email,
+                    odoo             = EXCLUDED.odoo,
+                    related_people   = EXCLUDED.related_people,
+                    enabled_sources  = EXCLUDED.enabled_sources,
+                    allowed_roles    = EXCLUDED.allowed_roles,
+                    mapping_status   = EXCLUDED.mapping_status,
+                    updated_at       = NOW(),
+                    updated_by_hash  = EXCLUDED.updated_by_hash
+                """,
+                project_code,
+                project_name,
+                _json.dumps(contract_numbers),
+                _json.dumps(sharepoint),
+                _json.dumps(owncloud),
+                _json.dumps(email),
+                _json.dumps(odoo),
+                _json.dumps(related_people),
+                _json.dumps(enabled_sources),
+                _json.dumps(allowed_roles),
+                mapping_status,
+                actor_hash,
+            )
+
+    async def disable_source_mapping(self, project_code: str) -> None:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE source_mappings
+                SET mapping_status = 'disabled', updated_at = NOW()
+                WHERE project_code = $1
+                """,
+                project_code,
+            )
+
+    async def update_source_mapping_validation(
+        self,
+        project_code: str,
+        status: str,
+        result: dict,
+    ) -> None:
+        import json as _json
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE source_mappings
+                SET mapping_status = $2,
+                    last_validation_result = $3,
+                    last_validated_at = NOW()
+                WHERE project_code = $1
+                """,
+                project_code,
+                status,
+                _json.dumps(result),
+            )
 
     async def insert_admin_event(
         self,

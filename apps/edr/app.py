@@ -583,6 +583,25 @@ async def stage_report(
     user_id = (claims.user_id if claims and claims.user_id else None) or request.user_id
     role = claims.role if claims else None
 
+    # A-20: block if source_mappings table is seeded and project has no complete mapping
+    if request.project_code:
+        try:
+            _pg = get_postgres_store()
+            await _pg.init_schema()
+            _all = await _pg.list_source_mappings()
+            if _all:  # table is seeded — enforce the mapping constraint
+                _row = await _pg.get_source_mapping(request.project_code)
+                if _row is None or _row.get("mapping_status") != "complete":
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Project {request.project_code!r} has no complete source mapping. "
+                               "Configure it in the Source Mapping admin screen.",
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # DB unavailable — allow through; production will fail at retrieval
+
     state = DecisionState(
         request_id=str(uuid.uuid4()),
         user_id=user_id,
@@ -1823,6 +1842,339 @@ async def get_admin_audit_event(
         service=row.get("service"),
         detail=str(row.get("detail", "")),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 6 — Project Source Mapping
+# Implements GET /admin/source-mappings, GET /admin/source-mappings/{code},
+# POST /admin/source-mappings/{code}/validate, PUT /admin/source-mappings/{code},
+# POST /admin/source-mappings/{code}/disable per docs/execution/PHASE_2B_PLAN.md §E row 6.
+# Admin-only via _require_admin.  C-1 / C-6 compliant.  A-21 audit-before-save.
+# ---------------------------------------------------------------------------
+
+
+class SourceMappingSharePoint(BaseModel):
+    model_config = {"extra": "forbid"}
+    site_id: str = ""
+    drive_id: str = ""
+    root_path: str = ""
+
+
+class SourceMappingOwnCloud(BaseModel):
+    model_config = {"extra": "forbid"}
+    base_path: str = ""
+
+
+class SourceMappingEmail(BaseModel):
+    model_config = {"extra": "forbid"}
+    shared_mailboxes: list[str] = []
+    document_control_mailbox: str = ""
+    client_domains: list[str] = []
+    consultant_domains: list[str] = []
+    contractor_domains: list[str] = []
+
+
+class SourceMappingOdoo(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_model: str = ""
+    cost_model: str = ""
+    project_external_id: str = ""
+    project_name: str = ""
+
+
+class RelatedPeople(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_manager: str = ""
+    commercial_manager: str = ""
+    finance_owner: str = ""
+    document_controller: str = ""
+    other: list[str] = []
+
+
+class SourceMappingSummary(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_code: str
+    project_name: str
+    mapping_status: str
+    contract_numbers: list[str]
+
+
+class SourceMappingDetail(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_code: str
+    project_name: str
+    contract_numbers: list[str]
+    sharepoint: SourceMappingSharePoint
+    owncloud: SourceMappingOwnCloud
+    email: SourceMappingEmail
+    odoo: SourceMappingOdoo
+    related_people: RelatedPeople
+    enabled_sources: list[str]
+    allowed_roles: list[str]
+    mapping_status: str
+    last_validation_result: dict[str, Any] | None = None
+    last_validated_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    created_by_hash: str | None = None
+    updated_by_hash: str | None = None
+
+
+class SourceMappingListResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+    mappings: list[SourceMappingSummary]
+
+
+class SourceMappingUpsertRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_name: str = Field(default="", min_length=0)
+    contract_numbers: list[str] = []
+    sharepoint: SourceMappingSharePoint = Field(default_factory=SourceMappingSharePoint)
+    owncloud: SourceMappingOwnCloud = Field(default_factory=SourceMappingOwnCloud)
+    email: SourceMappingEmail = Field(default_factory=SourceMappingEmail)
+    odoo: SourceMappingOdoo = Field(default_factory=SourceMappingOdoo)
+    related_people: RelatedPeople = Field(default_factory=RelatedPeople)
+    enabled_sources: list[str] = []
+    allowed_roles: list[str] = []
+
+
+class ValidationFieldError(BaseModel):
+    model_config = {"extra": "forbid"}
+    field: str
+    message: str
+
+
+class SourceMappingValidateResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_code: str
+    valid: bool
+    status: str
+    errors: list[ValidationFieldError]
+
+
+def _compute_mapping_status(
+    code: str, body: SourceMappingUpsertRequest
+) -> tuple[str, list[ValidationFieldError]]:
+    """Pure function: returns (status, errors). status ∈ {'complete', 'incomplete'}."""
+    errors: list[ValidationFieldError] = []
+    enabled = set(body.enabled_sources)
+
+    if "sharepoint" in enabled:
+        if not body.sharepoint.site_id:
+            errors.append(ValidationFieldError(field="sharepoint.site_id", message="Required for SharePoint source"))
+        if not body.sharepoint.drive_id:
+            errors.append(ValidationFieldError(field="sharepoint.drive_id", message="Required for SharePoint source"))
+        if not body.sharepoint.root_path:
+            errors.append(ValidationFieldError(field="sharepoint.root_path", message="Required for SharePoint source"))
+
+    if "owncloud" in enabled:
+        if not body.owncloud.base_path:
+            errors.append(ValidationFieldError(field="owncloud.base_path", message="Required for ownCloud source"))
+
+    if "email" in enabled:
+        if not body.email.shared_mailboxes and not body.email.client_domains:
+            errors.append(ValidationFieldError(
+                field="email.shared_mailboxes",
+                message="At least one mailbox or client domain required for Email source",
+            ))
+
+    if "odoo" in enabled:
+        if not body.odoo.project_external_id and not body.odoo.project_name:
+            errors.append(ValidationFieldError(
+                field="odoo.project_external_id",
+                message="Odoo project external ID or project name required",
+            ))
+
+    status = "complete" if not errors else "incomplete"
+    return status, errors
+
+
+def _row_to_source_mapping_detail(row: dict[str, Any]) -> SourceMappingDetail:
+    import json as _json
+
+    def _j(val: Any) -> Any:
+        return _json.loads(val) if isinstance(val, str) else (val or {})
+
+    def _jlist(val: Any) -> list:
+        parsed = _json.loads(val) if isinstance(val, str) else (val or [])
+        return parsed if isinstance(parsed, list) else []
+
+    sp = _j(row.get("sharepoint"))
+    oc = _j(row.get("owncloud"))
+    em = _j(row.get("email"))
+    od = _j(row.get("odoo"))
+    rp = _j(row.get("related_people"))
+
+    return SourceMappingDetail(
+        project_code=str(row["project_code"]),
+        project_name=str(row.get("project_name") or ""),
+        contract_numbers=_jlist(row.get("contract_numbers")),
+        sharepoint=SourceMappingSharePoint(
+            site_id=sp.get("site_id", ""),
+            drive_id=sp.get("drive_id", ""),
+            root_path=sp.get("root_path", ""),
+        ),
+        owncloud=SourceMappingOwnCloud(base_path=oc.get("base_path", "")),
+        email=SourceMappingEmail(
+            shared_mailboxes=em.get("shared_mailboxes", []),
+            document_control_mailbox=em.get("document_control_mailbox", ""),
+            client_domains=em.get("client_domains", []),
+            consultant_domains=em.get("consultant_domains", []),
+            contractor_domains=em.get("contractor_domains", []),
+        ),
+        odoo=SourceMappingOdoo(
+            project_model=od.get("project_model", ""),
+            cost_model=od.get("cost_model", ""),
+            project_external_id=od.get("project_external_id", ""),
+            project_name=od.get("project_name", ""),
+        ),
+        related_people=RelatedPeople(
+            project_manager=rp.get("project_manager", ""),
+            commercial_manager=rp.get("commercial_manager", ""),
+            finance_owner=rp.get("finance_owner", ""),
+            document_controller=rp.get("document_controller", ""),
+            other=rp.get("other", []),
+        ),
+        enabled_sources=_jlist(row.get("enabled_sources")),
+        allowed_roles=_jlist(row.get("allowed_roles")),
+        mapping_status=str(row.get("mapping_status") or "incomplete"),
+        last_validation_result=_j(row.get("last_validation_result")) if row.get("last_validation_result") else None,
+        last_validated_at=_ts_iso(row["last_validated_at"]) if row.get("last_validated_at") else None,
+        created_at=_ts_iso(row["created_at"]) if row.get("created_at") else None,
+        updated_at=_ts_iso(row["updated_at"]) if row.get("updated_at") else None,
+        created_by_hash=row.get("created_by_hash"),
+        updated_by_hash=row.get("updated_by_hash"),
+    )
+
+
+@app.get("/admin/source-mappings")
+async def list_source_mappings(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> SourceMappingListResponse:
+    """Admin-only list of all project source mappings."""
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows = await pg.list_source_mappings()
+    import json as _json
+    return SourceMappingListResponse(
+        mappings=[
+            SourceMappingSummary(
+                project_code=str(r["project_code"]),
+                project_name=str(r.get("project_name") or ""),
+                mapping_status=str(r.get("mapping_status") or "incomplete"),
+                contract_numbers=(
+                    _json.loads(r["contract_numbers"])
+                    if isinstance(r.get("contract_numbers"), str)
+                    else list(r.get("contract_numbers") or [])
+                ),
+            )
+            for r in rows
+        ]
+    )
+
+
+@app.get("/admin/source-mappings/{code}")
+async def get_source_mapping(
+    code: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> SourceMappingDetail:
+    """Admin-only single source mapping detail."""
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    row = await pg.get_source_mapping(code)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return _row_to_source_mapping_detail(row)
+
+
+@app.post("/admin/source-mappings/{code}/validate")
+async def validate_source_mapping(
+    code: str,
+    body: SourceMappingUpsertRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> SourceMappingValidateResponse:
+    """Admin-only structural validation; no side effects."""
+    _require_admin(claims)
+    status, errors = _compute_mapping_status(code, body)
+    return SourceMappingValidateResponse(
+        project_code=code,
+        valid=len(errors) == 0,
+        status=status,
+        errors=errors,
+    )
+
+
+@app.put("/admin/source-mappings/{code}")
+async def upsert_source_mapping(
+    code: str,
+    body: SourceMappingUpsertRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> SourceMappingDetail:
+    """Admin-only upsert of a source mapping.
+
+    A-21: audit event is emitted BEFORE the database write.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    status, _ = _compute_mapping_status(code, body)
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    # A-21 audit-before-save
+    await pg.insert_admin_event(
+        event_type="admin.source_mapping_changed",
+        actor_hash=actor_hash,
+        project_code=code,
+        detail=f"status={status}",
+    )
+    await pg.upsert_source_mapping(
+        project_code=code,
+        project_name=body.project_name,
+        contract_numbers=body.contract_numbers,
+        sharepoint=body.sharepoint.model_dump(),
+        owncloud=body.owncloud.model_dump(),
+        email=body.email.model_dump(),
+        odoo=body.odoo.model_dump(),
+        related_people=body.related_people.model_dump(),
+        enabled_sources=body.enabled_sources,
+        allowed_roles=body.allowed_roles,
+        mapping_status=status,
+        actor_hash=actor_hash,
+    )
+    row = await pg.get_source_mapping(code)
+    if row is None:
+        raise HTTPException(status_code=500, detail="Upsert failed.")
+    return _row_to_source_mapping_detail(row)
+
+
+@app.post("/admin/source-mappings/{code}/disable")
+async def disable_source_mapping(
+    code: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> Response:
+    """Admin-only soft-disable of a source mapping.
+
+    404 if missing; 409 if already disabled.  A-21: audit event emitted
+    before the status change.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    row = await pg.get_source_mapping(code)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    if row.get("mapping_status") == "disabled":
+        raise HTTPException(status_code=409, detail="Mapping already disabled")
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.source_mapping_disabled",
+        actor_hash=actor_hash,
+        project_code=code,
+        detail="mapping disabled",
+    )
+    await pg.disable_source_mapping(code)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
