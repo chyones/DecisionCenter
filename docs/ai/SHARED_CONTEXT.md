@@ -7,9 +7,9 @@
 - Current status: `PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 9 (Routing + Admin Nav) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 10 (Closeout).
-  Requires explicit per-slice user approval before implementation.
+- Active phase: Phase 2B — all 10 slices complete and CI-green. Phase 2B is closed.
+- Current allowed next work: Phase 2C (UI Hardening & Acceptance Validation).
+  Requires explicit user authorization before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
 
@@ -91,6 +91,10 @@ highlighting works correctly. `Topbar.tsx` now shows correct breadcrumb labels
 for every admin route (`/admin/dashboard`, `/admin/connectors`, `/admin/audit`,
 `/admin/approvals`). No backend changes; no new tests.
 
+Slice 10 is the closeout slice: `docs/execution/PHASE_2B_REPORT.md` records
+the A-01..A-23 QA matrix, cross-screen invariants, audit event catalog, and
+validation evidence. All governance docs are refreshed. No code changes.
+
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
@@ -123,8 +127,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 9 without explicit per-slice
-  user approval.
+- Do not start Phase 2C without explicit user authorization. Phase 2B is closed.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not deploy.

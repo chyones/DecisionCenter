@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-18 (Phase 2B Slice 9 — Routing + Admin Nav)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–9 are complete and CI-green. Phase 2B is the safe next phase; Slice 10 requires explicit per-slice user approval. Production is `NOT_LIVE`.
+> **Date:** 2026-05-17 (Phase 2B Closeout — Slices 1–10 complete)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2C is the safe next phase and requires explicit user authorization. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 

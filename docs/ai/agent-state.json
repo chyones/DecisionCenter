@@ -1,10 +1,10 @@
 {
   "project": "DecisionCenter",
   "current_commit": "927e7c3",
-  "status": "PHASE_2B_SLICE_9_COMPLETE_NOT_LIVE",
+  "status": "PHASE_2B_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
-  "last_completed_phase": "Phase 2A",
-  "active_phase": "Phase 2B",
+  "last_completed_phase": "Phase 2B",
+  "active_phase": "Phase 2C",
   "completed_phase_2a_slices": [
     "Slice 1 — API client foundation and auth wiring",
     "Slice 2 — Query Composer submit",
@@ -29,9 +29,10 @@
     "Slice 6 — Project Source Mapping",
     "Slice 7 — Approval Queue + admin override",
     "Slice 8 — Dashboard",
-    "Slice 9 — Routing + Admin Nav"
+    "Slice 9 — Routing + Admin Nav",
+    "Slice 10 — Closeout + truth reconciliation"
   ],
-  "next_allowed_phase": "Phase 2B Slice 10 — Closeout",
+  "next_allowed_phase": "Phase 2C — UI Hardening & Acceptance Validation",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -46,8 +47,10 @@
   "requires_explicit_user_approval_for_phase_2b_slice_7": false,
   "requires_explicit_user_approval_for_phase_2b_slice_8": false,
   "requires_explicit_user_approval_for_phase_2b_slice_9": false,
-  "latest_report": "docs/execution/PHASE_2B_PLAN.md",
-  "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
+  "requires_explicit_user_approval_for_phase_2b_slice_10": false,
+  "requires_explicit_user_approval_for_phase_2c": true,
+  "latest_report": "docs/execution/PHASE_2B_REPORT.md",
+  "latest_full_phase_report": "docs/execution/PHASE_2B_REPORT.md",
   "latest_verified_ci": {
     "commit": "c6a92e410e7d03c331683e89e078e181a2300386",
     "run_id": 25982553222,

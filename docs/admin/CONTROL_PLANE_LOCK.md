@@ -138,7 +138,7 @@ slices are gated on explicit per-slice user approval, as documented in
 | 7 — Approval Queue + admin override | Complete | `GET /admin/approvals`, `GET /admin/approvals/{request_id}`, `POST /admin/approvals/{request_id}/override-approve`, `POST /admin/approvals/{request_id}/override-reject`; `list_approval_queue()` queries `audit_log`; A-10 self-block; N-1 audit-before-action; R13 failed-QG → 409; 49 integration cases in `test_phase2b_approvals.py`; live `AdminApprovalQueueScreen.tsx` frontend. CI green. |
 | 8 — Dashboard | Complete | `GET /admin/dashboard/summary`; `dashboard_counts_today()` in PostgresStore; service probes, approval count, cost, today counts, recent events; 16 integration cases in `test_phase2b_dashboard.py`; live `AdminDashboardScreen.tsx` with stat grid, service dots, recent events; `/admin` redirects to `/admin/dashboard`. CI green. |
 | 9 — Routing + admin nav | Complete | Sidebar.tsx: Dashboard path `/admin/dashboard`, Audit Log and Approvals entries added; Topbar.tsx: breadcrumb labels for all admin routes. Frontend-only. CI green. |
-| 10 — Phase 2B closeout | Pending | Requires explicit user approval. |
+| 10 — Phase 2B closeout | Complete | PHASE_2B_REPORT.md authored; A-01..A-23 QA matrix recorded; cross-screen invariants verified; all 10 audit event types documented. Phase 2B is closed. |
 
 ## Pip-audit Triage (Decided in Phase 1H — Promotion Still Deferred)
 
@@ -193,10 +193,11 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**PHASE_2B_SLICE_9_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
+**PHASE_2B_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
 
-Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is
-in progress: Slices 1–9 are complete and CI-green. The next safe step is
-Phase 2B Slice 10 (Closeout), and it requires explicit
-user authorization. This does not authorize deployment, Phase 2B Slice 10
-implementation, Phase 2C, or any spec change.
+Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2B
+is closed. All ten slices are CI-green. Phase 2C is the safe next phase
+(UI Hardening & Acceptance Validation), and it requires explicit user
+authorization. This does not authorize deployment, Phase 2C implementation,
+or any spec change. All admin endpoints are locked; Phase 2C scope is
+test coverage and accessibility hardening — no new admin endpoints.
