@@ -7,8 +7,8 @@
 - Current status: `PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 7 (Approval Queue + admin override) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 8 (Dashboard).
+- Active phase: Phase 2B — Slice 8 (Dashboard) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 9 (Routing + Admin Nav).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -76,6 +76,14 @@ N-1 audit-before-action, R13 failed-QG → 409 guard, and the live
 QG flags, and mandatory-comment override actions. 49 integration cases in
 `test_phase2b_approvals.py` lock the contract.
 
+Slice 8 adds `GET /admin/dashboard/summary` with `dashboard_counts_today()`
+in PostgresStore, service health probes, approval queue count, cost data,
+today counts, and recent events. The live `AdminDashboardScreen.tsx` frontend
+provides a 6-card stat grid with clickable navigation, external service health
+dots, cost progress bars, and a recent events table. `/admin` redirects to
+`/admin/dashboard` and `getDefaultLanding('admin')` returns `/admin/dashboard`.
+16 integration cases in `test_phase2b_dashboard.py` lock the contract.
+
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
@@ -108,7 +116,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 7 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 8 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

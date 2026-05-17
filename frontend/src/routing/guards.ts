@@ -12,7 +12,7 @@ import type { Role } from './roles';
 
 /** Default landing path for each canonical role (contract §F.1). */
 export function getDefaultLanding(role: Role): string {
-  if (role === 'admin') return '/admin';
+  if (role === 'admin') return '/admin/dashboard';
   if (role === 'auditor') return '/workspace/reports';
   return '/workspace/new';
 }

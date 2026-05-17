@@ -974,6 +974,28 @@ class PostgresStore:
             )
             return ([dict(r) for r in rows], total)
 
+    async def dashboard_counts_today(self) -> dict[str, int]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*) AS requests_today,
+                    COUNT(*) FILTER (
+                        WHERE quality_gate_status = 'failed'
+                    ) AS failed_qg_today
+                FROM audit_log
+                WHERE date_trunc('day', created_at AT TIME ZONE 'UTC')
+                    = date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                """
+            )
+            if row is None:
+                return {"requests_today": 0, "failed_qg_today": 0}
+            return {
+                "requests_today": int(row["requests_today"]),
+                "failed_qg_today": int(row["failed_qg_today"]),
+            }
+
     async def insert_admin_event(
         self,
         *,

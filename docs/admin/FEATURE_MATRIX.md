@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-18 (Phase 2B Slice 7 — Approval Queue + admin override)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–7 are complete and CI-green. Phase 2B is the safe next phase; Slice 8 requires explicit per-slice user approval. Production is `NOT_LIVE`.
+> **Date:** 2026-05-18 (Phase 2B Slice 8 — Dashboard)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–8 are complete and CI-green. Phase 2B is the safe next phase; Slice 9 requires explicit per-slice user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -85,6 +85,7 @@
 | Admin approval queue detail | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.6 | `GET /admin/approvals/{request_id}` | Admin only; 404 if not found; 409 if already finalized; includes QG flags from MinIO | `ApprovalQueueDetail` | None (read-only) | `test_phase2b_approvals.py` | implemented |
 | Admin override approve | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.6 | `POST /admin/approvals/{request_id}/override-approve` | Admin only; A-10 self-approval blocked (403); R13 failed QG blocked (409); N-1 audit-before-action; calls `node_17_publish.run()` | `AdminOverrideResponse` | `report.admin_override_approved`, `report.admin_override_rejected` | `test_phase2b_approvals.py` | implemented |
 | Admin override reject | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.6 | `POST /admin/approvals/{request_id}/override-reject` | Admin only; A-10 self-rejection blocked (403); R13 failed QG blocked (409); N-1 audit-before-action; does NOT publish | `AdminOverrideResponse` | `report.admin_override_rejected` | `test_phase2b_approvals.py` | implemented |
+| Admin dashboard summary | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.5 | `GET /admin/dashboard/summary` | Admin only; aggregates service health, approval queue count, cost data, today counts, recent events; no query, no evidence, no report content | `DashboardSummary` | None (read-only) | `test_phase2b_dashboard.py` (16 cases) | implemented |
 
 ---
 
@@ -240,6 +241,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Admin Permissions screen | `/admin/permissions` | Live three-tab screen: Role Matrix (static), Entra Group Mapping (CRUD via `GET/PUT/DELETE /admin/entra-mappings` with `SlideInPanel` add/edit and typed-confirmation `ConfirmDialog` delete), Project Role Assignments (active placeholder linking to Source Mapping) | Phase 2B Slice 5; frontend lint/build | implemented |
 | Admin Source Mapping screen | `/admin/source-mapping` | Live two-column editor: project list + full editor with 8 form sections, Validate/Save/Disable, `DiffPreviewModal`, risky-change `ConfirmDialog`, typed-confirmation disable | Phase 2B Slice 6; frontend lint/build | implemented |
 | Admin Approval Queue screen | `/admin/approvals` | Live `GET /admin/approvals` list with project/state filters, offset pagination, detail panel via `GET /admin/approvals/{id}`; QG flags display; admin override approve/reject with mandatory comment and warning banner; A-10 self-block enforced server-side | Phase 2B Slice 7; frontend lint/build | implemented |
+| Admin Dashboard screen | `/admin/dashboard` | Live `GET /admin/dashboard/summary`; 6-card stat grid with clickable cards, service health dots, progress bars, recent events table; `/admin` redirects here; `getDefaultLanding('admin')` returns `/admin/dashboard` | Phase 2B Slice 8; frontend lint/build | implemented |
 
 ---
 

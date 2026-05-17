@@ -1,7 +1,7 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "b015330",
-  "status": "PHASE_2B_SLICE_7_COMPLETE_NOT_LIVE",
+  "current_commit": "927e7c3",
+  "status": "PHASE_2B_SLICE_8_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2A",
   "active_phase": "Phase 2B",
@@ -27,9 +27,10 @@
     "Slice 4 — Audit Log screen",
     "Slice 5 — Permissions & Roles (Entra Group Mapping)",
     "Slice 6 — Project Source Mapping",
-    "Slice 7 — Approval Queue + admin override"
+    "Slice 7 — Approval Queue + admin override",
+    "Slice 8 — Dashboard"
   ],
-  "next_allowed_phase": "Phase 2B Slice 8 — Dashboard",
+  "next_allowed_phase": "Phase 2B Slice 9 — Routing + Admin Nav",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -42,6 +43,7 @@
   "requires_explicit_user_approval_for_phase_2b_slice_5": false,
   "requires_explicit_user_approval_for_phase_2b_slice_6": false,
   "requires_explicit_user_approval_for_phase_2b_slice_7": false,
+  "requires_explicit_user_approval_for_phase_2b_slice_8": false,
   "latest_report": "docs/execution/PHASE_2B_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
@@ -55,7 +57,7 @@
     "date": "2026-05-18",
     "phase2a_e2e": "PASS",
     "smoke": "2 passed",
-    "test": "443 passed, 1 warning",
+    "test": "459 passed, 1 warning",
     "eval": "64/64 passed",
     "ruff": "clean",
     "compileall": "clean",

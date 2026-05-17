@@ -9,6 +9,7 @@ import { AdminSourceMappingScreen } from '../screens/AdminSourceMappingScreen';
 import { AdminConnectorsScreen } from '../screens/AdminConnectorsScreen';
 import { AdminAuditLogScreen } from '../screens/AdminAuditLogScreen';
 import { AdminApprovalQueueScreen } from '../screens/AdminApprovalQueueScreen';
+import { AdminDashboardScreen } from '../screens/AdminDashboardScreen';
 import { QueryComposerScreen } from '../screens/QueryComposerScreen';
 import { ReportsListScreen } from '../screens/ReportsListScreen';
 import { ProcessingScreen } from '../screens/ProcessingScreen';
@@ -58,13 +59,12 @@ export function Router() {
 
   // Admin routes
   if (path === '/admin') {
-    return (
-      <PlaceholderScreen
-        title="Admin Dashboard"
-        state="phase_2b_placeholder"
-        body="System overview, service status, and operational metrics will appear here."
-      />
-    );
+    window.location.replace('#/admin/dashboard');
+    return null;
+  }
+
+  if (path === '/admin/dashboard') {
+    return <AdminDashboardScreen />;
   }
 
   if (path === '/admin/health') {

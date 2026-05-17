@@ -466,6 +466,30 @@ export interface AdminOverrideResponse {
   new_state: string;
 }
 
+// Phase 2B Slice 8 — Dashboard
+export interface DashboardServiceStatus {
+  name: string;
+  display_name: string;
+  status: string;
+}
+
+export interface DashboardSummary {
+  services_ok: number;
+  services_total: number;
+  approvals_pending: number;
+  daily_cost: number;
+  daily_cap: number;
+  daily_percent: number;
+  requests_today: number;
+  failed_qg_today: number;
+  monthly_cost: number;
+  monthly_cap: number;
+  monthly_percent: number;
+  services: DashboardServiceStatus[];
+  recent_events: AuditEventSummary[];
+  checked_at: string;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

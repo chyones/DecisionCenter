@@ -2541,3 +2541,114 @@ async def admin_override_reject(
         action="admin_override_rejected",
         new_state="rejected",
     )
+
+
+# Phase 2B Slice 8 — Dashboard
+
+class DashboardServiceStatus(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str
+    display_name: str
+    status: str   # "ok", "error", "unknown"
+
+
+class DashboardSummary(BaseModel):
+    model_config = {"extra": "forbid"}
+    services_ok: int
+    services_total: int
+    approvals_pending: int
+    daily_cost: float
+    daily_cap: float
+    daily_percent: float
+    requests_today: int
+    failed_qg_today: int
+    monthly_cost: float
+    monthly_cap: float
+    monthly_percent: float
+    services: list[DashboardServiceStatus]
+    recent_events: list[AuditEventSummary]   # reuse existing model; last 10
+    checked_at: str                          # ISO-8601; A-02
+
+
+@app.get("/admin/dashboard/summary", response_model=DashboardSummary)
+async def admin_dashboard_summary(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> DashboardSummary:
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    # 1. Service health probes
+    svc_statuses: list[DashboardServiceStatus] = []
+    for name, svc in services_catalog.SERVICE_REGISTRY.items():
+        status, _ = _probe_with_latency(name)
+        svc_statuses.append(DashboardServiceStatus(
+            name=name,
+            display_name=svc.display_name,
+            status=status,
+        ))
+    services_ok = sum(1 for s in svc_statuses if s.status == "ok")
+
+    # 2. Approval queue count
+    try:
+        _, approvals_pending = await pg.list_approval_queue(limit=1, offset=0)
+    except Exception:
+        approvals_pending = 0
+
+    # 3. Cost data
+    from apps.edr.llm import _cost_tracker
+    daily_cost = _cost_tracker.daily_cost
+    daily_cap = settings.daily_cost_cap_usd
+    daily_percent = round((daily_cost / daily_cap * 100), 2) if daily_cap > 0 else 0.0
+    try:
+        monthly_cost = await pg.monthly_cost_aggregate()
+    except Exception:
+        monthly_cost = 0.0
+    monthly_cap = settings.monthly_cost_target_usd
+    monthly_percent = (
+        round((monthly_cost / monthly_cap * 100), 2) if monthly_cap > 0 else 0.0
+    )
+
+    # 4. Today's request counts
+    try:
+        counts = await pg.dashboard_counts_today()
+        requests_today = counts["requests_today"]
+        failed_qg_today = counts["failed_qg_today"]
+    except Exception:
+        requests_today = 0
+        failed_qg_today = 0
+
+    # 5. Recent events (last 10)
+    try:
+        rows, _ = await pg.list_audit_events(limit=10, offset=0)
+    except Exception:
+        rows = []
+    recent: list[AuditEventSummary] = [
+        AuditEventSummary(
+            event_id=str(r.get("event_id", "")),
+            event_type=str(r.get("event_type", "")),
+            ts=_ts_iso(r["ts"]) if r.get("ts") else "",
+            user_id_hash=r.get("user_id_hash"),
+            project_code=r.get("project_code"),
+            service=r.get("service"),
+            detail=str(r.get("detail") or ""),
+        )
+        for r in rows
+    ]
+
+    return DashboardSummary(
+        services_ok=services_ok,
+        services_total=len(svc_statuses),
+        approvals_pending=approvals_pending,
+        daily_cost=daily_cost,
+        daily_cap=daily_cap,
+        daily_percent=daily_percent,
+        requests_today=requests_today,
+        failed_qg_today=failed_qg_today,
+        monthly_cost=monthly_cost,
+        monthly_cap=monthly_cap,
+        monthly_percent=monthly_percent,
+        services=svc_statuses,
+        recent_events=recent,
+        checked_at=datetime.now().isoformat(),
+    )
