@@ -12,3 +12,4 @@ export { ExportPanel } from './ExportPanel';
 export { UploadZone } from './UploadZone';
 export { AdminConnectorsScreen } from './AdminConnectorsScreen';
 export { AdminAuditLogScreen } from './AdminAuditLogScreen';
+export { AdminApprovalQueueScreen } from './AdminApprovalQueueScreen';

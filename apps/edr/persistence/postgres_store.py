@@ -930,6 +930,50 @@ class PostgresStore:
                 _json.dumps(result),
             )
 
+    async def list_approval_queue(
+        self,
+        *,
+        project_code: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List reports pending admin approval.
+
+        Filters: review_state='staging' AND quality_gate_status != 'failed'.
+        This covers both external 'staging' and 'needs_review' states (A-09).
+        """
+        base_clauses = [
+            "review_state = 'staging'",
+            "COALESCE(quality_gate_status, '') != 'failed'",
+        ]
+        extra_params: list[Any] = []
+
+        def _add(clause: str, value: Any) -> None:
+            extra_params.append(value)
+            base_clauses.append(clause.replace("?", f"${len(extra_params)}"))
+
+        if project_code is not None:
+            _add("project_code = ?", project_code)
+
+        where = "WHERE " + " AND ".join(base_clauses)
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                f"SELECT COUNT(*) AS n FROM audit_log {where}", *extra_params
+            )
+            total = int(count_row["n"]) if count_row else 0
+            rows = await conn.fetch(
+                f"""
+                SELECT * FROM audit_log {where}
+                ORDER BY created_at DESC
+                LIMIT ${len(extra_params) + 1} OFFSET ${len(extra_params) + 2}
+                """,
+                *extra_params,
+                limit,
+                offset,
+            )
+            return ([dict(r) for r in rows], total)
+
     async def insert_admin_event(
         self,
         *,

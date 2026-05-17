@@ -61,4 +61,9 @@ export {
   type SourceMappingUpsertRequest,
   type ValidationFieldError,
   type SourceMappingValidateResponse,
+  type ApprovalQueueItem,
+  type ApprovalQueueResponse,
+  type ApprovalQueueDetail,
+  type AdminOverrideRequest,
+  type AdminOverrideResponse,
 } from './types';

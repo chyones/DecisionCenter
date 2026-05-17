@@ -1,7 +1,7 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "df961fc",
-  "status": "PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE",
+  "current_commit": "76c40ab",
+  "status": "PHASE_2B_SLICE_7_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2A",
   "active_phase": "Phase 2B",
@@ -26,9 +26,10 @@
     "Slice 3 — System Health + cost monitor",
     "Slice 4 — Audit Log screen",
     "Slice 5 — Permissions & Roles (Entra Group Mapping)",
-    "Slice 6 — Project Source Mapping"
+    "Slice 6 — Project Source Mapping",
+    "Slice 7 — Approval Queue + admin override"
   ],
-  "next_allowed_phase": "Phase 2B Slice 5 — Permissions & Roles",
+  "next_allowed_phase": "Phase 2B Slice 8 — Dashboard",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -39,6 +40,8 @@
   "requires_explicit_user_approval_for_phase_2b_slice_3": false,
   "requires_explicit_user_approval_for_phase_2b_slice_4": false,
   "requires_explicit_user_approval_for_phase_2b_slice_5": false,
+  "requires_explicit_user_approval_for_phase_2b_slice_6": false,
+  "requires_explicit_user_approval_for_phase_2b_slice_7": false,
   "latest_report": "docs/execution/PHASE_2B_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
@@ -49,10 +52,10 @@
     "url": "https://github.com/chyones/DecisionCenter/actions/runs/25982553222"
   },
   "latest_local_validation": {
-    "date": "2026-05-17",
+    "date": "2026-05-18",
     "phase2a_e2e": "PASS",
     "smoke": "2 passed",
-    "test": "394 passed, 1 warning",
+    "test": "443 passed, 1 warning",
     "eval": "64/64 passed",
     "ruff": "clean",
     "compileall": "clean",

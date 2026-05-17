@@ -422,6 +422,50 @@ export interface SourceMappingValidateResponse {
   errors: ValidationFieldError[];
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2B Slice 7 — Approval Queue
+// ---------------------------------------------------------------------------
+
+export interface ApprovalQueueItem {
+  request_id: string;
+  project_code: string | null;
+  review_state: string;
+  quality_gate_status: string | null;
+  submitted_at: string;
+  requester_hash: string | null;
+  cost_total_usd: number;
+}
+
+export interface ApprovalQueueResponse {
+  items: ApprovalQueueItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ApprovalQueueDetail {
+  request_id: string;
+  project_code: string | null;
+  review_state: string;
+  quality_gate_status: string | null;
+  submitted_at: string;
+  requester_hash: string | null;
+  cost_total_usd: number;
+  token_counts: Record<string, number> | null;
+  requires_approval: boolean;
+  quality_gate_flags: string[];
+}
+
+export interface AdminOverrideRequest {
+  comment: string;
+}
+
+export interface AdminOverrideResponse {
+  request_id: string;
+  action: string;
+  new_state: string;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

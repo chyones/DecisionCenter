@@ -2298,3 +2298,246 @@ async def delete_entra_mapping(
     )
     await pg.delete_entra_mapping(group_id)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 7 — Approval Queue + Admin Override
+# Implements GET /admin/approvals, GET /admin/approvals/{request_id},
+# POST /admin/approvals/{request_id}/override-approve,
+# POST /admin/approvals/{request_id}/override-reject
+# per docs/execution/PHASE_2B_PLAN.md §E row 7.
+# Admin-only via _require_admin.  C-1 / C-6 compliant.  A-10 / R13 enforced.
+# ---------------------------------------------------------------------------
+
+
+class ApprovalQueueItem(BaseModel):
+    model_config = {"extra": "forbid"}
+    request_id: str
+    project_code: str | None
+    review_state: str
+    quality_gate_status: str | None
+    submitted_at: str
+    requester_hash: str | None
+    cost_total_usd: float
+
+
+class ApprovalQueueResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+    items: list[ApprovalQueueItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class ApprovalQueueDetail(BaseModel):
+    model_config = {"extra": "forbid"}
+    request_id: str
+    project_code: str | None
+    review_state: str
+    quality_gate_status: str | None
+    submitted_at: str
+    requester_hash: str | None
+    cost_total_usd: float
+    token_counts: dict[str, int] | None
+    requires_approval: bool
+    quality_gate_flags: list[str]
+
+
+class AdminOverrideRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    comment: str = Field(min_length=1)
+
+
+class AdminOverrideResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+    request_id: str
+    action: str
+    new_state: str
+
+
+@app.get("/admin/approvals")
+async def list_approval_queue(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    project_code: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ApprovalQueueResponse:
+    """Admin-only paginated approval queue.
+
+    Returns reports with review_state='staging' and quality_gate != 'failed'.
+    Both external 'staging' and 'needs_review' states are included (A-09).
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows, total = await pg.list_approval_queue(
+        project_code=project_code,
+        limit=limit,
+        offset=offset,
+    )
+    items = [
+        ApprovalQueueItem(
+            request_id=str(r["request_id"]),
+            project_code=r.get("project_code"),
+            review_state=_derive_external_state(r),
+            quality_gate_status=r.get("quality_gate_status"),
+            submitted_at=_ts_iso(r["created_at"]),
+            requester_hash=r.get("user_id_hash"),
+            cost_total_usd=float(r.get("cost_total_usd") or 0.0),
+        )
+        for r in rows
+    ]
+    return ApprovalQueueResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/admin/approvals/{request_id}")
+async def get_approval_queue_item(
+    request_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> ApprovalQueueDetail:
+    """Admin-only single approval-queue item detail.
+
+    404 if absent. 409 if not in approval queue (already finalized or failed).
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    state = _derive_external_state(audit)
+    if state not in {"staging", "needs_review"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Report is not in the approval queue (current state: {state}).",
+        )
+    qg_result = _load_json_artifact(request_id, "quality-gate-result.json", "staging")
+    flags = _quality_gate_flags(qg_result)
+    token_counts_raw = audit.get("token_counts")
+    token_counts: dict[str, int] | None = None
+    if token_counts_raw:
+        try:
+            token_counts = dict(token_counts_raw) if isinstance(token_counts_raw, dict) else None
+        except Exception:
+            token_counts = None
+    return ApprovalQueueDetail(
+        request_id=str(audit["request_id"]),
+        project_code=audit.get("project_code"),
+        review_state=state,
+        quality_gate_status=audit.get("quality_gate_status"),
+        submitted_at=_ts_iso(audit["created_at"]),
+        requester_hash=audit.get("user_id_hash"),
+        cost_total_usd=float(audit.get("cost_total_usd") or 0.0),
+        token_counts=token_counts,
+        requires_approval=bool(audit.get("requires_approval", True)),
+        quality_gate_flags=flags,
+    )
+
+
+@app.post("/admin/approvals/{request_id}/override-approve")
+async def admin_override_approve(
+    request_id: str,
+    body: AdminOverrideRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> AdminOverrideResponse:
+    """Admin-only override approval of a pending report.
+
+    A-10: self-approval is blocked.  N-1: audit event before action.
+    Calls node_17_publish to finalize the report.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    reviewer_hash = hash_user_id(claims.user_id) if claims else ""
+    if reviewer_hash == audit.get("user_id_hash", ""):
+        raise HTTPException(status_code=403, detail="Self-approval is not allowed.")
+    state = _derive_external_state(audit)
+    if state not in {"staging", "needs_review"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Report is not in the approval queue (current state: {state}).",
+        )
+    # N-1 audit-before-action
+    await pg.insert_admin_event(
+        event_type="report.admin_override_approved",
+        actor_hash=reviewer_hash,
+        project_code=audit.get("project_code"),
+        detail=f"request_id={request_id}",
+    )
+    await pg.insert_review_decision(
+        request_id=request_id,
+        reviewer_id_hash=reviewer_hash,
+        action="admin_override",
+        comment=body.comment,
+    )
+    await pg.update_review_state(request_id, "approved")
+    # Publish to final
+    publish_state = await node_17_publish.run(
+        DecisionState(
+            request_id=request_id,
+            user_id=claims.user_id if claims else "",
+            role=claims.role if claims else "",
+            project_code=audit.get("project_code") or None,
+            query=audit.get("query") or "",
+        )
+    )
+    return AdminOverrideResponse(
+        request_id=request_id,
+        action="admin_override_approved",
+        new_state="approved" if publish_state else "approved",
+    )
+
+
+@app.post("/admin/approvals/{request_id}/override-reject")
+async def admin_override_reject(
+    request_id: str,
+    body: AdminOverrideRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> AdminOverrideResponse:
+    """Admin-only override rejection of a pending report.
+
+    A-10: self-rejection is blocked.  N-1: audit event before action.
+    Does NOT call node_17_publish.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    audit = await pg.get_audit(request_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    reviewer_hash = hash_user_id(claims.user_id) if claims else ""
+    if reviewer_hash == audit.get("user_id_hash", ""):
+        raise HTTPException(status_code=403, detail="Self-rejection is not allowed.")
+    state = _derive_external_state(audit)
+    if state not in {"staging", "needs_review"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Report is not in the approval queue (current state: {state}).",
+        )
+    # N-1 audit-before-action
+    await pg.insert_admin_event(
+        event_type="report.admin_override_rejected",
+        actor_hash=reviewer_hash,
+        project_code=audit.get("project_code"),
+        detail=f"request_id={request_id}",
+    )
+    await pg.insert_review_decision(
+        request_id=request_id,
+        reviewer_id_hash=reviewer_hash,
+        action="admin_override",
+        comment=body.comment,
+    )
+    await pg.update_review_state(request_id, "rejected")
+    return AdminOverrideResponse(
+        request_id=request_id,
+        action="admin_override_rejected",
+        new_state="rejected",
+    )

@@ -89,6 +89,7 @@ deployment.
 | Phase 2B Slice 4 — Audit Log screen | Complete | `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; `admin_events` table + UNION read-model; 18 integration cases in `test_phase2b_audit.py`; `AdminAuditLogScreen.tsx` frontend with filters, pagination, CSV export, and detail panel. CI green. |
 | Phase 2B Slice 5 — Permissions & Roles | Complete | `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`, `DELETE /admin/entra-mappings/{group_id}`; `entra_group_mappings` table + `_validate_canonical_role()`; A-17 audit-before-save on upsert and delete; 33 integration cases in `test_phase2b_permissions.py`; live three-tab `AdminPermissionsScreen.tsx` frontend (Role Matrix, Entra Group Mapping CRUD, Project Role Assignments placeholder). CI green. |
 | Phase 2B Slice 6 — Project Source Mapping | Complete | `GET /admin/source-mappings`, `GET /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/validate`, `PUT /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/disable`; `source_mappings` table + JSON seeding + `_compute_mapping_status()`; A-21 audit-before-save; A-20 guard in `stage_report()`; 53 integration cases in `test_phase2b_source_mapping.py`; live two-column `AdminSourceMappingScreen.tsx` frontend with diff preview and risky-change confirmation. CI green. |
+| Phase 2B Slice 7 — Approval Queue + admin override | Complete | `GET /admin/approvals`, `GET /admin/approvals/{request_id}`, `POST /admin/approvals/{request_id}/override-approve`, `POST /admin/approvals/{request_id}/override-reject`; `list_approval_queue()` queries existing `audit_log` for `staging`/`needs_review` rows; A-10 self-approval block; N-1 audit-before-action; R13 failed-QG → 409; 49 integration cases in `test_phase2b_approvals.py` (RBAC ×4, 401, list, filter, detail, 404, 409, approve happy path, N-1 order, self-block 403, reject happy path, reject self-block, mandatory comment, C-1, C-6); live `AdminApprovalQueueScreen.tsx` frontend with filter bar, pagination, detail panel, QG flags, and admin override actions with mandatory comment. CI green. |
 
 ---
 
@@ -96,7 +97,7 @@ deployment.
 
 | Phase | Evidence |
 |---|---|
-| Phase 2B, 2C — later UI phases | Admin control-plane live integration and UI hardening/acceptance are not started. Phase 2B requires explicit user authorization. |
+| Phase 2B Slices 8–10, 2C — later UI phases | Admin Dashboard, routing + nav, Phase 2B closeout, and UI hardening/acceptance are not started. Phase 2B Slice 8 requires explicit user authorization. |
 
 ---
 
