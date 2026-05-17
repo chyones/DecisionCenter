@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-18 (Phase 2B Slice 8 — Dashboard)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–8 are complete and CI-green. Phase 2B is the safe next phase; Slice 9 requires explicit per-slice user approval. Production is `NOT_LIVE`.
+> **Date:** 2026-05-18 (Phase 2B Slice 9 — Routing + Admin Nav)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–9 are complete and CI-green. Phase 2B is the safe next phase; Slice 10 requires explicit per-slice user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -242,6 +242,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Admin Source Mapping screen | `/admin/source-mapping` | Live two-column editor: project list + full editor with 8 form sections, Validate/Save/Disable, `DiffPreviewModal`, risky-change `ConfirmDialog`, typed-confirmation disable | Phase 2B Slice 6; frontend lint/build | implemented |
 | Admin Approval Queue screen | `/admin/approvals` | Live `GET /admin/approvals` list with project/state filters, offset pagination, detail panel via `GET /admin/approvals/{id}`; QG flags display; admin override approve/reject with mandatory comment and warning banner; A-10 self-block enforced server-side | Phase 2B Slice 7; frontend lint/build | implemented |
 | Admin Dashboard screen | `/admin/dashboard` | Live `GET /admin/dashboard/summary`; 6-card stat grid with clickable cards, service health dots, progress bars, recent events table; `/admin` redirects here; `getDefaultLanding('admin')` returns `/admin/dashboard` | Phase 2B Slice 8; frontend lint/build | implemented |
+| Admin nav completeness | Sidebar + Topbar | Sidebar has all 7 admin entries (Dashboard, System Health, Connectors, Permissions, Source Mapping, Audit Log, Approvals) with correct active-state highlighting; Topbar shows correct breadcrumb for every admin route | Phase 2B Slice 9; frontend lint/build | implemented |
 
 ---
 

@@ -7,8 +7,8 @@
 - Current status: `PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 8 (Dashboard) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 9 (Routing + Admin Nav).
+- Active phase: Phase 2B — Slice 9 (Routing + Admin Nav) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 10 (Closeout).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -84,6 +84,13 @@ dots, cost progress bars, and a recent events table. `/admin` redirects to
 `/admin/dashboard` and `getDefaultLanding('admin')` returns `/admin/dashboard`.
 16 integration cases in `test_phase2b_dashboard.py` lock the contract.
 
+Slice 9 is a frontend-only slice: `Sidebar.tsx` now has all 7 admin entries
+(Dashboard, System Health, Connectors, Permissions, Source Mapping, Audit Log,
+Approvals) with the Dashboard path fixed to `/admin/dashboard` so active-state
+highlighting works correctly. `Topbar.tsx` now shows correct breadcrumb labels
+for every admin route (`/admin/dashboard`, `/admin/connectors`, `/admin/audit`,
+`/admin/approvals`). No backend changes; no new tests.
+
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
 ## Required Validation Commands
@@ -116,7 +123,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 8 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 9 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

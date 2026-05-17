@@ -6,6 +6,8 @@ import {
   Plug,
   Shield,
   Map,
+  ClipboardList,
+  ListChecks,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -43,7 +45,7 @@ const navItems: NavItemDef[] = [
   {
     icon: LayoutDashboard,
     label: 'Dashboard',
-    path: '/admin',
+    path: '/admin/dashboard',
     visible: (r) => r === 'admin',
   },
   {
@@ -68,6 +70,18 @@ const navItems: NavItemDef[] = [
     icon: Map,
     label: 'Source Mapping',
     path: '/admin/source-mapping',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: ClipboardList,
+    label: 'Audit Log',
+    path: '/admin/audit',
+    visible: (r) => r === 'admin',
+  },
+  {
+    icon: ListChecks,
+    label: 'Approvals',
+    path: '/admin/approvals',
     visible: (r) => r === 'admin',
   },
 ];

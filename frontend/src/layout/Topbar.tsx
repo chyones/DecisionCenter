@@ -34,10 +34,13 @@ function breadcrumbLabel(path: string): string {
   }
   if (path.startsWith('/workspace/report/')) return 'Report View';
   if (path.startsWith('/workspace/')) return 'Workspace';
-  if (path === '/admin') return 'Dashboard';
+  if (path === '/admin/dashboard') return 'Dashboard';
   if (path === '/admin/health') return 'System Health';
+  if (path === '/admin/connectors') return 'Connectors';
   if (path === '/admin/permissions') return 'Permissions';
   if (path === '/admin/source-mapping') return 'Source Mapping';
+  if (path === '/admin/audit') return 'Audit Log';
+  if (path === '/admin/approvals') return 'Approvals';
   if (path.startsWith('/admin/')) return 'Admin';
   if (path === '/403') return 'Forbidden';
   return 'Dashboard';

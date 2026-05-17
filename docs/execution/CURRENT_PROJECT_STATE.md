@@ -91,6 +91,7 @@ deployment.
 | Phase 2B Slice 6 — Project Source Mapping | Complete | `GET /admin/source-mappings`, `GET /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/validate`, `PUT /admin/source-mappings/{code}`, `POST /admin/source-mappings/{code}/disable`; `source_mappings` table + JSON seeding + `_compute_mapping_status()`; A-21 audit-before-save; A-20 guard in `stage_report()`; 53 integration cases in `test_phase2b_source_mapping.py`; live two-column `AdminSourceMappingScreen.tsx` frontend with diff preview and risky-change confirmation. CI green. |
 | Phase 2B Slice 7 — Approval Queue + admin override | Complete | `GET /admin/approvals`, `GET /admin/approvals/{request_id}`, `POST /admin/approvals/{request_id}/override-approve`, `POST /admin/approvals/{request_id}/override-reject`; `list_approval_queue()` queries existing `audit_log` for `staging`/`needs_review` rows; A-10 self-approval block; N-1 audit-before-action; R13 failed-QG → 409; 49 integration cases in `test_phase2b_approvals.py` (RBAC ×4, 401, list, filter, detail, 404, 409, approve happy path, N-1 order, self-block 403, reject happy path, reject self-block, mandatory comment, C-1, C-6); live `AdminApprovalQueueScreen.tsx` frontend with filter bar, pagination, detail panel, QG flags, and admin override actions with mandatory comment. CI green. |
 | Phase 2B Slice 8 — Dashboard | Complete | `GET /admin/dashboard/summary`; `dashboard_counts_today()` in PostgresStore; service health probes, approval queue count, cost data, today counts, recent events; 16 integration cases in `test_phase2b_dashboard.py` (RBAC ×8, 401, happy path, services all ok, degraded service, today counts, recent events, C-1, C-6); live `AdminDashboardScreen.tsx` with 6-card stat grid, external services grid, recent events table, and role-based default landing at `/admin/dashboard`; `/admin` redirects to `/admin/dashboard`. CI green. |
+| Phase 2B Slice 9 — Routing + Admin Nav | Complete | Sidebar.tsx: Dashboard path fixed to `/admin/dashboard` (active-state highlight works); Audit Log and Approvals entries added. Topbar.tsx: breadcrumb labels added for `/admin/dashboard`, `/admin/connectors`, `/admin/audit`, `/admin/approvals`. Frontend-only slice; no backend changes; no test changes. CI green. |
 
 ---
 
@@ -98,7 +99,7 @@ deployment.
 
 | Phase | Evidence |
 |---|---|
-| Phase 2B Slices 9–10, 2C — later UI phases | Admin routing + nav, Phase 2B closeout, and UI hardening/acceptance are not started. Phase 2B Slice 9 requires explicit user authorization. |
+| Phase 2B Slice 10 — Closeout | Phase 2B closeout and UI hardening/acceptance are not started. Phase 2B Slice 10 requires explicit user authorization. |
 
 ---
 
