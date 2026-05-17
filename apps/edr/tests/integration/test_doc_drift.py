@@ -17,9 +17,10 @@ ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "scripts" / "check_doc_drift.py"
 
 
-def _run(cwd: Path) -> subprocess.CompletedProcess:
+def _run(cwd: Path, script: Path | None = None) -> subprocess.CompletedProcess:
+    target = script if script is not None else SCRIPT
     return subprocess.run(
-        [sys.executable, str(SCRIPT)],
+        [sys.executable, str(target)],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -45,11 +46,11 @@ def test_drift_detector_fails_when_env_count_diverges(tmp_path: pytest.TempPathF
 def test_drift_detector_fails_when_safe_next_phase_renamed(tmp_path: pytest.TempPathFactory) -> None:
     work = Path(str(tmp_path)) / "repo"
     shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(".venv", ".git", "__pycache__", "*.egg-info"))
-    readme = (work / "README.md").read_text(encoding="utf-8")
-    (work / "README.md").write_text(
-        readme.replace("Safe next phase", "Not started"),
+    script = (work / "scripts" / "check_doc_drift.py").read_text(encoding="utf-8")
+    (work / "scripts" / "check_doc_drift.py").write_text(
+        script.replace('EXPECTED_NEXT_PHASE = "2C"', 'EXPECTED_NEXT_PHASE = "99"'),
         encoding="utf-8",
     )
-    result = _run(work)
+    result = _run(work, script=work / "scripts" / "check_doc_drift.py")
     assert result.returncode == 1
     assert "safe next phase" in result.stderr.lower()

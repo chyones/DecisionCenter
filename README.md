@@ -93,11 +93,8 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 | Understand utility scripts | [scripts/README.md](scripts/README.md) |
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
-Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are
-complete. Phase 2A is complete and production is `NOT_LIVE`. The Phase 2A
-E2E path and U-01..U-16 manual QA passed locally on 2026-05-14. Phase 2B is
-the safe next phase, but it requires explicit user authorization before any
-work starts. The phase-status table below is the authoritative marker for
+Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, and
+Phases 2A–2B are complete and production is `NOT_LIVE`. Phase 2C is the safe next phase, but it requires explicit user authorization before any work starts. The phase-status table below is the authoritative marker for
 Phase 2A. Treat the files above as the current authority before changing code,
 workflows, schemas, or operational assumptions.
 

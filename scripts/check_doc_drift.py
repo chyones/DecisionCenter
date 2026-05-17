@@ -33,8 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "2B"
-EXPECTED_NEXT_PHASE_TITLE = "Admin Visual Control Plane Implementation"
+EXPECTED_NEXT_PHASE = "2C"
+EXPECTED_NEXT_PHASE_TITLE = "UI Hardening & Acceptance Validation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 MAX_ANCHOR_DRIFT_COMMITS = 3
 
