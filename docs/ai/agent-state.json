@@ -41,11 +41,11 @@
   "latest_report": "docs/execution/PHASE_2B_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
-    "commit": "3e58418b91481df319c4f8b3019d67ae18b5d153",
-    "run_id": 25915244929,
+    "commit": "c6a92e410e7d03c331683e89e078e181a2300386",
+    "run_id": 25982553222,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25915244929"
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25982553222"
   },
   "latest_local_validation": {
     "date": "2026-05-17",
