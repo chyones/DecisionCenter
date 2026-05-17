@@ -25,6 +25,10 @@ python3 scripts/check_doc_drift.py
 python3 scripts/check_ai_context.py
 ```
 
+For app tests and evaluation, use the Docker app container (`make smoke`,
+`make test`, `make eval`) or the local `.venv` interpreter. Bare system Python
+on the host is not a supported test environment because it may not have the
+project dependencies installed.
+
 These scripts create infrastructure structure only. They do not embed content, insert vectors,
 perform retrieval, or implement product logic.
-

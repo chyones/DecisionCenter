@@ -562,8 +562,7 @@ def _http_ok(url: str) -> None:
 def _derive_status(outputs: dict[str, object]) -> str:
     """Compute the response status from the workflow outputs.
 
-    The skeleton workflow still has stubbed downstream nodes for Phase 1E onward,
-    so we report ``in_progress`` while the quality gate is in its default
+    Report ``in_progress`` while the quality gate is still in its default
     ``needs_review`` state, ``failed`` when the gate hard-fails, and ``ready``
     only when an export was produced.
     """

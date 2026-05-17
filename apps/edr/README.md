@@ -8,7 +8,7 @@ tests for DecisionCenter.
 
 | Path | Purpose |
 |---|---|
-| `app.py` | FastAPI routes, health checks, Entra/local-bypass claim extraction, report staging, review, download, Phase 2A workspace APIs, and upload handling |
+| `app.py` | FastAPI routes, health checks, Entra/local-bypass claim extraction, report staging, review, download, Phase 2A workspace APIs, Phase 2B admin APIs, and upload handling |
 | `config.py` | Pydantic settings for the locked `.env.example` baseline |
 | `auth/` | Microsoft Entra JWT validation |
 | `rbac/` | Canonical 9-role permissions and project-source mapping loader |
@@ -19,18 +19,17 @@ tests for DecisionCenter.
 | `persistence/` | PostgreSQL audit/review state and MinIO artifact/upload storage |
 | `evaluation/` | Executable golden-set runner and local load-test helpers |
 | `schemas/` | Pydantic models corresponding to the JSON Schemas in `docs/schemas/` |
-| `tests/` | Smoke and integration tests for RBAC, connectors, retrieval, LLM nodes, persistence, review/publish, evaluation, and Phase 2A workspace APIs |
+| `tests/` | Smoke and integration tests for RBAC, connectors, retrieval, LLM nodes, persistence, review/publish, evaluation, Phase 2A workspace APIs, and Phase 2B admin APIs |
 
 ## Current Boundary
 
-Phases 1A through 1I, the Phase 1D-fixup, and Phase 2A are complete. Production
-is `NOT_LIVE`. Phase 2A closeout evidence is recorded in
-`docs/execution/PHASE_2A_REPORT.md`.
+Phases 1A through 1I, the Phase 1D-fixup, Phase 2A, and Phase 2B are complete.
+Production is `NOT_LIVE`. Phase 2B closeout evidence is recorded in
+`docs/execution/PHASE_2B_REPORT.md`.
 
-Safe next phase: Phase 2B — Admin Visual Control Plane Implementation. It
-requires explicit user authorization before any implementation starts. Do not
-deploy, do not start Phase 2B by inference, and do not add unrelated product
-behavior.
+Safe next phase: Phase 2C — UI Hardening & Acceptance Validation. It requires
+explicit user authorization before any implementation starts. Do not deploy, do
+not start Phase 2C by inference, and do not add unrelated product behavior.
 
 Before changing behavior, read `docs/admin/CONTROL_PLANE_LOCK.md`,
 `docs/execution/IMPLEMENTATION_PHASES.md`, `docs/ai/SHARED_CONTEXT.md`, and

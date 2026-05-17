@@ -375,8 +375,8 @@ blocker fixes are complete. Current frontend integration:
    - Left: project list. Right: project editor.
    - Client-side JSON schema validation.
    - Diff preview modal before save.
-   - Confirmation modal for role removal or project deletion.
-   - Audit events: `admin.source_mapping_changed`, `admin.source_mapping_deleted`.
+   - Confirmation modal for role removal or source mapping disable.
+   - Audit events: `admin.source_mapping_changed`, `admin.source_mapping_disabled`.
 5. **Approval Queue** (`/admin/approvals`)
    - Show `staging` and `needs_review` reports only.
    - Columns: request ID, project, status, submitted at, requester hash.
@@ -395,7 +395,7 @@ blocker fixes are complete. Current frontend integration:
    - Auto-refresh configurable interval.
 
 **Validation gate before 2C:**
-- A-01 through A-17 acceptance criteria from UI_CONTRACT Section 9.2 pass in manual QA.
+- A-01 through A-23 acceptance criteria from UI_CONTRACT Section 9.2 pass in manual QA.
 - Non-admin JWT receives HTTP 403 on all `/admin/*` routes.
 - No credential values shown in any form (C-6).
 - Admin review panel never shows report content, query text, or evidence excerpts.
@@ -424,7 +424,7 @@ blocker fixes are complete. Current frontend integration:
 7. Add `make test:ui` target to CI (headless browser run).
 
 **Validation gate before Production:**
-- All U-01..U-16 and A-01..A-17 acceptance criteria pass in automated or manual QA.
+- All U-01..U-16 and A-01..A-23 acceptance criteria pass in automated or manual QA.
 - `make test:ui` passes in CI.
 - No P0 or P1 UI defects remain open.
 - Security audit sign-off: no credential leakage, no admin content bypass.

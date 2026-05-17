@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase2a_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase2b_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -94,9 +94,11 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, and
-Phases 2A–2B are complete and production is `NOT_LIVE`. Phase 2C is the safe next phase, but it requires explicit user authorization before any work starts. The phase-status table below is the authoritative marker for
-Phase 2A. Treat the files above as the current authority before changing code,
-workflows, schemas, or operational assumptions.
+Phases 2A–2B are complete and production is `NOT_LIVE`. Phase 2C is the safe
+next phase, but it requires explicit user authorization before any work starts.
+The phase-status table below is the authoritative marker for the current
+project state. Treat the files above as the current authority before changing
+code, workflows, schemas, or operational assumptions.
 
 ## AI Agent Operating Context
 
@@ -107,7 +109,7 @@ Read these files in order:
 2. [docs/ai/SHARED_CONTEXT.md](docs/ai/SHARED_CONTEXT.md)
 3. [docs/ai/AGENT_HANDOFF.md](docs/ai/AGENT_HANDOFF.md)
 4. [docs/ai/agent-state.json](docs/ai/agent-state.json)
-5. [docs/execution/PHASE_2A_REPORT.md](docs/execution/PHASE_2A_REPORT.md) and the active phase plan named by `agent-state.json`
+5. The latest report named by [docs/ai/agent-state.json](docs/ai/agent-state.json)
 
 The AI context is checked by `python3 scripts/check_ai_context.py` and
 `python3 scripts/check_doc_drift.py`, plus the read-only
@@ -143,8 +145,9 @@ Use [docs/README.md](docs/README.md) as the full documentation index. Key suppor
 | Control-plane lock | [docs/admin/CONTROL_PLANE_LOCK.md](docs/admin/CONTROL_PLANE_LOCK.md) |
 | Phase execution order | [docs/execution/IMPLEMENTATION_PHASES.md](docs/execution/IMPLEMENTATION_PHASES.md) |
 | Phase 1A scope | [docs/execution/PHASE_1A_SCOPE.md](docs/execution/PHASE_1A_SCOPE.md) |
-| Active Phase 2A plan | [docs/execution/PHASE_2A_PLAN.md](docs/execution/PHASE_2A_PLAN.md) |
-| Latest full-phase report | [docs/execution/PHASE_2A_REPORT.md](docs/execution/PHASE_2A_REPORT.md) |
+| Phase 2A plan | [docs/execution/PHASE_2A_PLAN.md](docs/execution/PHASE_2A_PLAN.md) |
+| Phase 2B plan | [docs/execution/PHASE_2B_PLAN.md](docs/execution/PHASE_2B_PLAN.md) |
+| Latest full-phase report | [docs/execution/PHASE_2B_REPORT.md](docs/execution/PHASE_2B_REPORT.md) |
 | Feature matrix | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | RBAC matrix | [docs/security/rbac_matrix.md](docs/security/rbac_matrix.md) |
 | API contracts | [docs/contracts/](docs/contracts/) |
@@ -210,8 +213,8 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1H — Evaluation and Hardening | Complete |
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
 | 2A — User Chat Workspace Implementation | Complete; E2E and U-01..U-16 manual QA passed; production `NOT_LIVE` |
-| 2B — Admin Visual Control Plane Implementation | Safe next phase; requires explicit user authorization |
-| 2C — UI Hardening and Production Readiness | Not started |
+| 2B — Admin Visual Control Plane Implementation | Complete; A-01..A-23 manual QA passed; production `NOT_LIVE` |
+| 2C — UI Hardening and Acceptance Validation | Safe next phase; requires explicit user authorization |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

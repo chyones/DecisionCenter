@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +53,16 @@ REQUIRED_FILES = [
     Path("docs/ai/agent-state.json"),
 ]
 
+STALE_TEXT_PATTERNS = [
+    r"PHASE_2B_SLICE_\d+_COMPLETE_NOT_LIVE",
+    r"Phase 2B is in progress",
+    r"Phase 2B Slice 7[^.\n]*safe next",
+    r"Safe next phase:\s*Phase 2B\b",
+    r"Last completed phase:\s*Phase 2A",
+    r"Latest full-phase report:\s*`docs/execution/PHASE_2A_REPORT.md`",
+    r"Do not start Phase 2B\b",
+]
+
 
 def _repo_root() -> Path:
     cwd = Path.cwd()
@@ -60,6 +72,13 @@ def _repo_root() -> Path:
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    if shutil.which("git") is None:
+        return subprocess.CompletedProcess(
+            args=["git", *args],
+            returncode=127,
+            stdout="",
+            stderr="git executable not found",
+        )
     return subprocess.run(
         ["git", *args],
         cwd=root,
@@ -71,7 +90,14 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _commit_is_in_history(root: Path, commit: str) -> bool:
+    # Docker images copy the source tree without .git and may not include the
+    # git binary. Keep validating the machine-readable state there, but leave
+    # ancestry enforcement to host/CI checkouts that have Git metadata.
+    if not (root / ".git").exists():
+        return True
     head = _git(root, "rev-parse", "HEAD")
+    if head.returncode == 127:
+        return True
     if head.returncode != 0:
         return False
     if head.stdout.strip() == commit:
@@ -100,6 +126,13 @@ def main() -> int:
     for relative_path in REQUIRED_FILES:
         if not (root / relative_path).exists():
             failures.append(f"missing required file: {relative_path}")
+        elif relative_path.suffix == ".md":
+            raw = (root / relative_path).read_text(encoding="utf-8")
+            for pattern in STALE_TEXT_PATTERNS:
+                if re.search(pattern, raw, flags=re.IGNORECASE):
+                    failures.append(
+                        f"{relative_path} contains stale current-state marker: {pattern}"
+                    )
 
     state_path = root / "docs/ai/agent-state.json"
     state: dict[str, Any] = {}
@@ -128,6 +161,30 @@ def main() -> int:
         if status not in ALLOWED_STATUSES:
             allowed = ", ".join(sorted(ALLOWED_STATUSES))
             failures.append(f"status must be one of: {allowed}")
+        elif status == "PHASE_2B_COMPLETE_NOT_LIVE":
+            if state.get("last_completed_phase") != "Phase 2B":
+                failures.append(
+                    "last_completed_phase must be Phase 2B when status is "
+                    "PHASE_2B_COMPLETE_NOT_LIVE"
+                )
+            if state.get("active_phase") != "Phase 2C":
+                failures.append(
+                    "active_phase must be Phase 2C when status is "
+                    "PHASE_2B_COMPLETE_NOT_LIVE"
+                )
+            next_allowed = state.get("next_allowed_phase")
+            if not isinstance(next_allowed, str) or "Phase 2C" not in next_allowed:
+                failures.append(
+                    "next_allowed_phase must name Phase 2C when status is "
+                    "PHASE_2B_COMPLETE_NOT_LIVE"
+                )
+            if latest_report != "docs/execution/PHASE_2B_REPORT.md":
+                failures.append(
+                    "latest_report must be docs/execution/PHASE_2B_REPORT.md when "
+                    "status is PHASE_2B_COMPLETE_NOT_LIVE"
+                )
+            if state.get("requires_explicit_user_approval_for_phase_2c") is not True:
+                failures.append("Phase 2C must require explicit user approval")
 
         phase_1e_may_start = state.get("phase_1e_may_start")
         if status == "PHASE_1E_IN_PROGRESS_NOT_LIVE":

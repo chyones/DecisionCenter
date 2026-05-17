@@ -1,22 +1,24 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `0a19bae` (Phase 2A E2E unblock base, before manual QA closeout commit).
-> **Audit date:** 2026-05-14 (updated for Phase 2A manual QA closeout)
+> **Audited HEAD:** `43efd07` (Phase 2B closeout + truth reconciliation).
+> **Audit date:** 2026-05-17 (updated for Phase 2B closeout)
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
-> 1I, and Phase 2A — verified against live repo files and local validation
-> evidence captured during the Phase 2A manual QA closeout.
+> 1I, Phase 2A, and Phase 2B — verified against live repo files and local
+> validation evidence captured during the Phase 2B closeout.
 
 ---
 
 ## Current Project Stage
 
-DecisionCenter has completed Phase 2A (User Chat Workspace Implementation) and
-is not live. The Phase 2A validation gate (end-to-end submit -> processing ->
-quality_gate passed -> approve -> final -> download MD, plus U-01..U-16 manual
-QA per `docs/design/UI_CONTRACT_v1.md` §9.1) passed locally on 2026-05-14. All
-prior phases including the Phase 1D-fixup remain closed and locked. The backend
-execution pipeline
-runs end-to-end with evaluation coverage: authentication and RBAC at Node 01;
+DecisionCenter has completed Phase 2B (Admin Visual Control Plane
+Implementation) and is not live. Phase 2A's user workspace validation gate
+(end-to-end submit -> processing -> quality_gate passed -> approve -> final ->
+download MD, plus U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md`
+§9.1) passed locally on 2026-05-14. Phase 2B's A-01..A-23 manual QA matrix and
+cross-screen invariants are recorded in `docs/execution/PHASE_2B_REPORT.md`.
+All prior phases including the Phase 1D-fixup remain closed and locked. The
+backend execution pipeline runs end-to-end with evaluation coverage:
+authentication and RBAC at Node 01;
 n8n connectors with Header Auth and `$env`-sourced credentials; Voyage
 embeddings, Cohere reranking, tiktoken chunking, per-project Qdrant
 collections, and a Redis-backed evidence cache; LLM nodes 02/03/04/11/12
@@ -27,15 +29,15 @@ with hashed user IDs and staging artifacts; human review at Node 16;
 write-once publish to immutable final artifacts at Node 17; and a 64-case
 executable golden set with pass-rate and precision thresholds enforced in CI.
 
-The frontend now contains the full Phase 2A workspace implementation. Query
-Composer submits to live `POST /reports/staging` and loads role-scoped project
-context from `GET /workspace/context`. Reports List consumes `GET /reports`.
-Processing View consumes `GET /reports/{id}/status` and `DELETE /reports/{id}`.
-Report View and Evidence Panel consume `GET /reports/{id}/content`; failed
-quality gates suppress exports, needs-review requesters see flags only,
-authorized reviewers see a watermarked draft, citations highlight evidence, and
-final reports show immutable locked state. Upload Zone validates locally and
-the server-side `POST /upload` endpoint enforces the same size/type rules.
+The frontend now contains the full Phase 2A workspace implementation and the
+full Phase 2B admin visual control plane. Query Composer submits to live
+`POST /reports/staging` and loads role-scoped project context from
+`GET /workspace/context`; Reports List, Processing View, Report View, Evidence
+Panel, Export Panel, and Upload Zone consume live backend APIs. The admin area
+has seven live screens: Dashboard, System Health, Connectors, Permissions,
+Source Mapping, Audit Log, and Approval Queue. Admin endpoints are locked to
+system metadata: no report content, query text, evidence excerpts, or
+credential values are exposed.
 
 Production is `NOT_LIVE`. Phase 2C is the safe next phase, but it may only
 start after explicit user authorization. A push to `origin/main` is not a
@@ -79,7 +81,7 @@ deployment.
 
 ---
 
-## Active Phase 2B Progress
+## Phase 2B Slice Progress
 
 | Slice | Status | Evidence |
 |---|---|---|
@@ -133,27 +135,27 @@ deployment.
 
 ## Safe Next Phase
 
-Phase 2B Slice 7 (Approval Queue + admin override) is the safe next work item, but it
-requires explicit per-slice user authorization before any implementation starts.
-
-Allowed next work is limited to explicitly authorized Phase 2B slices or later
-maintenance requested by the user. Do not start Slice 7 by inference.
+Phase 2C (UI Hardening & Acceptance Validation) is the safe next phase, but it
+requires explicit user authorization before any implementation starts. Phase 2C
+scope is test coverage, accessibility, responsive, security-DOM, performance,
+and cross-browser hardening. No new admin endpoints are authorized by this
+status.
 
 ## Standing Forbidden Work
 
 Do not deploy. Do not change the locked spec unless an explicit spec-change
 ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
-tests. Do not start Phase 2B Slice 7 without explicit per-slice user authorization.
+tests. Do not start Phase 2C without explicit user authorization.
 
 ---
 
 ## README And Truth Doc Freshness
 
-This audit refreshed `CURRENT_PROJECT_STATE.md`, `IMPLEMENTATION_PHASES.md`,
-`FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`, `README.md`, the AI context
-(`SHARED_CONTEXT.md`, `AGENT_HANDOFF.md`, `agent-state.json`), the locked
-workflow spec's internal draft-artifact note, and
-`scripts/check_doc_drift.py` to reflect Phase 2A completion.
+The Phase 2B closeout refreshed `CURRENT_PROJECT_STATE.md`,
+`IMPLEMENTATION_PHASES.md`, `FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`,
+`README.md`, the AI context (`SHARED_CONTEXT.md`, `AGENT_HANDOFF.md`,
+`agent-state.json`), and the drift/context checks to reflect Phase 2B
+completion.
 
 ---
 
@@ -164,5 +166,6 @@ workflow spec's internal draft-artifact note, and
 | Architecture quality | 8/10 | Clear phase plan, fixed 18-node graph, separated docs/contracts/policies, explicit service boundaries. |
 | Code foundation | 8/10 | Pinned dependencies, CI with config coverage + doc/AI checks (incl. anchor-currency invariant) + integration tests + drift detector, async runtime, retrieval pipeline + LLM + persistence + review gate working. |
 | Phase 2A readiness | 10/10 | Phase 2A implementation, local E2E, and U-01 through U-16 manual QA are complete. |
+| Phase 2B readiness | 10/10 | Phase 2B admin control plane implementation, A-01 through A-23 manual QA, and CI evidence are complete. |
 | Product readiness | 8/10 | Pipeline produces structured, evidence-bound reports with human approval; 64-case golden set and Arabic PDF hardening validate the core path. Production remains `NOT_LIVE`. |
-| Overall maturity | 8/10 | Strong controlled foundation; functional backend implementation through review/publish; Phase 2A workspace complete; Phase 2B/admin UI and production readiness remain future work. |
+| Overall maturity | 8/10 | Strong controlled foundation; functional backend implementation through review/publish; Phase 2A workspace and Phase 2B admin UI are complete; Phase 2C hardening and production deployment remain future work. |

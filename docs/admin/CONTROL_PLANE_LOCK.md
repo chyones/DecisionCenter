@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-17 (updated for Phase 2B Slice 5 closeout)
+> **Date:** 2026-05-17 (updated for Phase 2B closeout)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2B_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 64-case executable golden set covers the required baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup are complete; Phase 2A is complete and not live; Phase 2B is the safe next phase after explicit user authorization | This document |
+| Readiness | Phase 1A–1I + Phase 1D-fixup and Phases 2A–2B are complete and not live; Phase 2C is the safe next phase after explicit user authorization | This document |
 
 ## Authoritative Environment Baseline
 
@@ -123,9 +123,9 @@ U-01..U-16 manual QA are complete. See
 
 ## Phase 2B Progress Lock
 
-Phase 2B is in progress. Slice 1 (admin RBAC base) is complete. Subsequent
-slices are gated on explicit per-slice user approval, as documented in
-`docs/execution/PHASE_2B_PLAN.md`.
+Phase 2B is complete. All ten slices are closed and CI-green, as documented in
+`docs/execution/PHASE_2B_REPORT.md`. Phase 2C is the safe next phase and
+requires explicit user authorization.
 
 | Slice | Status | Evidence |
 |---|---|---|
@@ -177,19 +177,20 @@ regression-tested.
   validation, and promotion of `pip-audit` to a hard gate are all deferred past
   Phase 1H.
 - Frontend / Admin UI foundation is complete in Phase 1I and is governed by the
-  locked UI contract; any Admin UI beyond the locked contract is a spec change.
-- Phase 2B Admin Visual Control Plane implementation is not started and
-  requires explicit user authorization.
+  locked UI contract.
+- Phase 2B Admin Visual Control Plane implementation is complete. Phase 2C
+  hardening requires explicit user authorization.
 
 ## Admin And Control-Plane Coverage
 
-The locked spec defines an `admin` RBAC role but does not define an Admin UI. The current
-control plane is therefore documentation, configuration, CI, RBAC mapping, source mapping,
-audit policy, approval policy, and operational runbooks.
+The locked spec defines an `admin` RBAC role. The current control plane includes
+documentation, configuration, CI, RBAC mapping, source mapping, audit policy,
+approval policy, operational runbooks, and the Phase 2B admin visual control
+plane.
 
-The `admin` role is configuration-only. It MUST NOT grant business-data visibility by default.
-Any future Admin UI, admin screen, or control-panel feature is outside the current spec and
-must be treated as a spec change before implementation.
+The `admin` role MUST NOT grant business-data visibility by default. Future
+admin features beyond the locked Phase 2B control plane are spec changes unless
+explicitly listed in the approved Phase 2C hardening scope.
 
 ## Final Readiness Decision
 

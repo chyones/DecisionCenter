@@ -3,15 +3,15 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `8a420c8a9d0c8e0e8d4c8b3e1e8f3e0c8b3e1e8f3`
-- Current status: `PHASE_2B_SLICE_6_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `43efd073d3c078de6227c4977c668e14d51fc8a3`
+- Current status: `PHASE_2B_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 2A
-- Active phase: Phase 2B — all 10 slices complete and CI-green. Phase 2B is closed.
+- Last completed phase: Phase 2B — Admin Visual Control Plane Implementation
+- Active phase: Phase 2C — UI Hardening & Acceptance Validation.
 - Current allowed next work: Phase 2C (UI Hardening & Acceptance Validation).
   Requires explicit user authorization before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
-- Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
+- Latest full-phase report: `docs/execution/PHASE_2B_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -21,79 +21,27 @@ static scaffolds for Admin System Health, Permissions & Roles (Role Matrix
 only), Source Mapping (read-only), and the initial Query Composer shell.
 Frontend lint and build are wired into CI.
 
-Phase 2A is complete and not live. Implementation slices 1–9, the backend
-read/status/content/cancel/upload additions, the deterministic local E2E
-harness, and the final manual-QA blocker fixes are complete. The current
-workspace uses live backend state for the Query Composer project list,
-Reports List, Processing View, Report View, Evidence Panel, review actions,
-quality-gate banners, final immutable display, and cancellation path.
+Phase 2A is complete and not live. Implementation slices 1–9, backend
+read/status/content/cancel/upload additions, deterministic local E2E, and
+U-01..U-16 manual QA are complete. The current workspace uses live backend
+state for the Query Composer project list, Reports List, Processing View,
+Report View, Evidence Panel, review actions, quality-gate banners, final
+immutable display, and cancellation path.
 
-The Phase 2A closeout gate passed locally on 2026-05-14:
+Phase 2B is complete and not live. All ten slices are closed and CI-green:
+admin RBAC base, Connectors, Health, Audit Log, Permissions, Source Mapping,
+Approval Queue, Dashboard, Routing + Nav, and Closeout. The admin control
+plane has seven live backend-integrated screens and preserves the C-1/C-6
+boundaries: no business report content, query text, evidence excerpts, or
+credential values in admin responses. `docs/execution/PHASE_2B_REPORT.md`
+records the A-01..A-23 QA matrix, cross-screen invariants, audit event
+catalog, and validation evidence.
 
-- `make phase2a-e2e`: PASS; 18 workflow nodes visited; `quality_gate=passed`;
-  pre-approval download returned 403; final markdown download returned 1443 bytes.
-- U-01 through U-16 manual QA: PASSED.
-- `make smoke`: 2 passed.
-- `make test`: 184 passed, 1 warning.
-- `make eval`: 64/64 passed.
-- `ruff check .`, `python3 -m compileall apps scripts`, frontend lint/build,
-  doc drift, AI context, and postflight checks are required before closeout
-  commit.
-
-
-Phase 2B is in progress. Slice 1 adds the admin RBAC base: a shared
-`_require_admin(claims)` helper in `apps/edr/app.py` plus a `GET
-/admin/_authcheck` stub. Slice 2 adds three admin endpoints (`GET
-/admin/services`, `GET /admin/services/{name}`, `POST
-/admin/services/{name}/probe`) backed by `apps/edr/admin/services_catalog.py`
-and the `connector_events` table, plus the `AdminConnectorsScreen` frontend.
-Slice 3 adds `GET /admin/health/live` and `GET /admin/cost` with live probes,
-sparkline buckets, cost breakdown, and warning/exceeded thresholds, plus the
-upgraded `AdminHealthScreen` frontend. Slice 4 adds `GET /admin/audit`,
-`GET /admin/audit/export.csv`, and `GET /admin/audit/{event_id}` with a UNION
-read-model over four event tables, plus the `AdminAuditLogScreen.tsx` frontend.
-Slice 5 adds `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`,
-and `DELETE /admin/entra-mappings/{group_id}` with the `entra_group_mappings`
-table, `_validate_canonical_role()`, A-17 audit-before-save, and the live
-three-tab `AdminPermissionsScreen.tsx` frontend.
-Slice 6 adds `GET /admin/source-mappings`, `GET /admin/source-mappings/{code}`,
-`POST /admin/source-mappings/{code}/validate`, `PUT /admin/source-mappings/{code}`,
-and `POST /admin/source-mappings/{code}/disable` with the `source_mappings` table
-(seeded from JSON), `_compute_mapping_status()`, A-21 audit-before-save, A-20
-report-generation guard, and the live two-column `AdminSourceMappingScreen.tsx`
-frontend with diff preview, risky-change confirmation, and typed-confirmation disable.
-190 integration cases across `test_phase2b_admin_rbac.py` (13),
-`test_phase2b_connectors.py` (45), `test_phase2b_health_cost.py` (28),
-`test_phase2b_audit.py` (18), `test_phase2b_permissions.py` (33), and
-`test_phase2b_source_mapping.py` (53) lock the contract.
-
-Slice 7 adds `GET /admin/approvals`, `GET /admin/approvals/{request_id}`,
-`POST /admin/approvals/{request_id}/override-approve`, and
-`POST /admin/approvals/{request_id}/override-reject` with `list_approval_queue()`
-querying the existing `audit_log` table, A-10 self-approval/rejection block,
-N-1 audit-before-action, R13 failed-QG → 409 guard, and the live
-`AdminApprovalQueueScreen.tsx` frontend with filter bar, pagination, detail panel,
-QG flags, and mandatory-comment override actions. 49 integration cases in
-`test_phase2b_approvals.py` lock the contract.
-
-Slice 8 adds `GET /admin/dashboard/summary` with `dashboard_counts_today()`
-in PostgresStore, service health probes, approval queue count, cost data,
-today counts, and recent events. The live `AdminDashboardScreen.tsx` frontend
-provides a 6-card stat grid with clickable navigation, external service health
-dots, cost progress bars, and a recent events table. `/admin` redirects to
-`/admin/dashboard` and `getDefaultLanding('admin')` returns `/admin/dashboard`.
-16 integration cases in `test_phase2b_dashboard.py` lock the contract.
-
-Slice 9 is a frontend-only slice: `Sidebar.tsx` now has all 7 admin entries
-(Dashboard, System Health, Connectors, Permissions, Source Mapping, Audit Log,
-Approvals) with the Dashboard path fixed to `/admin/dashboard` so active-state
-highlighting works correctly. `Topbar.tsx` now shows correct breadcrumb labels
-for every admin route (`/admin/dashboard`, `/admin/connectors`, `/admin/audit`,
-`/admin/approvals`). No backend changes; no new tests.
-
-Slice 10 is the closeout slice: `docs/execution/PHASE_2B_REPORT.md` records
-the A-01..A-23 QA matrix, cross-screen invariants, audit event catalog, and
-validation evidence. All governance docs are refreshed. No code changes.
+Phase 2C is the safe next phase. It is limited to UI hardening and acceptance
+validation: accessibility, responsive behavior, security-DOM checks,
+performance, cross-browser testing, Playwright/Cypress automation, and adding
+`make test:ui` to CI. Phase 2C does not authorize new admin endpoints,
+production deployment, or spec changes.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -188,6 +136,8 @@ Protected source-of-truth files:
 - `docs/execution/PHASE_1I_REPORT.md`
 - `docs/execution/PHASE_2A_PLAN.md`
 - `docs/execution/PHASE_2A_REPORT.md`
+- `docs/execution/PHASE_2B_PLAN.md`
+- `docs/execution/PHASE_2B_REPORT.md`
 - `docs/admin/CONTROL_PLANE_LOCK.md`
 - `docs/admin/FEATURE_MATRIX.md`
 - `docs/ai/SHARED_CONTEXT.md`
@@ -217,6 +167,6 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 2B or any other gated next
+- If a future user explicitly authorizes Phase 2C or any other gated next
   step, update this shared context, the handoff, and
   `docs/ai/agent-state.json` only as part of that approved session.

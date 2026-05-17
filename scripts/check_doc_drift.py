@@ -8,7 +8,7 @@ every CI run must satisfy.
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
    FEATURE_MATRIX.md, and README.md must all reference the same "safe next
-   phase" (currently Phase 2B).
+   phase" (currently Phase 2C).
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
@@ -37,6 +37,18 @@ EXPECTED_NEXT_PHASE = "2C"
 EXPECTED_NEXT_PHASE_TITLE = "UI Hardening & Acceptance Validation"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 MAX_ANCHOR_DRIFT_COMMITS = 3
+STALE_CURRENT_STATE_PATTERNS = [
+    r"PHASE_2B_SLICE_\d+_COMPLETE_NOT_LIVE",
+    r"Phase 2B is in progress",
+    r"Phase 2B Slice 7[^.\n]*safe next",
+    r"Safe next phase:\s*Phase 2B\b",
+    r"\| 2B [^|]*\| Safe next phase",
+    r"Latest full-phase report.*PHASE_2A_REPORT",
+    r"Active Phase 2A plan",
+    r"Phase 2B Admin Visual Control Plane implementation is not started",
+    r"Phase 2A closeout evidence is recorded",
+    r"Do not start Phase 2B\b",
+]
 
 
 def _resolve_root(explicit: Path | None) -> Path:
@@ -57,6 +69,9 @@ def _doc_paths(root: Path) -> dict[str, Path]:
         "phases": root / "docs/execution/IMPLEMENTATION_PHASES.md",
         "feature_matrix": root / "docs/admin/FEATURE_MATRIX.md",
         "readme": root / "README.md",
+        "shared_context": root / "docs/ai/SHARED_CONTEXT.md",
+        "handoff": root / "docs/ai/AGENT_HANDOFF.md",
+        "app_readme": root / "apps/edr/README.md",
     }
 
 
@@ -94,7 +109,7 @@ def _doc_mentions_next_phase(docs: dict[str, Path], name: str) -> bool:
     title = re.escape(EXPECTED_NEXT_PHASE_TITLE)
     candidates = [
         rf"Phase {EXPECTED_NEXT_PHASE} may start",
-        rf"Phase {EXPECTED_NEXT_PHASE} is the safe next phase",
+        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+the\s+safe\s+next\s+phase",
         rf"safe next phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
         rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}\b",
         rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| Safe next phase",
@@ -104,6 +119,15 @@ def _doc_mentions_next_phase(docs: dict[str, Path], name: str) -> bool:
 
 def _doc_marks_fixup_complete(docs: dict[str, Path], name: str) -> bool:
     return PHASE_FIXUP_MARKER in _read(docs[name])
+
+
+def _stale_current_state_matches(docs: dict[str, Path], name: str) -> list[str]:
+    raw = _read(docs[name])
+    return [
+        pattern
+        for pattern in STALE_CURRENT_STATE_PATTERNS
+        if re.search(pattern, raw, flags=re.IGNORECASE)
+    ]
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -214,6 +238,22 @@ def main(argv: list[str] | None = None) -> int:
             failures.append(
                 f"{docs[name].relative_to(root)} does not name '{EXPECTED_NEXT_PHASE}' "
                 f"as the safe next phase."
+            )
+
+    for name in (
+        "control_plane",
+        "current_state",
+        "feature_matrix",
+        "readme",
+        "shared_context",
+        "handoff",
+        "app_readme",
+    ):
+        stale_matches = _stale_current_state_matches(docs, name)
+        if stale_matches:
+            failures.append(
+                f"{docs[name].relative_to(root)} contains stale current-state marker(s): "
+                + ", ".join(stale_matches)
             )
 
     for name in ("control_plane", "current_state", "phases"):
