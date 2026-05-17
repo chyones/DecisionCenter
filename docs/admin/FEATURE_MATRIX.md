@@ -69,6 +69,9 @@
 | Admin connector probe | 27, PHASE_2B_PLAN §C.2 | `POST /admin/services/{name}/probe` | Admin only; 404 unknown service; read-only probe | `ProbeResult` — pass/fail + latency; writes `connector.probe_success` or `connector.error` | `connector.probe_success`, `connector.error`, `connector.latency_spike` | `test_phase2b_connectors.py` | implemented |
 | Admin health live | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.7 | `GET /admin/health/live` | Admin only; per-service live probe latencies + 24h sparkline buckets from `connector_events` | `HealthLiveResponse` — no business content, no credentials | None (read-only) | `test_phase2b_health_cost.py` (28 cases) | implemented |
 | Admin cost monitor | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.7 | `GET /admin/cost` | Admin only; daily/monthly caps, LLM call breakdown, warning/exceeded flags; emits `cost.daily_cap_warning` / `cost.daily_cap_exceeded` events | `CostResponse` — no business content, no credentials | `cost.daily_cap_warning`, `cost.daily_cap_exceeded` | `test_phase2b_health_cost.py` | implemented |
+| Admin audit log list | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.8 | `GET /admin/audit` | Admin only; paginated, filterable by date/type; hard limit ≤ 200; UNION over audit_log, review_decisions, connector_events, admin_events | `AuditEventListResponse` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` (18 cases) | implemented |
+| Admin audit log export | 27, PHASE_2B_PLAN §C.2 | `GET /admin/audit/export.csv` | Admin only; CSV of up to 200 events | `text/csv` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` | implemented |
+| Admin audit log detail | 27, PHASE_2B_PLAN §C.2 | `GET /admin/audit/{event_id}` | Admin only; 404 if unknown composite id | `AuditEventDetail` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` | implemented |
 
 ---
 
@@ -220,6 +223,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Phase 2A validation gate | E2E + U-01..U-16 manual QA | Complete | `docs/execution/PHASE_2A_REPORT.md` | implemented |
 | Admin System Health screen | `/admin/health` | Live `GET /admin/health/live` + `GET /admin/cost`; auto-refresh; sparklines; cost banners with warning/exceeded thresholds | Phase 2B Slice 3; frontend lint/build | implemented |
 | Admin Connectors screen | `/admin/connectors` | Live `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` | Phase 2B Slice 2; frontend lint/build | implemented |
+| Admin Audit Log screen | `/admin/audit` | Live `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; filters, pagination, CSV export, detail panel | Phase 2B Slice 4; frontend lint/build | implemented |
 
 ---
 

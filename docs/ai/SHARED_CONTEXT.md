@@ -3,12 +3,12 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `0a3edb5f65de75807427b5630a94182e410e518c`
-- Current status: `PHASE_2B_SLICE_3_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `3e58418b91481df319c4f8b3019d67ae18b5d153`
+- Current status: `PHASE_2B_SLICE_4_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 3 (System Health + cost monitor) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 4 (Audit Log screen).
+- Active phase: Phase 2B — Slice 4 (Audit Log screen) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 5 (Permissions & Roles).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -49,9 +49,12 @@ Phase 2B is in progress. Slice 1 adds the admin RBAC base: a shared
 and the `connector_events` table, plus the `AdminConnectorsScreen` frontend.
 Slice 3 adds `GET /admin/health/live` and `GET /admin/cost` with live probes,
 sparkline buckets, cost breakdown, and warning/exceeded thresholds, plus the
-upgraded `AdminHealthScreen` frontend. 86 integration cases across
-`test_phase2b_admin_rbac.py` (13), `test_phase2b_connectors.py` (45), and
-`test_phase2b_health_cost.py` (28) lock the contract.
+upgraded `AdminHealthScreen` frontend. Slice 4 adds `GET /admin/audit`,
+`GET /admin/audit/export.csv`, and `GET /admin/audit/{event_id}` with a UNION
+read-model over four event tables, plus the `AdminAuditLogScreen.tsx` frontend.
+104 integration cases across `test_phase2b_admin_rbac.py` (13),
+`test_phase2b_connectors.py` (45), `test_phase2b_health_cost.py` (28), and
+`test_phase2b_audit.py` (18) lock the contract.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -85,7 +88,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 3 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 4 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.

@@ -281,6 +281,36 @@ export interface CostResponse {
   exceeded: boolean;
 }
 
+// Phase 2B Slice 4 — Audit Log screen.
+// ---------------------------------------------------------------------------
+
+export interface AuditEventSummary {
+  event_id: string;
+  event_type: string;
+  ts: string;
+  user_id_hash: string | null;
+  project_code: string | null;
+  service: string | null;
+  detail: string;
+}
+
+export type AuditEventDetail = AuditEventSummary;
+
+export interface AuditEventListResponse {
+  events: AuditEventSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListAuditEventsParams {
+  date_from?: string;
+  date_to?: string;
+  event_type?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

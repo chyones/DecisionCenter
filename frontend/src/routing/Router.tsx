@@ -7,6 +7,7 @@ import { AdminHealthScreen } from '../screens/AdminHealthScreen';
 import { AdminPermissionsScreen } from '../screens/AdminPermissionsScreen';
 import { AdminSourceMappingScreen } from '../screens/AdminSourceMappingScreen';
 import { AdminConnectorsScreen } from '../screens/AdminConnectorsScreen';
+import { AdminAuditLogScreen } from '../screens/AdminAuditLogScreen';
 import { QueryComposerScreen } from '../screens/QueryComposerScreen';
 import { ReportsListScreen } from '../screens/ReportsListScreen';
 import { ProcessingScreen } from '../screens/ProcessingScreen';
@@ -79,6 +80,10 @@ export function Router() {
 
   if (path === '/admin/connectors') {
     return <AdminConnectorsScreen />;
+  }
+
+  if (path === '/admin/audit') {
+    return <AdminAuditLogScreen />;
   }
 
   if (path.startsWith('/admin/')) {

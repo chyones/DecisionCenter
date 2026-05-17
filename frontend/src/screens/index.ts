@@ -10,3 +10,5 @@ export { ReportViewScreen } from './ReportViewScreen';
 export { EvidencePanel } from './EvidencePanel';
 export { ExportPanel } from './ExportPanel';
 export { UploadZone } from './UploadZone';
+export { AdminConnectorsScreen } from './AdminConnectorsScreen';
+export { AdminAuditLogScreen } from './AdminAuditLogScreen';

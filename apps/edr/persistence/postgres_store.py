@@ -96,6 +96,24 @@ class PostgresStore:
                     ON connector_events (service, ts DESC)
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS admin_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    ts TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    event_type TEXT NOT NULL,
+                    actor_hash TEXT,
+                    project_code TEXT,
+                    detail TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS admin_events_ts_idx
+                    ON admin_events (ts DESC)
+                """
+            )
 
     async def insert_audit(
         self,
@@ -427,6 +445,258 @@ class PostgresStore:
                 """,
                 "cost",
                 event_type,
+                detail,
+            )
+            return int(row["id"]) if row else 0
+
+    # ------------------------------------------------------------------
+    # Phase 2B Slice 4 — Audit Log read-model + admin_events writer
+    # ------------------------------------------------------------------
+
+    async def list_audit_events(
+        self,
+        *,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Return a paginated, filtered UNION over all event tables.
+
+        Composite ``event_id`` prefixes prevent cross-table collisions:
+        ``al:`` = audit_log, ``rd:`` = review_decisions,
+        ``ce:`` = connector_events, ``ae:`` = admin_events.
+        No query text, report content, or evidence excerpts are selected (C-1).
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        def _add(clause: str, value: Any) -> None:
+            params.append(value)
+            clauses.append(clause.replace("?", f"${len(params)}"))
+
+        if date_from is not None:
+            _add("ts >= ?", date_from)
+        if date_to is not None:
+            _add("ts <= ?", date_to)
+        if event_type is not None:
+            _add("event_type = ?", event_type)
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            count_row = await conn.fetchrow(
+                f"""
+                WITH unified AS (
+                    SELECT
+                        'al:' || id AS event_id,
+                        created_at AS ts,
+                        'report.submitted' AS event_type,
+                        user_id_hash,
+                        project_code,
+                        NULL::text AS service,
+                        'state=' || COALESCE(review_state, 'unknown')
+                        || ' qg=' || COALESCE(quality_gate_status, 'unknown') AS detail
+                    FROM audit_log
+                    UNION ALL
+                    SELECT
+                        'rd:' || id,
+                        created_at,
+                        action,
+                        reviewer_id_hash,
+                        NULL,
+                        NULL,
+                        COALESCE(reason, '') || COALESCE(
+                            CASE WHEN comment IS NOT NULL AND comment <> ''
+                                 THEN ' | ' || comment ELSE '' END, ''
+                        )
+                    FROM review_decisions
+                    UNION ALL
+                    SELECT
+                        'ce:' || id,
+                        ts,
+                        event_type,
+                        NULL,
+                        NULL,
+                        service,
+                        detail
+                    FROM connector_events
+                    UNION ALL
+                    SELECT
+                        'ae:' || id,
+                        ts,
+                        event_type,
+                        actor_hash,
+                        project_code,
+                        NULL,
+                        detail
+                    FROM admin_events
+                )
+                SELECT COUNT(*) AS n FROM unified {where}
+                """,
+                *params,
+            )
+            total = int(count_row["n"]) if count_row else 0
+
+            rows = await conn.fetch(
+                f"""
+                WITH unified AS (
+                    SELECT
+                        'al:' || id AS event_id,
+                        created_at AS ts,
+                        'report.submitted' AS event_type,
+                        user_id_hash,
+                        project_code,
+                        NULL::text AS service,
+                        'state=' || COALESCE(review_state, 'unknown')
+                        || ' qg=' || COALESCE(quality_gate_status, 'unknown') AS detail
+                    FROM audit_log
+                    UNION ALL
+                    SELECT
+                        'rd:' || id,
+                        created_at,
+                        action,
+                        reviewer_id_hash,
+                        NULL,
+                        NULL,
+                        COALESCE(reason, '') || COALESCE(
+                            CASE WHEN comment IS NOT NULL AND comment <> ''
+                                 THEN ' | ' || comment ELSE '' END, ''
+                        )
+                    FROM review_decisions
+                    UNION ALL
+                    SELECT
+                        'ce:' || id,
+                        ts,
+                        event_type,
+                        NULL,
+                        NULL,
+                        service,
+                        detail
+                    FROM connector_events
+                    UNION ALL
+                    SELECT
+                        'ae:' || id,
+                        ts,
+                        event_type,
+                        actor_hash,
+                        project_code,
+                        NULL,
+                        detail
+                    FROM admin_events
+                )
+                SELECT * FROM unified {where}
+                ORDER BY ts DESC
+                LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+                """,
+                *params,
+                limit,
+                offset,
+            )
+            return ([dict(r) for r in rows], total)
+
+    async def get_audit_event(self, event_id: str) -> dict[str, Any] | None:
+        """Fetch a single unified event by its composite id."""
+        if ":" not in event_id:
+            return None
+        prefix, raw_id = event_id.split(":", 1)
+        try:
+            pk = int(raw_id)
+        except ValueError:
+            return None
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if prefix == "al":
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        'al:' || id AS event_id,
+                        created_at AS ts,
+                        'report.submitted' AS event_type,
+                        user_id_hash,
+                        project_code,
+                        NULL::text AS service,
+                        'state=' || COALESCE(review_state, 'unknown')
+                        || ' qg=' || COALESCE(quality_gate_status, 'unknown') AS detail
+                    FROM audit_log WHERE id = $1
+                    """,
+                    pk,
+                )
+            elif prefix == "rd":
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        'rd:' || id AS event_id,
+                        created_at AS ts,
+                        action AS event_type,
+                        reviewer_id_hash AS user_id_hash,
+                        NULL AS project_code,
+                        NULL::text AS service,
+                        COALESCE(reason, '') || COALESCE(
+                            CASE WHEN comment IS NOT NULL AND comment <> ''
+                                 THEN ' | ' || comment ELSE '' END, ''
+                        ) AS detail
+                    FROM review_decisions WHERE id = $1
+                    """,
+                    pk,
+                )
+            elif prefix == "ce":
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        'ce:' || id AS event_id,
+                        ts,
+                        event_type,
+                        NULL AS user_id_hash,
+                        NULL AS project_code,
+                        service,
+                        detail
+                    FROM connector_events WHERE id = $1
+                    """,
+                    pk,
+                )
+            elif prefix == "ae":
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        'ae:' || id AS event_id,
+                        ts,
+                        event_type,
+                        actor_hash AS user_id_hash,
+                        project_code,
+                        NULL::text AS service,
+                        detail
+                    FROM admin_events WHERE id = $1
+                    """,
+                    pk,
+                )
+            else:
+                return None
+            return dict(row) if row else None
+
+    async def insert_admin_event(
+        self,
+        *,
+        event_type: str,
+        actor_hash: str | None,
+        project_code: str | None,
+        detail: str,
+    ) -> int:
+        """Insert an admin event (used by Slices 5–7)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO admin_events (event_type, actor_hash, project_code, detail)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id
+                """,
+                event_type,
+                actor_hash,
+                project_code,
                 detail,
             )
             return int(row["id"]) if row else 0

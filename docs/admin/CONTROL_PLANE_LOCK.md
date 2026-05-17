@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-15 (updated for Phase 2B Slice 3 closeout)
+> **Date:** 2026-05-17 (updated for Phase 2B Slice 4 closeout)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2B_SLICE_3_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2B_SLICE_4_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.

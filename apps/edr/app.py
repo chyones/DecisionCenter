@@ -1669,3 +1669,152 @@ async def admin_cost(
         warning=warning,
         exceeded=exceeded,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 4 — Audit Log screen
+# Implements GET /admin/audit, GET /admin/audit/export.csv, and
+# GET /admin/audit/{event_id} per docs/execution/PHASE_2B_PLAN.md §E row 4.
+# Admin-only via _require_admin.  C-1 / C-6 compliant.
+# ---------------------------------------------------------------------------
+
+
+class AuditEventSummary(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    event_id: str
+    event_type: str
+    ts: str
+    user_id_hash: str | None
+    project_code: str | None
+    service: str | None
+    detail: str
+
+
+class AuditEventDetail(AuditEventSummary):
+    pass
+
+
+class AuditEventListResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    events: list[AuditEventSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+@app.get("/admin/audit")
+async def list_admin_audit(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    date_from: Annotated[datetime | None, Query()] = None,
+    date_to: Annotated[datetime | None, Query()] = None,
+    event_type: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> AuditEventListResponse:
+    """Admin-only paginated audit log over all event tables.
+
+    Filters: date_from, date_to, event_type.  Hard limit ≤ 200.
+    No business content (C-1); no credentials (C-6).
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows, total = await pg.list_audit_events(
+        date_from=date_from,
+        date_to=date_to,
+        event_type=event_type,
+        limit=limit,
+        offset=offset,
+    )
+    events = [
+        AuditEventSummary(
+            event_id=str(r["event_id"]),
+            event_type=str(r["event_type"]),
+            ts=r["ts"].isoformat() if isinstance(r["ts"], datetime) else str(r["ts"]),
+            user_id_hash=r.get("user_id_hash"),
+            project_code=r.get("project_code"),
+            service=r.get("service"),
+            detail=str(r.get("detail", "")),
+        )
+        for r in rows
+    ]
+    return AuditEventListResponse(
+        events=events,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/admin/audit/export.csv")
+async def export_admin_audit_csv(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    date_from: Annotated[datetime | None, Query()] = None,
+    date_to: Annotated[datetime | None, Query()] = None,
+    event_type: Annotated[str | None, Query()] = None,
+) -> Response:
+    """Admin-only CSV export of up to 200 audit events."""
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows, _total = await pg.list_audit_events(
+        date_from=date_from,
+        date_to=date_to,
+        event_type=event_type,
+        limit=200,
+        offset=0,
+    )
+    lines = ["event_id,event_type,ts,user_id_hash,project_code,service,detail"]
+    for r in rows:
+        ts = r["ts"].isoformat() if isinstance(r["ts"], datetime) else str(r["ts"])
+        lines.append(
+            ",".join(
+                [
+                    _csv_escape(str(r["event_id"])),
+                    _csv_escape(str(r["event_type"])),
+                    _csv_escape(ts),
+                    _csv_escape(str(r.get("user_id_hash") or "")),
+                    _csv_escape(str(r.get("project_code") or "")),
+                    _csv_escape(str(r.get("service") or "")),
+                    _csv_escape(str(r.get("detail", ""))),
+                ]
+            )
+        )
+    csv_text = "\n".join(lines) + "\n"
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="audit-log.csv"'},
+    )
+
+
+def _csv_escape(value: str) -> str:
+    """Escape a string for safe inclusion in CSV."""
+    if "," in value or '"' in value or "\n" in value:
+        return '"' + value.replace('"', '""') + '"'
+    return value
+
+
+@app.get("/admin/audit/{event_id}")
+async def get_admin_audit_event(
+    event_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> AuditEventDetail:
+    """Admin-only single event detail by composite event_id."""
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    row = await pg.get_audit_event(event_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return AuditEventDetail(
+        event_id=str(row["event_id"]),
+        event_type=str(row["event_type"]),
+        ts=row["ts"].isoformat() if isinstance(row["ts"], datetime) else str(row["ts"]),
+        user_id_hash=row.get("user_id_hash"),
+        project_code=row.get("project_code"),
+        service=row.get("service"),
+        detail=str(row.get("detail", "")),
+    )

@@ -43,4 +43,8 @@ export {
   type HealthLiveResponse,
   type LlmBreakdownItem,
   type CostResponse,
+  type AuditEventSummary,
+  type AuditEventDetail,
+  type AuditEventListResponse,
+  type ListAuditEventsParams,
 } from './types';
