@@ -1,7 +1,7 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "3e58418b91481df319c4f8b3019d67ae18b5d153",
-  "status": "PHASE_2B_SLICE_4_COMPLETE_NOT_LIVE",
+  "current_commit": "c6a92e410e7d03c331683e89e078e181a2300386",
+  "status": "PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2A",
   "active_phase": "Phase 2B",
@@ -24,7 +24,8 @@
     "Slice 1 — Plan ratification and admin RBAC base",
     "Slice 2 — Connectors & APIs (read + probe)",
     "Slice 3 — System Health + cost monitor",
-    "Slice 4 — Audit Log screen"
+    "Slice 4 — Audit Log screen",
+    "Slice 5 — Permissions & Roles (Entra Group Mapping)"
   ],
   "next_allowed_phase": "Phase 2B Slice 5 — Permissions & Roles",
   "phase_1e_may_start": false,
@@ -36,7 +37,7 @@
   "requires_explicit_user_approval_for_phase_2b_slice_2": false,
   "requires_explicit_user_approval_for_phase_2b_slice_3": false,
   "requires_explicit_user_approval_for_phase_2b_slice_4": false,
-  "requires_explicit_user_approval_for_phase_2b_slice_5": true,
+  "requires_explicit_user_approval_for_phase_2b_slice_5": false,
   "latest_report": "docs/execution/PHASE_2B_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2A_REPORT.md",
   "latest_verified_ci": {
@@ -50,7 +51,7 @@
     "date": "2026-05-17",
     "phase2a_e2e": "PASS",
     "smoke": "2 passed",
-    "test": "308 passed, 1 warning",
+    "test": "341 passed, 1 warning",
     "eval": "64/64 passed",
     "ruff": "clean",
     "compileall": "clean",

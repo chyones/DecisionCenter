@@ -47,4 +47,7 @@ export {
   type AuditEventDetail,
   type AuditEventListResponse,
   type ListAuditEventsParams,
+  type EntraGroupMapping,
+  type EntraGroupMappingUpsertRequest,
+  type EntraGroupMappingListResponse,
 } from './types';

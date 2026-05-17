@@ -24,7 +24,7 @@ from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.admin import services_catalog
 from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
-from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
+from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
 
 app = FastAPI(
     title="Decision Center",
@@ -1797,6 +1797,11 @@ def _csv_escape(value: str) -> str:
     return value
 
 
+def _ts_iso(ts: datetime | Any) -> str:
+    """Normalise a timestamp to ISO-8601 string."""
+    return ts.isoformat() if isinstance(ts, datetime) else str(ts)
+
+
 @app.get("/admin/audit/{event_id}")
 async def get_admin_audit_event(
     event_id: str,
@@ -1818,3 +1823,126 @@ async def get_admin_audit_event(
         service=row.get("service"),
         detail=str(row.get("detail", "")),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2B Slice 5 — Permissions & Roles (Entra Group Mapping)
+# Implements GET /admin/entra-mappings, PUT /admin/entra-mappings/{group_id},
+# DELETE /admin/entra-mappings/{group_id} per docs/execution/PHASE_2B_PLAN.md §E row 5.
+# Admin-only via _require_admin.  C-1 / C-6 compliant.  A-17 audit-before-save.
+# ---------------------------------------------------------------------------
+
+
+class EntraGroupMapping(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    entra_group_id: str
+    role: str
+    created_at: str
+    updated_at: str
+
+
+class EntraGroupMappingUpsertRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    role: str = Field(min_length=1)
+
+
+class EntraGroupMappingListResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    mappings: list[EntraGroupMapping]
+
+
+def _validate_canonical_role(role: str) -> None:
+    """Raise 400 if role is not one of the nine canonical roles."""
+    if role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role: {role}. Must be one of: {sorted(VALID_ROLES)}",
+        )
+
+
+@app.get("/admin/entra-mappings")
+async def list_entra_mappings(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> EntraGroupMappingListResponse:
+    """Admin-only list of all Entra group → role mappings."""
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows = await pg.list_entra_mappings()
+    mappings = [
+        EntraGroupMapping(
+            entra_group_id=str(r["entra_group_id"]),
+            role=str(r["role"]),
+            created_at=_ts_iso(r["created_at"]),
+            updated_at=_ts_iso(r["updated_at"]),
+        )
+        for r in rows
+    ]
+    return EntraGroupMappingListResponse(mappings=mappings)
+
+
+@app.put("/admin/entra-mappings/{group_id}")
+async def upsert_entra_mapping(
+    group_id: str,
+    body: EntraGroupMappingUpsertRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> EntraGroupMapping:
+    """Admin-only upsert of an Entra group → role mapping.
+
+    A-17: audit event is emitted BEFORE the database write.
+    """
+    _require_admin(claims)
+    _validate_canonical_role(body.role)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    # A-17 audit-before-save
+    await pg.insert_admin_event(
+        event_type="admin.role_mapping_changed",
+        actor_hash=actor_hash,
+        project_code=None,
+        detail=f"group={group_id} role={body.role}",
+    )
+    await pg.upsert_entra_mapping(entra_group_id=group_id, role=body.role)
+
+    row = await pg.get_entra_mapping(group_id)
+    assert row is not None  # we just wrote it
+    return EntraGroupMapping(
+        entra_group_id=str(row["entra_group_id"]),
+        role=str(row["role"]),
+        created_at=_ts_iso(row["created_at"]),
+        updated_at=_ts_iso(row["updated_at"]),
+    )
+
+
+@app.delete("/admin/entra-mappings/{group_id}")
+async def delete_entra_mapping(
+    group_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> Response:
+    """Admin-only delete of an Entra group → role mapping.
+
+    404 if the mapping does not exist.  A-17: audit event emitted
+    only after confirming existence and before the delete.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    row = await pg.get_entra_mapping(group_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.role_mapping_changed",
+        actor_hash=actor_hash,
+        project_code=None,
+        detail=f"deleted group={group_id} role={row['role']}",
+    )
+    await pg.delete_entra_mapping(group_id)
+    return Response(status_code=204)

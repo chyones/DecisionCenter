@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-17 (updated for Phase 2B Slice 4 closeout)
+> **Date:** 2026-05-17 (updated for Phase 2B Slice 5 closeout)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2B_SLICE_4_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -131,9 +131,9 @@ slices are gated on explicit per-slice user approval, as documented in
 |---|---|---|
 | 1 — Plan ratification and admin RBAC base | Complete | `apps/edr/app.py` `_require_admin` helper + `GET /admin/_authcheck` stub; 13 RBAC integration cases in `apps/edr/tests/integration/test_phase2b_admin_rbac.py` (admin allowed, 8 non-admin roles denied, missing role 403, unknown role 403, missing claims 401, helper-level invariants); `docs/execution/PHASE_2B_PLAN.md` ratified. |
 | 2 — Connectors & APIs (read + probe) | Complete | `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` in `apps/edr/app.py`; `apps/edr/admin/services_catalog.py` registry + probe logic; `connector_events` table in `postgres_store.py`; 45 integration cases in `test_phase2b_connectors.py` (RBAC, A-03, A-04, A-05, C-1, C-6, write-before-return); `AdminConnectorsScreen.tsx` frontend. |
-| 3 — System Health + cost monitor | Pending | Requires explicit user approval. |
-| 4 — Audit Log screen | Pending | Requires explicit user approval. |
-| 5 — Permissions & Roles | Pending | Requires explicit user approval. |
+| 3 — System Health + cost monitor | Complete | `GET /admin/health/live`, `GET /admin/cost`; `cost_events` table + sparkline buckets; 28 integration cases in `test_phase2b_health_cost.py`; live `AdminHealthScreen.tsx` frontend with auto-refresh, cost banners, and warning/exceeded thresholds. |
+| 4 — Audit Log screen | Complete | `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; `admin_events` table + UNION read-model; 18 integration cases in `test_phase2b_audit.py`; `AdminAuditLogScreen.tsx` frontend with filters, pagination, CSV export, and detail panel. |
+| 5 — Permissions & Roles | Complete | `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`, `DELETE /admin/entra-mappings/{group_id}`; `entra_group_mappings` table + `_validate_canonical_role()`; A-17 audit-before-save on upsert and delete; 33 integration cases in `test_phase2b_permissions.py` (RBAC, 401, happy paths, invalid role 400, A-17 order, 404 delete, C-1, C-6); live three-tab `AdminPermissionsScreen.tsx` frontend. |
 | 6 — Project Source Mapping | Pending | Requires explicit user approval. |
 | 7 — Approval Queue + admin override | Pending | Requires explicit user approval. |
 | 8 — Dashboard | Pending | Requires explicit user approval. |
@@ -193,10 +193,10 @@ must be treated as a spec change before implementation.
 
 ## Final Readiness Decision
 
-**PHASE_2B_SLICE_1_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
+**PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
 
 Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is
-in progress: Slice 1 (admin RBAC base) is complete and CI-green. The next
-safe step is Phase 2B Slice 2 (Connectors & APIs, read + probe), and it
-requires explicit user authorization. This does not authorize deployment,
-Phase 2B Slice 2 implementation, Phase 2C, or any spec change.
+in progress: Slices 1–5 are complete and CI-green. The next safe step is
+Phase 2B Slice 6 (Project Source Mapping), and it requires explicit user
+authorization. This does not authorize deployment, Phase 2B Slice 6
+implementation, Phase 2C, or any spec change.

@@ -311,6 +311,25 @@ export interface ListAuditEventsParams {
   offset?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2B Slice 5 — Permissions & Roles (Entra Group Mapping)
+// ---------------------------------------------------------------------------
+
+export interface EntraGroupMapping {
+  entra_group_id: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EntraGroupMappingUpsertRequest {
+  role: string;
+}
+
+export interface EntraGroupMappingListResponse {
+  mappings: EntraGroupMapping[];
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

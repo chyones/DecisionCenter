@@ -114,6 +114,16 @@ class PostgresStore:
                     ON admin_events (ts DESC)
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entra_group_mappings (
+                    entra_group_id TEXT PRIMARY KEY,
+                    role TEXT NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+                """
+            )
 
     async def insert_audit(
         self,
@@ -675,6 +685,63 @@ class PostgresStore:
                 )
             else:
                 return None
+            return dict(row) if row else None
+
+    async def list_entra_mappings(self) -> list[dict[str, Any]]:
+        """Return all Entra group mappings ordered by created_at ASC."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT entra_group_id, role, created_at, updated_at
+                FROM entra_group_mappings
+                ORDER BY created_at ASC
+                """
+            )
+            return [dict(r) for r in rows]
+
+    async def upsert_entra_mapping(
+        self,
+        *,
+        entra_group_id: str,
+        role: str,
+    ) -> None:
+        """Insert or update an Entra group → role mapping."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO entra_group_mappings (entra_group_id, role)
+                VALUES ($1, $2)
+                ON CONFLICT (entra_group_id)
+                DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()
+                """,
+                entra_group_id,
+                role,
+            )
+
+    async def delete_entra_mapping(self, entra_group_id: str) -> bool:
+        """Delete an Entra group mapping. Returns True if a row was removed."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            status: str = await conn.execute(
+                "DELETE FROM entra_group_mappings WHERE entra_group_id = $1",
+                entra_group_id,
+            )
+            return status == "DELETE 1"
+
+    async def get_entra_mapping(self, entra_group_id: str) -> dict[str, Any] | None:
+        """Fetch a single mapping by group id, or None if absent."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT entra_group_id, role, created_at, updated_at
+                FROM entra_group_mappings
+                WHERE entra_group_id = $1
+                """,
+                entra_group_id,
+            )
             return dict(row) if row else None
 
     async def insert_admin_event(

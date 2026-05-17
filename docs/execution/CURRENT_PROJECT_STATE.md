@@ -87,6 +87,7 @@ deployment.
 | Phase 2B Slice 2 — Connectors & APIs (read + probe) | Complete | `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe`; `apps/edr/admin/services_catalog.py`; `connector_events` table; 45 integration cases in `test_phase2b_connectors.py`; `AdminConnectorsScreen.tsx` frontend. CI green. |
 | Phase 2B Slice 3 — System Health + cost monitor | Complete | `GET /admin/health/live`, `GET /admin/cost`; `cost_events` table + sparkline buckets; 28 integration cases in `test_phase2b_health_cost.py`; live `AdminHealthScreen.tsx` frontend with auto-refresh, cost banners, and warning/exceeded thresholds. CI green. |
 | Phase 2B Slice 4 — Audit Log screen | Complete | `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; `admin_events` table + UNION read-model; 18 integration cases in `test_phase2b_audit.py`; `AdminAuditLogScreen.tsx` frontend with filters, pagination, CSV export, and detail panel. CI green. |
+| Phase 2B Slice 5 — Permissions & Roles | Complete | `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`, `DELETE /admin/entra-mappings/{group_id}`; `entra_group_mappings` table + `_validate_canonical_role()`; A-17 audit-before-save on upsert and delete; 33 integration cases in `test_phase2b_permissions.py`; live three-tab `AdminPermissionsScreen.tsx` frontend (Role Matrix, Entra Group Mapping CRUD, Project Role Assignments placeholder). CI green. |
 
 ---
 
@@ -127,17 +128,17 @@ deployment.
 
 ## Safe Next Phase
 
-Phase 2B Slice 5 (Permissions & Roles) is the safe next work item, but it
+Phase 2B Slice 6 (Project Source Mapping) is the safe next work item, but it
 requires explicit per-slice user authorization before any implementation starts.
 
 Allowed next work is limited to explicitly authorized Phase 2B slices or later
-maintenance requested by the user. Do not start Slice 5 by inference.
+maintenance requested by the user. Do not start Slice 6 by inference.
 
 ## Standing Forbidden Work
 
 Do not deploy. Do not change the locked spec unless an explicit spec-change
 ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
-tests. Do not start Phase 2B Slice 5 without explicit per-slice user authorization.
+tests. Do not start Phase 2B Slice 6 without explicit per-slice user authorization.
 
 ---
 

@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-15 (Phase 2B Slice 2 — Connectors & APIs read + probe)
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is the safe next phase and is in progress: Slice 1 (admin RBAC base) is complete and CI-green. Subsequent slices are gated on explicit per-slice user approval. Production is `NOT_LIVE`.
+> **Date:** 2026-05-17 (Phase 2B Slice 5 — Permissions & Roles)
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phase 2A are complete. Phase 2B is in progress: Slices 1–5 are complete and CI-green. Phase 2B is the safe next phase; subsequent slices require explicit per-slice user approval. Production is `NOT_LIVE`.
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -72,6 +72,9 @@
 | Admin audit log list | 27, PHASE_2B_PLAN §C.2, UI_CONTRACT §3.8 | `GET /admin/audit` | Admin only; paginated, filterable by date/type; hard limit ≤ 200; UNION over audit_log, review_decisions, connector_events, admin_events | `AuditEventListResponse` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` (18 cases) | implemented |
 | Admin audit log export | 27, PHASE_2B_PLAN §C.2 | `GET /admin/audit/export.csv` | Admin only; CSV of up to 200 events | `text/csv` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` | implemented |
 | Admin audit log detail | 27, PHASE_2B_PLAN §C.2 | `GET /admin/audit/{event_id}` | Admin only; 404 if unknown composite id | `AuditEventDetail` — no query, no evidence, no report content | None (read-only) | `test_phase2b_audit.py` | implemented |
+| Admin Entra mapping list | 27, PHASE_2B_PLAN §C.2 | `GET /admin/entra-mappings` | Admin only; list all group → role mappings | `EntraGroupMappingListResponse` — no business content, no credentials | None (read-only) | `test_phase2b_permissions.py` (33 cases) | implemented |
+| Admin Entra mapping upsert | 27, PHASE_2B_PLAN §C.2 | `PUT /admin/entra-mappings/{group_id}` | Admin only; `_validate_canonical_role()` rejects invalid roles with 400; A-17 audit-before-save | `EntraGroupMapping` | `admin.role_mapping_changed` | `test_phase2b_permissions.py` | implemented |
+| Admin Entra mapping delete | 27, PHASE_2B_PLAN §C.2 | `DELETE /admin/entra-mappings/{group_id}` | Admin only; 404 if absent; A-17 audit-before-delete | 204 No Content | `admin.role_mapping_changed` | `test_phase2b_permissions.py` | implemented |
 
 ---
 
@@ -224,6 +227,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Admin System Health screen | `/admin/health` | Live `GET /admin/health/live` + `GET /admin/cost`; auto-refresh; sparklines; cost banners with warning/exceeded thresholds | Phase 2B Slice 3; frontend lint/build | implemented |
 | Admin Connectors screen | `/admin/connectors` | Live `GET /admin/services`, `GET /admin/services/{name}`, `POST /admin/services/{name}/probe` | Phase 2B Slice 2; frontend lint/build | implemented |
 | Admin Audit Log screen | `/admin/audit` | Live `GET /admin/audit`, `GET /admin/audit/export.csv`, `GET /admin/audit/{event_id}`; filters, pagination, CSV export, detail panel | Phase 2B Slice 4; frontend lint/build | implemented |
+| Admin Permissions screen | `/admin/permissions` | Live three-tab screen: Role Matrix (static), Entra Group Mapping (CRUD via `GET/PUT/DELETE /admin/entra-mappings` with `SlideInPanel` add/edit and typed-confirmation `ConfirmDialog` delete), Project Role Assignments (active placeholder linking to Source Mapping) | Phase 2B Slice 5; frontend lint/build | implemented |
 
 ---
 

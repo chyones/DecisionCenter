@@ -3,12 +3,12 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `3e58418b91481df319c4f8b3019d67ae18b5d153`
-- Current status: `PHASE_2B_SLICE_4_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `5f481c8696dd7feec054e165558f70ed815f2822`
+- Current status: `PHASE_2B_SLICE_5_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2A
-- Active phase: Phase 2B — Slice 4 (Audit Log screen) complete and CI-green.
-- Current allowed next work: Phase 2B Slice 5 (Permissions & Roles).
+- Active phase: Phase 2B — Slice 5 (Permissions & Roles) complete and CI-green.
+- Current allowed next work: Phase 2B Slice 6 (Project Source Mapping).
   Requires explicit per-slice user approval before implementation.
 - Latest plan: `docs/execution/PHASE_2B_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2A_REPORT.md`
@@ -52,9 +52,14 @@ sparkline buckets, cost breakdown, and warning/exceeded thresholds, plus the
 upgraded `AdminHealthScreen` frontend. Slice 4 adds `GET /admin/audit`,
 `GET /admin/audit/export.csv`, and `GET /admin/audit/{event_id}` with a UNION
 read-model over four event tables, plus the `AdminAuditLogScreen.tsx` frontend.
-104 integration cases across `test_phase2b_admin_rbac.py` (13),
-`test_phase2b_connectors.py` (45), `test_phase2b_health_cost.py` (28), and
-`test_phase2b_audit.py` (18) lock the contract.
+Slice 5 adds `GET /admin/entra-mappings`, `PUT /admin/entra-mappings/{group_id}`,
+and `DELETE /admin/entra-mappings/{group_id}` with the `entra_group_mappings`
+table, `_validate_canonical_role()`, A-17 audit-before-save, and the live
+three-tab `AdminPermissionsScreen.tsx` frontend (Role Matrix, Entra Group Mapping
+CRUD with typed-confirmation delete, Project Role Assignments placeholder).
+137 integration cases across `test_phase2b_admin_rbac.py` (13),
+`test_phase2b_connectors.py` (45), `test_phase2b_health_cost.py` (28),
+`test_phase2b_audit.py` (18), and `test_phase2b_permissions.py` (33) lock the contract.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -88,7 +93,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start any Phase 2B slice past Slice 4 without explicit per-slice
+- Do not start any Phase 2B slice past Slice 5 without explicit per-slice
   user approval.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
