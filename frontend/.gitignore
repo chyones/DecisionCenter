@@ -17,6 +17,10 @@ dist-ssr
 .tsbuildinfo.app
 .tsbuildinfo.node
 
+# Playwright
+/test-results/
+/playwright-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
