@@ -113,6 +113,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Bundle size check
+        working-directory: frontend
+        run: npm run check-bundle
+
       - name: Install Playwright browsers
         working-directory: frontend
         run: npx playwright install --with-deps chromium

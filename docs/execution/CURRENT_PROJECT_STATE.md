@@ -40,6 +40,11 @@ Source Mapping, Audit Log, and Approval Queue. Admin endpoints are locked to
 system metadata: no report content, query text, evidence excerpts, or
 credential values are exposed.
 
+Phase 2C Slice 1 (Playwright E2E harness) and Slice 2 (bundle-size budget +
+performance assertions) are complete. Bundle budgets enforced: JS 120 kB gzip,
+CSS 15 kB gzip. Playwright performance tests verify Processing View and
+Report View render within 1500 ms FCP and 2000 ms content-ready budgets.
+
 Production is `NOT_LIVE`. Phase 2C is the current active phase after explicit
 user authorization on 2026-05-21. A push to `origin/main` is not a deployment.
 

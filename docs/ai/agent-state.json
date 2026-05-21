@@ -32,7 +32,10 @@
     "Slice 9 — Routing + Admin Nav",
     "Slice 10 — Closeout + truth reconciliation"
   ],
-  "completed_phase_2c_slices": [],
+  "completed_phase_2c_slices": [
+    "Slice 1 — Browser test harness and first hardening checks",
+    "Slice 2 — Performance and bundle-budget validation"
+  ],
   "next_allowed_phase": "Phase 2C — UI Hardening & Acceptance Validation (in progress)",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
@@ -64,11 +67,16 @@
     "phase2a_e2e": "PASS",
     "smoke": "2 passed",
     "test": "461 passed, 1 warning",
-    "eval": "64/64 passed",
+    "eval": "64/64 passed, precision 92.19%",
+    "test_ui": "17 passed",
     "ruff": "clean",
     "compileall": "clean",
     "frontend_lint": "clean",
-    "frontend_build": "success"
+    "frontend_build": "success, JS gzip 91.33 kB",
+    "bundle_check": "pass",
+    "doc_drift": "clean",
+    "ai_context": "clean",
+    "postflight": "clean"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,

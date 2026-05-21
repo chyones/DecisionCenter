@@ -33,7 +33,9 @@ Phase 2C proves the existing UI against the locked UI contract before go-live:
 
 | Slice | Status | Deliverable |
 |---|---|---|
-| Slice 1 — Browser test harness and first hardening checks | In progress | Playwright config, `frontend/e2e/*`, `frontend` `test:ui`, root `make test-ui`, CI headless browser step |
+| Slice 1 — Browser test harness and first hardening checks | ✅ Done | Playwright config, `frontend/e2e/*`, `frontend` `test:ui`, root `make test-ui`, CI headless browser step |
+| Slice 2 — Performance and bundle-budget validation | ✅ Done | `scripts/check-bundle-size.mjs`, `frontend/e2e/performance.spec.ts`, CI bundle-size gate |
+| Slice 3 — Golden-path acceptance automation | Planned | Browser test for submit -> processing -> report -> approve -> download with mocked or deterministic backend fixtures |
 | Slice 2 — Performance and bundle-budget validation | Planned | Automated bundle-size check plus targeted Report View/Processing View performance assertions |
 | Slice 3 — Golden-path acceptance automation | Planned | Browser test for submit -> processing -> report -> approve/final -> download with mocked or deterministic backend fixtures |
 | Slice 4 — Cross-browser expansion and closeout | Planned | Broaden Playwright project matrix, record U-01..U-16 and A-01..A-23 automated/manual evidence, produce Phase 2C closeout report |
