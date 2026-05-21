@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `43efd073d3c078de6227c4977c668e14d51fc8a3`
+- Current verified commit (anchor): `32b039c4b146a9d7517dfa1c847a909961a143eb`
 - Current status: `PHASE_2B_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2B — Admin Visual Control Plane Implementation
@@ -42,6 +42,11 @@ validation: accessibility, responsive behavior, security-DOM checks,
 performance, cross-browser testing, Playwright/Cypress automation, and adding
 `make test:ui` to CI. Phase 2C does not authorize new admin endpoints,
 production deployment, or spec changes.
+
+Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
+Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit
+persistence with sanitized operation names when MinIO/PostgreSQL writes fail.
+Phase 2C remains unstarted until explicit user authorization.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 

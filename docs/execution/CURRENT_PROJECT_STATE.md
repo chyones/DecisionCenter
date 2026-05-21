@@ -1,10 +1,10 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `43efd07` (Phase 2B closeout + truth reconciliation).
-> **Audit date:** 2026-05-17 (updated for Phase 2B closeout)
+> **Audited HEAD:** `32b039c` (Pre-2C cleanup and audit persistence hardening).
+> **Audit date:** 2026-05-21 (updated for pre-2C cleanup)
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
-> 1I, Phase 2A, and Phase 2B — verified against live repo files and local
-> validation evidence captured during the Phase 2B closeout.
+> 1I, Phase 2A, Phase 2B, and pre-2C cleanup — verified against live repo files
+> and local validation evidence captured before Phase 2C authorization.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "43efd073d3c078de6227c4977c668e14d51fc8a3",
+  "current_commit": "32b039c4b146a9d7517dfa1c847a909961a143eb",
   "status": "PHASE_2B_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2B",
@@ -59,10 +59,10 @@
     "url": "https://github.com/chyones/DecisionCenter/actions/runs/25982553222"
   },
   "latest_local_validation": {
-    "date": "2026-05-17",
+    "date": "2026-05-21",
     "phase2a_e2e": "PASS",
     "smoke": "2 passed",
-    "test": "459 passed, 1 warning",
+    "test": "461 passed, 1 warning",
     "eval": "64/64 passed",
     "ruff": "clean",
     "compileall": "clean",
