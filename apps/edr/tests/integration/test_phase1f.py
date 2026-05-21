@@ -86,8 +86,8 @@ async def test_node_15_writes_report_and_validation_artifacts() -> None:
     ]
 
     mock_pg = MagicMock()
-    mock_pg.init_schema = MagicMock(return_value=None)
-    mock_pg.insert_audit = MagicMock(return_value=None)
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.insert_audit = AsyncMock(return_value=None)
 
     with (
         patch("apps.edr.graph.node_15_save_audit.get_minio_store", return_value=mock_minio),
@@ -110,8 +110,8 @@ async def test_node_15_bucket_init_is_idempotent() -> None:
     mock_minio.put_json.return_value = "key-json"
 
     mock_pg = MagicMock()
-    mock_pg.init_schema = MagicMock(return_value=None)
-    mock_pg.insert_audit = MagicMock(return_value=None)
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.insert_audit = AsyncMock(return_value=None)
 
     with (
         patch("apps.edr.graph.node_15_save_audit.get_minio_store", return_value=mock_minio),
@@ -224,8 +224,8 @@ async def test_node_15_audit_artifact_omits_confidential_content() -> None:
     mock_minio.put_json.return_value = "key-json"
 
     mock_pg = MagicMock()
-    mock_pg.init_schema = MagicMock(return_value=None)
-    mock_pg.insert_audit = MagicMock(return_value=None)
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.insert_audit = AsyncMock(return_value=None)
 
     with (
         patch("apps.edr.graph.node_15_save_audit.get_minio_store", return_value=mock_minio),
@@ -242,6 +242,55 @@ async def test_node_15_audit_artifact_omits_confidential_content() -> None:
     # Evidence pack (second put_json call) DOES contain evidence
     evidence_pack_arg = mock_minio.put_json.call_args_list[0][0][2]
     assert "evidence" in evidence_pack_arg
+
+
+@pytest.mark.asyncio
+async def test_node_15_reports_degraded_when_minio_writes_fail() -> None:
+    state = _make_state()
+    mock_minio = MagicMock()
+    mock_minio.put_bytes.side_effect = RuntimeError("storage unavailable")
+    mock_minio.put_json.side_effect = RuntimeError("storage unavailable")
+
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.insert_audit = AsyncMock(return_value=None)
+
+    with (
+        patch("apps.edr.graph.node_15_save_audit.get_minio_store", return_value=mock_minio),
+        patch("apps.edr.graph.node_15_save_audit.get_postgres_store", return_value=mock_pg),
+    ):
+        result = await node_15_save_audit.run(state)
+
+    assert result.outputs["audit_status"] == "degraded"
+    assert result.outputs["artifact_keys"] == []
+    assert all("storage unavailable" not in err for err in result.outputs["audit_errors"])
+    assert any(
+        err.startswith("report_export.md: RuntimeError")
+        for err in result.outputs["audit_errors"]
+    )
+    mock_pg.insert_audit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_node_15_reports_degraded_when_postgres_write_fails() -> None:
+    state = _make_state()
+    mock_minio = MagicMock()
+    mock_minio.put_bytes.return_value = "key-md"
+    mock_minio.put_json.return_value = "key-json"
+
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.insert_audit = AsyncMock(side_effect=RuntimeError("postgres unavailable"))
+
+    with (
+        patch("apps.edr.graph.node_15_save_audit.get_minio_store", return_value=mock_minio),
+        patch("apps.edr.graph.node_15_save_audit.get_postgres_store", return_value=mock_pg),
+    ):
+        result = await node_15_save_audit.run(state)
+
+    assert result.outputs["audit_status"] == "degraded"
+    assert any(err == "postgres_audit: RuntimeError" for err in result.outputs["audit_errors"])
+    assert "postgres unavailable" not in json.dumps(result.outputs["audit_errors"])
 
 
 # ---------------------------------------------------------------------------

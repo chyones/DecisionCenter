@@ -112,11 +112,3 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: UI tests (headless)
-        working-directory: frontend
-        run: npm run test:ui

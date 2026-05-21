@@ -17,6 +17,11 @@ from apps.edr.schemas.audit import AuditArtifact
 _DRAFT_ONLY_INTENTS: set[str] = {"document_control"}
 
 
+def _record_persistence_error(errors: list[str], operation: str, exc: Exception) -> None:
+    """Record a sanitized persistence failure without leaking connection details."""
+    errors.append(f"{operation}: {type(exc).__name__}")
+
+
 def _requires_approval(state: DecisionState) -> bool:
     """Determine whether this report requires human approval.
 
@@ -39,6 +44,7 @@ async def run(state: DecisionState) -> DecisionState:
     user_id_hash = hash_user_id(state.user_id)
     quality_gate_status = state.outputs.get("quality_gate", "needs_review")
     requires_approval = _requires_approval(state)
+    persistence_errors: list[str] = []
 
     # ------------------------------------------------------------------
     # 1. Prepare stores (degrade gracefully if services are unreachable)
@@ -47,7 +53,9 @@ async def run(state: DecisionState) -> DecisionState:
         minio = get_minio_store()
         pg = get_postgres_store()
     except Exception as exc:
-        state.outputs["audit_status"] = f"degraded: {exc}"
+        _record_persistence_error(persistence_errors, "store_init", exc)
+        state.outputs["audit_status"] = "degraded"
+        state.outputs["audit_errors"] = persistence_errors
         return state.mark("node_15_save_audit")
 
     # ------------------------------------------------------------------
@@ -79,8 +87,8 @@ async def run(state: DecisionState) -> DecisionState:
                         content_type=mime,
                     )
                     report_keys.append(key)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _record_persistence_error(persistence_errors, f"report_export.{fmt}", exc)
     else:
         # Placeholder when gate blocked export
         placeholder = (
@@ -96,8 +104,8 @@ async def run(state: DecisionState) -> DecisionState:
                 content_type="text/markdown; charset=utf-8",
             )
             report_keys.append(key)
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_persistence_error(persistence_errors, "report_export.md", exc)
 
     # 2b. Evidence pack (full evidence list from state)
     evidence_pack = {"request_id": request_id, "evidence": state.evidence}
@@ -137,19 +145,19 @@ async def run(state: DecisionState) -> DecisionState:
     audit_key: str | None = None
     try:
         ev_key = minio.put_json(request_id, "evidence-pack.json", evidence_pack)
-    except Exception:
-        pass
+    except Exception as exc:
+        _record_persistence_error(persistence_errors, "evidence_pack", exc)
     try:
         qg_key = minio.put_json(request_id, "quality-gate-result.json", qg_result)
-    except Exception:
-        pass
+    except Exception as exc:
+        _record_persistence_error(persistence_errors, "quality_gate_result", exc)
 
     draft_key: str | None = None
     if state.report_json:
         try:
             draft_key = minio.put_json(request_id, "report-draft.json", state.report_json)
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_persistence_error(persistence_errors, "report_draft", exc)
 
     artifact_keys = (
         report_keys
@@ -163,8 +171,8 @@ async def run(state: DecisionState) -> DecisionState:
     try:
         audit_key = minio.put_json(request_id, "audit-log.json", audit_artifact.model_dump())
         artifact_keys.append(audit_key)
-    except Exception:
-        pass
+    except Exception as exc:
+        _record_persistence_error(persistence_errors, "audit_artifact", exc)
 
     # ------------------------------------------------------------------
     # 4. Persist to PostgreSQL
@@ -182,14 +190,16 @@ async def run(state: DecisionState) -> DecisionState:
             artifact_keys=artifact_keys,
             requires_approval=requires_approval,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        _record_persistence_error(persistence_errors, "postgres_audit", exc)
 
     # ------------------------------------------------------------------
     # 5. Update state
     # ------------------------------------------------------------------
-    state.outputs["audit_status"] = "persisted"
+    state.outputs["audit_status"] = "degraded" if persistence_errors else "persisted"
     state.outputs["artifact_keys"] = artifact_keys
     state.outputs["audit_user_id_hash"] = user_id_hash
     state.outputs["requires_approval"] = requires_approval
+    if persistence_errors:
+        state.outputs["audit_errors"] = persistence_errors
     return state.mark("node_15_save_audit")

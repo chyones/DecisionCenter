@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test test-ui
+.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test
 
 up:
 	docker compose up -d --build
@@ -35,6 +35,3 @@ phase2a-e2e:
 
 load-test:
 	docker compose exec app python -m apps.edr.evaluation.load_test --requests 10 --concurrency 5
-
-test-ui:
-	cd frontend && npm run test:ui

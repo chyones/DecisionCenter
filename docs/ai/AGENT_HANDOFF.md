@@ -41,6 +41,23 @@ and Slice 7 language in live agent-facing files. The current truth is:
 - `docs/execution/PHASE_2B_REPORT.md` is the latest full-phase report.
 - Phase 2C is the only safe next phase and requires explicit user approval.
 
+## Pre-2C Cleanup
+
+The current cleanup session keeps Phase 2C unstarted. It removes accidental
+Phase 2C UI-test implementation surface from the worktree: Playwright config,
+`frontend/e2e/*`, `frontend`'s `test:ui` script/dependency, the root
+`make test-ui` target, and CI browser-test steps. Future UI automation still
+belongs to Phase 2C after explicit authorization.
+
+The same cleanup tightens Node 15 persistence reporting: MinIO/PostgreSQL
+write failures now leave `audit_status="degraded"` with sanitized operation
+names in `audit_errors` instead of reporting `persisted`.
+
+Validation run after rebuilding the app image: `make phase2a-e2e` PASS,
+`make smoke` 2 passed, `make test` 461 passed with 1 warning, `make eval`
+64/64 passed, ruff clean, compileall clean, frontend lint/build clean,
+doc-drift clean, AI-context clean, and postflight clean.
+
 ## Required Validation
 
 For repo-level changes, use the authoritative list in
