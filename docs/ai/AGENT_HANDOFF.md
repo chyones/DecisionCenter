@@ -2,19 +2,21 @@
 
 ## Current State
 
-- **Status:** `PHASE_2B_COMPLETE_NOT_LIVE`
-- **Current anchor:** `32b039c`
-- **Closeout report:** `docs/execution/PHASE_2B_REPORT.md`
+- **Status:** `PHASE_2C_IN_PROGRESS_NOT_LIVE`
+- **Current anchor:** `14c3154`
+- **Current plan:** `docs/execution/PHASE_2C_PLAN.md`
+- **Latest full closeout report:** `docs/execution/PHASE_2B_REPORT.md`
 - **Last completed phase:** Phase 2B — Admin Visual Control Plane Implementation
 - **Production:** `NOT_LIVE`
-- **Next safe phase:** Phase 2C — UI Hardening & Acceptance Validation
+- **Active phase:** Phase 2C — UI Hardening & Acceptance Validation
 
 Phase 2B is closed. All ten slices (admin RBAC base, Connectors, Health, Audit
 Log, Permissions, Source Mapping, Approval Queue, Dashboard, Routing + Nav,
 Closeout) are complete and CI-green. The admin control plane has seven live
 screens with backend integration.
 
-Phase 2C may only start after explicit user authorization. Its scope is UI
+Phase 2C was explicitly authorized on 2026-05-21 after pre-2C cleanup was
+pushed and CI run `26207850379` passed at commit `14c3154`. Its scope is UI
 hardening and acceptance validation: accessibility, responsive behavior,
 security-DOM checks, performance, cross-browser coverage, Playwright/Cypress
 automation, and adding `make test:ui` to CI. Phase 2C does not authorize
@@ -39,15 +41,15 @@ and Slice 7 language in live agent-facing files. The current truth is:
 
 - `docs/ai/agent-state.json` reports `PHASE_2B_COMPLETE_NOT_LIVE`.
 - `docs/execution/PHASE_2B_REPORT.md` is the latest full-phase report.
-- Phase 2C is the only safe next phase and requires explicit user approval.
+- Phase 2C is the active phase and remains limited to the approved hardening scope.
 
 ## Pre-2C Cleanup
 
-The current cleanup session keeps Phase 2C unstarted. It removes accidental
-Phase 2C UI-test implementation surface from the worktree: Playwright config,
-`frontend/e2e/*`, `frontend`'s `test:ui` script/dependency, the root
-`make test-ui` target, and CI browser-test steps. Future UI automation still
-belongs to Phase 2C after explicit authorization.
+The pre-2C cleanup kept Phase 2C unstarted until authorization. It removed
+accidental Phase 2C UI-test implementation surface from the worktree:
+Playwright config, `frontend/e2e/*`, `frontend`'s `test:ui`
+script/dependency, the root `make test-ui` target, and CI browser-test steps.
+Those surfaces may now be reintroduced only within the active Phase 2C scope.
 
 The same cleanup tightens Node 15 persistence reporting: MinIO/PostgreSQL
 write failures now leave `audit_status="degraded"` with sanitized operation
@@ -68,3 +70,6 @@ For repo-level changes, use the authoritative list in
 - `python3 scripts/agent_postflight.py --allow-no-evidence`
 
 Run broader test/build gates when code or frontend behavior changes.
+
+For Phase 2C UI hardening work, include `make test-ui` or
+`cd frontend && npm run test:ui` in the validation evidence.

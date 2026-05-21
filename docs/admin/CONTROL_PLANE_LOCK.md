@@ -1,10 +1,10 @@
 # DecisionCenter — Control Plane Lock
 
-> **Date:** 2026-05-17 (updated for Phase 2B closeout)
+> **Date:** 2026-05-21 (updated for Phase 2C start)
 > **Scope:** Documentation and control state only.
 > **Behavioral source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Execution sequence source of truth:** `docs/execution/IMPLEMENTATION_PHASES.md`
-> **Live state:** `PHASE_2B_COMPLETE_NOT_LIVE` (production is `NOT_LIVE`).
+> **Live state:** `PHASE_2C_IN_PROGRESS_NOT_LIVE` (production is `NOT_LIVE`).
 
 This document locks the control expectations for the project. It does not add
 application features and does not define an Admin UI.
@@ -22,7 +22,7 @@ application features and does not define an Admin UI.
 | Mailbox allowlist | Enforced twice: `apps/edr/graph/node_07_email.py` (Python) and the `Enforce Mailbox Allowlist` n8n code node | `apps/edr/graph/node_07_email.py`, `n8n/email_search.json` |
 | Evaluation baseline | A 64-case executable golden set covers the required baseline categories from spec Section 26; `make eval` enforces pass rate ≥ 0.95 and precision ≥ 0.90 in CI | `apps/edr/evaluation/goldenset/goldenset.jsonl`, `apps/edr/evaluation/run.py`, spec Section 26 |
 | Bucket initialization | `scripts/init_minio.py` creates the configured MinIO bucket idempotently; runtime `_ensure_bucket()` covers any missed init | `scripts/init_minio.py`, `apps/edr/persistence/minio_store.py` |
-| Readiness | Phase 1A–1I + Phase 1D-fixup and Phases 2A–2B are complete and not live; Phase 2C is the safe next phase after explicit user authorization | This document |
+| Readiness | Phase 1A-1I + Phase 1D-fixup and Phases 2A-2B are complete and not live; Phase 2C is the current active phase after explicit user authorization | This document |
 
 ## Authoritative Environment Baseline
 
@@ -124,8 +124,8 @@ U-01..U-16 manual QA are complete. See
 ## Phase 2B Progress Lock
 
 Phase 2B is complete. All ten slices are closed and CI-green, as documented in
-`docs/execution/PHASE_2B_REPORT.md`. Phase 2C is the safe next phase and
-requires explicit user authorization.
+`docs/execution/PHASE_2B_REPORT.md`. Phase 2C is the current active phase
+after explicit user authorization on 2026-05-21.
 
 | Slice | Status | Evidence |
 |---|---|---|
@@ -179,7 +179,7 @@ regression-tested.
 - Frontend / Admin UI foundation is complete in Phase 1I and is governed by the
   locked UI contract.
 - Phase 2B Admin Visual Control Plane implementation is complete. Phase 2C
-  hardening requires explicit user authorization.
+  hardening is in progress after explicit user authorization.
 
 ## Admin And Control-Plane Coverage
 
@@ -194,11 +194,10 @@ explicitly listed in the approved Phase 2C hardening scope.
 
 ## Final Readiness Decision
 
-**PHASE_2B_COMPLETE_NOT_LIVE — production is NOT_LIVE.**
+**PHASE_2C_IN_PROGRESS_NOT_LIVE — production is NOT_LIVE.**
 
 Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2B
-is closed. All ten slices are CI-green. Phase 2C is the safe next phase
-(UI Hardening & Acceptance Validation), and it requires explicit user
-authorization. This does not authorize deployment, Phase 2C implementation,
-or any spec change. All admin endpoints are locked; Phase 2C scope is
-test coverage and accessibility hardening — no new admin endpoints.
+is closed. All ten slices are CI-green. Phase 2C is the current active phase
+(UI Hardening & Acceptance Validation). This does not authorize deployment or
+any spec change. All admin endpoints are locked; Phase 2C scope is test
+coverage and accessibility hardening — no new admin endpoints.

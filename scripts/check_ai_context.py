@@ -45,6 +45,9 @@ ALLOWED_STATUSES = {
     "PHASE_2B_SLICE_9_COMPLETE_NOT_LIVE",
     "PHASE_2B_SLICE_10_COMPLETE_NOT_LIVE",
     "PHASE_2B_COMPLETE_NOT_LIVE",
+    "PHASE_2C_IN_PROGRESS_NOT_LIVE",
+    "PHASE_2C_SLICE_1_COMPLETE_NOT_LIVE",
+    "PHASE_2C_COMPLETE_NOT_LIVE",
 }
 
 REQUIRED_FILES = [
@@ -185,6 +188,26 @@ def main() -> int:
                 )
             if state.get("requires_explicit_user_approval_for_phase_2c") is not True:
                 failures.append("Phase 2C must require explicit user approval")
+        elif isinstance(status, str) and status.startswith("PHASE_2C_"):
+            if state.get("last_completed_phase") != "Phase 2B":
+                failures.append(
+                    "last_completed_phase must remain Phase 2B while Phase 2C is active"
+                )
+            if state.get("active_phase") != "Phase 2C":
+                failures.append("active_phase must be Phase 2C for Phase 2C statuses")
+            next_allowed = state.get("next_allowed_phase")
+            if not isinstance(next_allowed, str) or "Phase 2C" not in next_allowed:
+                failures.append("next_allowed_phase must name Phase 2C for Phase 2C statuses")
+            if latest_report != "docs/execution/PHASE_2C_PLAN.md":
+                failures.append(
+                    "latest_report must be docs/execution/PHASE_2C_PLAN.md while "
+                    "Phase 2C is active"
+                )
+            if state.get("requires_explicit_user_approval_for_phase_2c") is not False:
+                failures.append(
+                    "requires_explicit_user_approval_for_phase_2c must be false after "
+                    "explicit Phase 2C authorization"
+                )
 
         phase_1e_may_start = state.get("phase_1e_may_start")
         if status == "PHASE_1E_IN_PROGRESS_NOT_LIVE":

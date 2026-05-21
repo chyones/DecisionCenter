@@ -1,7 +1,7 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "32b039c4b146a9d7517dfa1c847a909961a143eb",
-  "status": "PHASE_2B_COMPLETE_NOT_LIVE",
+  "current_commit": "14c31540c3dfff32bf5efa445ac4ac72d1ac9f2e",
+  "status": "PHASE_2C_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2B",
   "active_phase": "Phase 2C",
@@ -32,7 +32,8 @@
     "Slice 9 — Routing + Admin Nav",
     "Slice 10 — Closeout + truth reconciliation"
   ],
-  "next_allowed_phase": "Phase 2C — UI Hardening & Acceptance Validation",
+  "completed_phase_2c_slices": [],
+  "next_allowed_phase": "Phase 2C — UI Hardening & Acceptance Validation (in progress)",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -48,15 +49,15 @@
   "requires_explicit_user_approval_for_phase_2b_slice_8": false,
   "requires_explicit_user_approval_for_phase_2b_slice_9": false,
   "requires_explicit_user_approval_for_phase_2b_slice_10": false,
-  "requires_explicit_user_approval_for_phase_2c": true,
-  "latest_report": "docs/execution/PHASE_2B_REPORT.md",
+  "requires_explicit_user_approval_for_phase_2c": false,
+  "latest_report": "docs/execution/PHASE_2C_PLAN.md",
   "latest_full_phase_report": "docs/execution/PHASE_2B_REPORT.md",
   "latest_verified_ci": {
-    "commit": "c6a92e410e7d03c331683e89e078e181a2300386",
-    "run_id": 25982553222,
+    "commit": "14c31540c3dfff32bf5efa445ac4ac72d1ac9f2e",
+    "run_id": 26207850379,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/25982553222"
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26207850379"
   },
   "latest_local_validation": {
     "date": "2026-05-21",
@@ -76,12 +77,14 @@
     "make phase2a-e2e",
     "make smoke",
     "make test",
+    "make test-ui",
     "make eval",
     "ruff check .",
     "python3 -m compileall apps scripts",
     "python3 scripts/check_doc_drift.py",
     "python3 scripts/check_ai_context.py",
     "cd frontend && npm run lint",
+    "cd frontend && npm run test:ui",
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ]

@@ -3,14 +3,14 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `32b039c4b146a9d7517dfa1c847a909961a143eb`
-- Current status: `PHASE_2B_COMPLETE_NOT_LIVE`
+- Current verified commit (anchor): `14c31540c3dfff32bf5efa445ac4ac72d1ac9f2e`
+- Current status: `PHASE_2C_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Last completed phase: Phase 2B — Admin Visual Control Plane Implementation
 - Active phase: Phase 2C — UI Hardening & Acceptance Validation.
-- Current allowed next work: Phase 2C (UI Hardening & Acceptance Validation).
-  Requires explicit user authorization before implementation.
-- Latest plan: `docs/execution/PHASE_2B_PLAN.md`
+- Current allowed work: Phase 2C (UI Hardening & Acceptance Validation).
+  Explicit user authorization was granted on 2026-05-21.
+- Latest plan: `docs/execution/PHASE_2C_PLAN.md`
 - Latest full-phase report: `docs/execution/PHASE_2B_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
@@ -37,16 +37,17 @@ credential values in admin responses. `docs/execution/PHASE_2B_REPORT.md`
 records the A-01..A-23 QA matrix, cross-screen invariants, audit event
 catalog, and validation evidence.
 
-Phase 2C is the safe next phase. It is limited to UI hardening and acceptance
-validation: accessibility, responsive behavior, security-DOM checks,
-performance, cross-browser testing, Playwright/Cypress automation, and adding
-`make test:ui` to CI. Phase 2C does not authorize new admin endpoints,
+Phase 2C is the current active phase. It is limited to UI hardening and
+acceptance validation: accessibility, responsive behavior, security-DOM
+checks, performance, cross-browser testing, Playwright/Cypress automation, and
+adding `make test:ui` to CI. Phase 2C does not authorize new admin endpoints,
 production deployment, or spec changes.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit
 persistence with sanitized operation names when MinIO/PostgreSQL writes fail.
-Phase 2C remains unstarted until explicit user authorization.
+Phase 2C was then explicitly authorized on 2026-05-21 after push/CI success at
+`14c3154`.
 
 The machine-readable checkpoint is `docs/ai/agent-state.json`.
 
@@ -58,12 +59,14 @@ authoritative list is `required_validation` in `docs/ai/agent-state.json`):
 ```bash
 make smoke
 make test
+make test-ui
 make eval
 ruff check .
 python3 -m compileall apps scripts
 python3 scripts/check_doc_drift.py
 python3 scripts/check_ai_context.py
 cd frontend && npm run lint
+cd frontend && npm run test:ui
 cd frontend && npm run build
 ```
 
@@ -80,7 +83,7 @@ land, refresh the anchor and the truth docs in the same session.
 
 ## Current No-Go Rules
 
-- Do not start Phase 2C without explicit user authorization. Phase 2B is closed.
+- Do not expand Phase 2C beyond UI hardening and acceptance validation. Phase 2B is closed.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not deploy.
@@ -172,6 +175,6 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes Phase 2C or any other gated next
-  step, update this shared context, the handoff, and
-  `docs/ai/agent-state.json` only as part of that approved session.
+- If a future user explicitly authorizes any gated next step beyond Phase 2C,
+  update this shared context, the handoff, and `docs/ai/agent-state.json` only
+  as part of that approved session.

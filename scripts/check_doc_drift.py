@@ -7,8 +7,8 @@ every CI run must satisfy.
 
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
-   FEATURE_MATRIX.md, and README.md must all reference the same "safe next
-   phase" (currently Phase 2C).
+   FEATURE_MATRIX.md, and README.md must all reference the same current or
+   next phase (currently Phase 2C).
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
@@ -48,6 +48,9 @@ STALE_CURRENT_STATE_PATTERNS = [
     r"Phase 2B Admin Visual Control Plane implementation is not started",
     r"Phase 2A closeout evidence is recorded",
     r"Do not start Phase 2B\b",
+    r"Phase 2C implementation\s*\|\s*Not started",
+    r"Do not start Phase 2C without explicit user authorization",
+    r"requires explicit user authorization before any implementation starts",
 ]
 
 
@@ -104,15 +107,20 @@ def _control_plane_count(docs: dict[str, Path]) -> int:
     return int(match.group(1))
 
 
-def _doc_mentions_next_phase(docs: dict[str, Path], name: str) -> bool:
+def _doc_mentions_expected_phase(docs: dict[str, Path], name: str) -> bool:
     raw = _read(docs[name])
     title = re.escape(EXPECTED_NEXT_PHASE_TITLE)
     candidates = [
         rf"Phase {EXPECTED_NEXT_PHASE} may start",
         rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+the\s+safe\s+next\s+phase",
+        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+the\s+current\s+active\s+phase",
+        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+in\s+progress",
         rf"safe next phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
+        rf"current active phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
         rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}\b",
+        rf"PHASE_{EXPECTED_NEXT_PHASE}_IN_PROGRESS_NOT_LIVE",
         rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| Safe next phase",
+        rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| In progress",
     ]
     return any(re.search(pattern, raw) for pattern in candidates)
 
@@ -234,10 +242,10 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     for name in ("control_plane", "current_state", "phases", "feature_matrix", "readme"):
-        if not _doc_mentions_next_phase(docs, name):
+        if not _doc_mentions_expected_phase(docs, name):
             failures.append(
                 f"{docs[name].relative_to(root)} does not name '{EXPECTED_NEXT_PHASE}' "
-                f"as the safe next phase."
+                f"as the current/next phase."
             )
 
     for name in (

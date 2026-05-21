@@ -3,7 +3,7 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-14
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2C is the safe next phase; it requires explicit user authorization. Production is `NOT_LIVE`.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2C is in progress for UI hardening and acceptance validation. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
@@ -24,7 +24,8 @@ covered by integration tests. The 64-case executable golden set, evaluation
 runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
 load test, pip-audit triage, and CI integration are all complete. Phase 2A is
 complete: implementation slices 1–9, backend read/status/content/cancel/upload
-additions, deterministic local E2E, and U-01..U-16 manual QA passed. Production
+additions, deterministic local E2E, and U-01..U-16 manual QA passed. Phase 2C
+was explicitly authorized on 2026-05-21 and is now in progress. Production
 deployment is out of scope until Phase 2C closes and an operator deploys.
 
 ---

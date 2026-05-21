@@ -94,8 +94,8 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, and
-Phases 2A–2B are complete and production is `NOT_LIVE`. Phase 2C is the safe
-next phase, but it requires explicit user authorization before any work starts.
+Phases 2A-2B are complete and production is `NOT_LIVE`. Phase 2C is the
+current active phase after explicit authorization on 2026-05-21.
 The phase-status table below is the authoritative marker for the current
 project state. Treat the files above as the current authority before changing
 code, workflows, schemas, or operational assumptions.
@@ -214,7 +214,7 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
 | 2A — User Chat Workspace Implementation | Complete; E2E and U-01..U-16 manual QA passed; production `NOT_LIVE` |
 | 2B — Admin Visual Control Plane Implementation | Complete; A-01..A-23 manual QA passed; production `NOT_LIVE` |
-| 2C — UI Hardening and Acceptance Validation | Safe next phase; requires explicit user authorization |
+| 2C — UI Hardening and Acceptance Validation | In progress; UI hardening and acceptance validation only |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

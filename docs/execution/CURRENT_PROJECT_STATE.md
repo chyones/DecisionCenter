@@ -1,10 +1,11 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `32b039c` (Pre-2C cleanup and audit persistence hardening).
-> **Audit date:** 2026-05-21 (updated for pre-2C cleanup)
+> **Audited HEAD:** `14c3154` (Pre-2C cleanup pushed; CI run `26207850379` successful).
+> **Audit date:** 2026-05-21 (updated for Phase 2C start)
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
-> 1I, Phase 2A, Phase 2B, and pre-2C cleanup — verified against live repo files
-> and local validation evidence captured before Phase 2C authorization.
+> 1I, Phase 2A, Phase 2B, pre-2C cleanup, and Phase 2C authorization —
+> verified against live repo files and successful CI evidence before Phase 2C
+> implementation.
 
 ---
 
@@ -39,9 +40,8 @@ Source Mapping, Audit Log, and Approval Queue. Admin endpoints are locked to
 system metadata: no report content, query text, evidence excerpts, or
 credential values are exposed.
 
-Production is `NOT_LIVE`. Phase 2C is the safe next phase, but it may only
-start after explicit user authorization. A push to `origin/main` is not a
-deployment.
+Production is `NOT_LIVE`. Phase 2C is the current active phase after explicit
+user authorization on 2026-05-21. A push to `origin/main` is not a deployment.
 
 ---
 
@@ -98,11 +98,11 @@ deployment.
 
 ---
 
-## Not-Started Functional Phases
+## Phase 2C Progress
 
 | Phase | Evidence |
 |---|---|
-| Phase 2C — UI Hardening & Acceptance Validation | Not started. Requires explicit user authorization. Phase 2B is closed. |
+| Phase 2C — UI Hardening & Acceptance Validation | In progress. Authorization received on 2026-05-21. Slice 1 is the Playwright browser-test harness and `make test-ui` CI gate. |
 
 ---
 
@@ -133,19 +133,18 @@ deployment.
 
 ---
 
-## Safe Next Phase
+## Current Active Phase
 
-Phase 2C (UI Hardening & Acceptance Validation) is the safe next phase, but it
-requires explicit user authorization before any implementation starts. Phase 2C
-scope is test coverage, accessibility, responsive, security-DOM, performance,
-and cross-browser hardening. No new admin endpoints are authorized by this
-status.
+Phase 2C (UI Hardening & Acceptance Validation) is the current active phase.
+Phase 2C scope is test coverage, accessibility, responsive, security-DOM,
+performance, and cross-browser hardening. No new admin endpoints are
+authorized by this status.
 
 ## Standing Forbidden Work
 
 Do not deploy. Do not change the locked spec unless an explicit spec-change
 ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
-tests. Do not start Phase 2C without explicit user authorization.
+tests. Do not expand Phase 2C beyond UI hardening and acceptance validation.
 
 ---
 
@@ -168,4 +167,4 @@ completion.
 | Phase 2A readiness | 10/10 | Phase 2A implementation, local E2E, and U-01 through U-16 manual QA are complete. |
 | Phase 2B readiness | 10/10 | Phase 2B admin control plane implementation, A-01 through A-23 manual QA, and CI evidence are complete. |
 | Product readiness | 8/10 | Pipeline produces structured, evidence-bound reports with human approval; 64-case golden set and Arabic PDF hardening validate the core path. Production remains `NOT_LIVE`. |
-| Overall maturity | 8/10 | Strong controlled foundation; functional backend implementation through review/publish; Phase 2A workspace and Phase 2B admin UI are complete; Phase 2C hardening and production deployment remain future work. |
+| Overall maturity | 8/10 | Strong controlled foundation; functional backend implementation through review/publish; Phase 2A workspace and Phase 2B admin UI are complete; Phase 2C hardening is in progress and production deployment remains future work. |
