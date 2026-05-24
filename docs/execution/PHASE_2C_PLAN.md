@@ -1,8 +1,10 @@
 # Phase 2C Plan — UI Hardening & Acceptance Validation
 
 > **Date:** 2026-05-21
-> **Status:** `PHASE_2C_IN_PROGRESS_NOT_LIVE`
+> **Closed:** 2026-05-24
+> **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
 > **Prepared against:** HEAD `14c3154` with CI run `26207850379` successful.
+> **Closed against:** HEAD `770e62e` — 54/54 Playwright tests across Chromium, Firefox, WebKit.
 > **Previous phase:** Phase 2B — Admin Visual Control Plane Implementation
 > **Production:** `NOT_LIVE`
 
@@ -33,12 +35,10 @@ Phase 2C proves the existing UI against the locked UI contract before go-live:
 
 | Slice | Status | Deliverable |
 |---|---|---|
-| Slice 1 — Browser test harness and first hardening checks | ✅ Done | Playwright config, `frontend/e2e/*`, `frontend` `test:ui`, root `make test-ui`, CI headless browser step |
-| Slice 2 — Performance and bundle-budget validation | ✅ Done | `scripts/check-bundle-size.mjs`, `frontend/e2e/performance.spec.ts`, CI bundle-size gate |
-| Slice 3 — Golden-path acceptance automation | Planned | Browser test for submit -> processing -> report -> approve -> download with mocked or deterministic backend fixtures |
-| Slice 2 — Performance and bundle-budget validation | Planned | Automated bundle-size check plus targeted Report View/Processing View performance assertions |
-| Slice 3 — Golden-path acceptance automation | Planned | Browser test for submit -> processing -> report -> approve/final -> download with mocked or deterministic backend fixtures |
-| Slice 4 — Cross-browser expansion and closeout | Planned | Broaden Playwright project matrix, record U-01..U-16 and A-01..A-23 automated/manual evidence, produce Phase 2C closeout report |
+| Slice 1 — Browser test harness and first hardening checks | ✅ Done | Playwright config, `frontend/e2e/*`, `frontend` `test:ui`, root `make test-ui`, CI headless browser step. Commits `c4e1113`, `61af9b1`. CI green. |
+| Slice 2 — Performance and bundle-budget validation | ✅ Done | `scripts/check-bundle-size.mjs`, `frontend/e2e/performance.spec.ts`, CI bundle-size gate. Commit `61af9b1`. CI green. |
+| Slice 3 — Golden-path acceptance automation | ✅ Done | Browser test for submit → processing → report → approve → download with fully mocked backend (page.route()). Commit `d0b05e3`. CI green (run `26356541561`). |
+| Slice 4 — Cross-browser expansion and closeout | ✅ Done | Firefox + WebKit added to Playwright project matrix; CI installs all three engines; 54/54 tests pass across Chromium, Firefox, WebKit. Commit `770e62e`. |
 
 ## Guardrails
 
@@ -77,3 +77,8 @@ Full closeout validation before production readiness remains:
 - `python3 scripts/check_ai_context.py`
 - `python3 scripts/agent_postflight.py --allow-no-evidence`
 
+## Closeout Evidence
+
+See `docs/execution/PHASE_2C_REPORT.md` for the full Phase 2C closeout report
+including the U-01..U-16 and A-01..A-23 automated coverage mapping, bundle
+evidence, and CI run references.

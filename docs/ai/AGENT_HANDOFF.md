@@ -2,63 +2,69 @@
 
 ## Current State
 
-- **Status:** `PHASE_2C_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `14c3154`
+- **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
+- **Current anchor:** `770e62e8ed33bc1f7f86818296566cde652b9228`
+- **Closed date:** 2026-05-24
 - **Current plan:** `docs/execution/PHASE_2C_PLAN.md`
-- **Latest full closeout report:** `docs/execution/PHASE_2B_REPORT.md`
-- **Last completed phase:** Phase 2B — Admin Visual Control Plane Implementation
+- **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
+- **Last completed phase:** Phase 2C — UI Hardening & Acceptance Validation
 - **Production:** `NOT_LIVE`
-- **Active phase:** Phase 2C — UI Hardening & Acceptance Validation
+- **Active phase:** Phase 2C (complete)
 
-Phase 2B is closed. All ten slices (admin RBAC base, Connectors, Health, Audit
-Log, Permissions, Source Mapping, Approval Queue, Dashboard, Routing + Nav,
-Closeout) are complete and CI-green. The admin control plane has seven live
-screens with backend integration.
+Phase 2C is closed. All four slices are complete:
 
-Phase 2C was explicitly authorized on 2026-05-21 after pre-2C cleanup was
-pushed and CI run `26207850379` passed at commit `14c3154`. Its scope is UI
-hardening and acceptance validation: accessibility, responsive behavior,
-security-DOM checks, performance, cross-browser coverage, Playwright/Cypress
-automation, and adding `make test:ui` to CI. Phase 2C does not authorize
-deployment, new admin endpoints, or spec changes.
+1. **Slice 1** — Playwright test harness (accessibility, responsive, security-DOM)
+2. **Slice 2** — Performance + bundle-budget validation (JS ≤ 120 kB gzip, CSS ≤ 15 kB gzip)
+3. **Slice 3** — Golden-path acceptance test (submit → processing → report → approve → download, fully mocked)
+4. **Slice 4** — Cross-browser expansion: 54/54 tests pass on Chromium, Firefox, and WebKit
+
+The UI hardening and acceptance validation phase is complete. All U-01..U-16
+workspace checks and the A-01/C-6 admin DOM checks are automated and green.
+
+## Next Phase: Phase 2D
+
+**Phase 2D is blocked.** It requires explicit user approval before any
+implementation begins. No agent may start Phase 2D work without the user
+confirming in the current session.
+
+`docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d`
+is `true`.
 
 ## Current Guardrails
 
 - Do not deploy; production remains `NOT_LIVE`.
+- Do not start Phase 2D without explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not expose business report content, query text, evidence excerpts, or
   credential values in admin responses.
 - Do not commit `.env`, `.env.*`, credentials, tokens, generated caches, local
   logs, or staging/final artifacts.
-- Rebuild the Docker app image before using container tests as current-code
-  evidence, because the image copies source files at build time.
 
-## Latest Truth Cleanup
+## Governance Drift Incident (Slice 4)
 
-This handoff was refreshed after a stale-doc audit found old Phase 2B Slice 6
-and Slice 7 language in live agent-facing files. The current truth is:
+The Slice 4 CI run (`26357255473`) had the `smoke` job fail on the
+documentation drift check. Root cause: `agent-state.json.current_commit` was
+4 commits behind HEAD after Slices 2–4 landed without a governance refresh.
+The frontend CI job was fully green (54/54 Playwright tests). This closeout
+commit fixes the anchor drift. Corrective rules have been added to `AGENTS.md`.
 
-- `docs/ai/agent-state.json` reports `PHASE_2B_COMPLETE_NOT_LIVE`.
-- `docs/execution/PHASE_2B_REPORT.md` is the latest full-phase report.
-- Phase 2C is the active phase and remains limited to the approved hardening scope.
+**Rule for future AI agents:** Refresh `agent-state.json`, `AGENT_HANDOFF.md`,
+and `SHARED_CONTEXT.md` after every pushed commit, before the final session
+report. Run `python3 scripts/check_doc_drift.py` before starting any new slice.
+If anchor drift exceeds 3 commits, stop and fix governance before coding.
 
-## Pre-2C Cleanup
+## Latest Validation Evidence
 
-The pre-2C cleanup kept Phase 2C unstarted until authorization. It removed
-accidental Phase 2C UI-test implementation surface from the worktree:
-Playwright config, `frontend/e2e/*`, `frontend`'s `test:ui`
-script/dependency, the root `make test-ui` target, and CI browser-test steps.
-Those surfaces may now be reintroduced only within the active Phase 2C scope.
-
-The same cleanup tightens Node 15 persistence reporting: MinIO/PostgreSQL
-write failures now leave `audit_status="degraded"` with sanitized operation
-names in `audit_errors` instead of reporting `persisted`.
-
-Validation run after rebuilding the app image: `make phase2a-e2e` PASS,
-`make smoke` 2 passed, `make test` 461 passed with 1 warning, `make eval`
-64/64 passed, ruff clean, compileall clean, frontend lint/build clean,
-doc-drift clean, AI-context clean, and postflight clean.
+| Check | Result |
+|---|---|
+| Playwright 54 tests (3 browsers) | 54/54 passed |
+| Frontend lint | clean |
+| Frontend build | JS 91.33 kB gzip, CSS 6.06 kB gzip |
+| Bundle budget | JS ≤ 120 kB ✅, CSS ≤ 15 kB ✅ |
+| doc_drift | clean (this commit) |
+| ai_context | clean (this commit) |
+| postflight | clean (this commit) |
 
 ## Required Validation
 
@@ -69,7 +75,17 @@ For repo-level changes, use the authoritative list in
 - `python3 scripts/check_ai_context.py`
 - `python3 scripts/agent_postflight.py --allow-no-evidence`
 
-Run broader test/build gates when code or frontend behavior changes.
+For any future Phase 2D implementation, run the full gate:
 
-For Phase 2C UI hardening work, include `make test-ui` or
-`cd frontend && npm run test:ui` in the validation evidence.
+- `make smoke`
+- `make test`
+- `make test-ui`
+- `make eval`
+- `ruff check .`
+- `python3 -m compileall apps scripts`
+- `cd frontend && npm run lint`
+- `cd frontend && npm run test:ui`
+- `cd frontend && npm run build`
+- `python3 scripts/check_doc_drift.py`
+- `python3 scripts/check_ai_context.py`
+- `python3 scripts/agent_postflight.py --allow-no-evidence`

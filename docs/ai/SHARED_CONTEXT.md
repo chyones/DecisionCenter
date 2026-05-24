@@ -3,15 +3,14 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `14c31540c3dfff32bf5efa445ac4ac72d1ac9f2e`
-- Current status: `PHASE_2C_IN_PROGRESS_NOT_LIVE`
+- Current verified commit (anchor): `770e62e8ed33bc1f7f86818296566cde652b9228`
+- Current status: `PHASE_2C_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
-- Last completed phase: Phase 2B — Admin Visual Control Plane Implementation
-- Active phase: Phase 2C — UI Hardening & Acceptance Validation.
-- Current allowed work: Phase 2C (UI Hardening & Acceptance Validation).
-  Explicit user authorization was granted on 2026-05-21.
+- Phase 2C closed: 2026-05-24
+- Phase 2C is the current active phase (complete).
+- Next allowed: Phase 2D — requires explicit user approval before implementation starts.
 - Latest plan: `docs/execution/PHASE_2C_PLAN.md`
-- Latest full-phase report: `docs/execution/PHASE_2B_REPORT.md`
+- Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -37,11 +36,20 @@ credential values in admin responses. `docs/execution/PHASE_2B_REPORT.md`
 records the A-01..A-23 QA matrix, cross-screen invariants, audit event
 catalog, and validation evidence.
 
-Phase 2C is the current active phase. It is limited to UI hardening and
-acceptance validation: accessibility, responsive behavior, security-DOM
-checks, performance, cross-browser testing, Playwright/Cypress automation, and
-adding `make test:ui` to CI. Phase 2C does not authorize new admin endpoints,
-production deployment, or spec changes.
+Phase 2C is complete and not live. All four slices are closed:
+
+- **Slice 1** — Playwright test harness: accessibility (5 tests), responsive
+  behavior (5 tests), security-DOM (4 tests).
+- **Slice 2** — Performance + bundle-budget validation: JS ≤ 120 kB gzip,
+  CSS ≤ 15 kB gzip; Processing View and Report View render within budget.
+- **Slice 3** — Golden-path acceptance: submit → processing → report →
+  approve → download, fully mocked with `page.route()`.
+- **Slice 4** — Cross-browser matrix: 54/54 tests pass on Chromium, Firefox,
+  and WebKit. CI updated to install all three browser engines.
+
+`docs/execution/PHASE_2C_REPORT.md` records the full closeout evidence
+including U-01..U-16 and A-01/C-6 automated coverage, bundle evidence,
+performance timings, cross-browser notes, and CI run references.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit
@@ -79,11 +87,13 @@ is acceptable supporting evidence, but it does not replace `make smoke`,
 `scripts/check_doc_drift.py` enforces an anchor-currency invariant: the
 `current_commit` in `docs/ai/agent-state.json` must be HEAD itself or no more
 than three commits behind HEAD on the current branch. When feature commits
-land, refresh the anchor and the truth docs in the same session.
+land, refresh the anchor and the truth docs **in the same session, before
+the final report**. Failure to do so will cause CI to fail on the
+documentation drift check.
 
 ## Current No-Go Rules
 
-- Do not expand Phase 2C beyond UI hardening and acceptance validation. Phase 2B is closed.
+- Do not start Phase 2D. It requires explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not deploy.
@@ -175,6 +185,11 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - Update `docs/ai/AGENT_HANDOFF.md` before ending a repo-changing session.
 - Keep each commit scoped and explain what was verified.
 - If checks fail, leave the status as not ready or document the exact blocker.
-- If a future user explicitly authorizes any gated next step beyond Phase 2C,
-  update this shared context, the handoff, and `docs/ai/agent-state.json` only
-  as part of that approved session.
+- **Governance drift rule:** After every pushed commit (not just at closeout),
+  refresh `agent-state.json`, `AGENT_HANDOFF.md`, and `SHARED_CONTEXT.md`
+  before ending the session. Run `python3 scripts/check_doc_drift.py` before
+  starting any new slice. If anchor drift exceeds 3 commits, stop and fix
+  governance before writing any more code.
+- If a future user explicitly authorizes Phase 2D, update this shared context,
+  the handoff, and `docs/ai/agent-state.json` only as part of that approved
+  session.
