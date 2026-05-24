@@ -48,9 +48,9 @@ def test_drift_detector_fails_when_current_phase_renamed(tmp_path: pytest.TempPa
     shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(".venv", ".git", "__pycache__", "*.egg-info"))
     script = (work / "scripts" / "check_doc_drift.py").read_text(encoding="utf-8")
     (work / "scripts" / "check_doc_drift.py").write_text(
-        script.replace('EXPECTED_NEXT_PHASE = "2C"', 'EXPECTED_NEXT_PHASE = "99"'),
+        script.replace('CURRENT_COMPLETED_PHASE = "2C"', 'CURRENT_COMPLETED_PHASE = "99"'),
         encoding="utf-8",
     )
     result = _run(work, script=work / "scripts" / "check_doc_drift.py")
     assert result.returncode == 1
-    assert "current/next phase" in result.stderr.lower()
+    assert "phase 2c complete" in result.stderr.lower()
