@@ -31,8 +31,10 @@ test.describe('Admin scope isolation', () => {
   });
 
   test('admin is blocked from query composer', async ({ page }) => {
+    // setRole navigates to /#/workspace/new and sets role to admin.
+    // Re-navigating to the same hash URL is a no-op in some browsers, so we
+    // wait for the re-render that follows the role-button click directly.
     await setRole(page, 'admin');
-    await page.goto('/#/workspace/new');
     await page.waitForSelector('text=Access denied');
     await expect(page.locator('h2:has-text("Access denied")')).toBeVisible();
   });

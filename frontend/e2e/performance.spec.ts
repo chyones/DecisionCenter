@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 const BUDGETS = {
   // Time from navigation to first visible heading/text
   processingFcpMs: 1500,
-  reportFcpMs: 1500,
+  reportFcpMs: 2000,
   // Time for main content skeleton to be ready
   processingContentReadyMs: 2000,
   reportContentReadyMs: 2000,

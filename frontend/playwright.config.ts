@@ -6,6 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Tests run against the Vite dev server so the dev-only RoleSwitcher is
  * available for role-scoped security assertions.
  * API calls are mocked via page.route() — no backend dependency.
+ *
+ * Phase 2C Slice 4: cross-browser matrix — Chromium, Firefox, WebKit.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -22,6 +24,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
     },
   ],
   webServer: {
