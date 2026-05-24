@@ -104,6 +104,7 @@ services:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/usr/share/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     ports:

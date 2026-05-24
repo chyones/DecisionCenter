@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test test-ui
+.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test test-ui build-frontend
 
 up:
 	docker compose up -d --build
@@ -38,3 +38,6 @@ load-test:
 
 test-ui:
 	cd frontend && npm run test:ui
+
+build-frontend:
+	cd frontend && npm ci && npm run build

@@ -53,6 +53,7 @@
   },
   "next_allowed_phase": "Phase 2D — blocked pending explicit user approval before implementation may start",
   "requires_explicit_user_approval_for_phase_2d": true,
+  "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,

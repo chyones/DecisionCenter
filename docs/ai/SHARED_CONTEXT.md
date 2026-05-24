@@ -11,6 +11,7 @@
 - Next allowed: Phase 2D — requires explicit user approval before implementation starts.
 - Latest report: `docs/execution/PHASE_2C_REPORT.md`
 - Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
+- Phase 2D Slice 1 (production frontend delivery path): implemented and committed
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +

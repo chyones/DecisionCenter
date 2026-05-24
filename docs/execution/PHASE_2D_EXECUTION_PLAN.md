@@ -45,19 +45,40 @@ authorized operator performs the deployment/cutover steps.
 
 ### Slice 1 — Production frontend delivery path
 
-**Scope**
+**Status:** ✅ Implemented
 
-- Decide and document how the frontend is served in production.
-- Choose either a Docker/Caddy/static build path or a documented external host.
-- Ensure the chosen path is compatible with the existing Vite build, hash-based routing, backend API base URL, TLS, and reverse-proxy setup.
-- Update operator docs with exact build, serve, rollback, and smoke-check steps.
+**Decision**
+
+- **Path:** Caddy static-file serving (SPA) + explicit reverse-proxy for backend routes.
+- **Rationale:** The backend does not use an `/api` prefix, so we cannot use a simple
+  `/api → backend` rule without changing backend business logic (forbidden in Slice 1).
+  Hash-based routing means `try_files {path} /index.html` is safe — every frontend
+  route sends `GET /` to the server.
+- **Build:** `make build-frontend` (or `cd frontend && npm ci && npm run build`).
+- **Serve:** `make up` mounts `./frontend/dist` into the Caddy container at
+  `/usr/share/caddy` and serves it as a static SPA.
+- **Rollback:** Re-build the previous commit's frontend and restart Caddy
+  (`docker compose restart caddy`) or revert to the previous `frontend/dist`
+  snapshot.
+- **Smoke-check:** `curl -f http://localhost/healthz` (backend proxy) and
+  `curl -f http://localhost/` (should return HTML with `<div id="root">`).
+
+**Changes**
+
+- `Caddyfile` — added explicit `handle` blocks for `/healthz*`, `/reports*`,
+  `/workspace*`, `/upload*`, `/admin*` proxying to `app:8000`; added static
+  `file_server` with SPA fallback and immutable-asset cache headers.
+- `docker-compose.yml` — mounted `./frontend/dist:/usr/share/caddy:ro` into the
+  Caddy service.
+- `frontend/vite.config.ts` — added explicit `base: '/'` with production comment.
+- `Makefile` — added `build-frontend` target.
 
 **Acceptance**
 
-- Frontend build is served correctly through the selected production path.
-- Routing works on refresh and direct URL entry.
-- No dev-only assumptions are required for production frontend delivery.
-- The production delivery decision and verification evidence are recorded in repo docs.
+- [x] Frontend build is served correctly through the selected production path.
+- [x] Routing works on refresh and direct URL entry.
+- [x] No dev-only assumptions are required for production frontend delivery.
+- [x] The production delivery decision and verification evidence are recorded in repo docs.
 
 ### Slice 2 — Production auth
 

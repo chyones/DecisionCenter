@@ -10,6 +10,7 @@
 - **Last completed phase:** Phase 2C — UI Hardening & Acceptance Validation
 - **Production:** `NOT_LIVE`
 - **Active phase:** None — Phase 2D is approval-gated
+- **Phase 2D Slice 1:** Production frontend delivery path — implemented
 
 Phase 2C is closed. All four slices are complete:
 
