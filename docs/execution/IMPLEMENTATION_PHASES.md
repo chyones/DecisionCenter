@@ -2,16 +2,17 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
-> **Date:** 2026-05-14
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2B are complete. Phase 2C is in progress for UI hardening and acceptance validation. Production is `NOT_LIVE`.
+> **Date:** 2026-05-24
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2C are complete. Production is `NOT_LIVE`. Phase 2D is the next allowed phase and is blocked pending explicit user approval.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
 this infrastructure-first sequence.
 
-Live audit note (Phase 2A closeout, 2026-05-14):
+Live audit note (Phase 2C closeout reconciliation, 2026-05-24):
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the Phase
-1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, and Phase 1I are complete.
+1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, Phase 2A,
+Phase 2B, and Phase 2C are complete.
 The four n8n workflow JSON files contain real 4–5 node pipelines, declare
 `authentication=headerAuth`, and read service-account credentials from
 `$env.*`. Voyage embeddings, Cohere reranking, tiktoken chunking, the
@@ -24,9 +25,13 @@ covered by integration tests. The 64-case executable golden set, evaluation
 runner with pass-rate/precision thresholds, Arabic PDF hardening, local-only
 load test, pip-audit triage, and CI integration are all complete. Phase 2A is
 complete: implementation slices 1–9, backend read/status/content/cancel/upload
-additions, deterministic local E2E, and U-01..U-16 manual QA passed. Phase 2C
-was explicitly authorized on 2026-05-21 and is now in progress. Production
-deployment is out of scope until Phase 2C closes and an operator deploys.
+additions, deterministic local E2E, and U-01..U-16 manual QA passed. Phase 2B
+is complete: all ten admin control-plane slices and A-01..A-23 QA are closed.
+Phase 2C is complete: 54/54 Playwright tests passed across Chromium, Firefox,
+and WebKit with passing bundle budgets. The latest audit rated the repo
+**7/10** and final recommendation `NOT_GO_LIVE_READY_BUT_HEALTHY`.
+Production deployment is out of scope until Phase 2D is explicitly approved
+and the go-live blockers are closed.
 
 ---
 
@@ -406,6 +411,8 @@ blocker fixes are complete. Current frontend integration:
 
 ## Phase 2C — UI Hardening & Acceptance Validation
 
+**Status:** Complete. See `docs/execution/PHASE_2C_REPORT.md`.
+
 **Goal:** Prove the UI meets the locked UI contract before go-live.
 
 **Scope:**
@@ -424,11 +431,29 @@ blocker fixes are complete. Current frontend integration:
    - Login → Query Composer → Submit → Processing → Report View → Approve → Final → Download.
 7. Add `make test:ui` target to CI (headless browser run).
 
+**Completion evidence:**
+- All four Phase 2C slices are complete.
+- 54/54 Playwright tests passed across Chromium, Firefox, and WebKit.
+- U-01..U-16 workspace checks and A-01/C-6 admin DOM checks are automated.
+- Bundle budgets passed: JS 91.33 kB gzip / 120 kB budget, CSS 6.06 kB gzip / 15 kB budget.
+- Production remains `NOT_LIVE`.
+
 **Validation gate before Production:**
-- All U-01..U-16 and A-01..A-23 acceptance criteria pass in automated or manual QA.
-- `make test:ui` passes in CI.
-- No P0 or P1 UI defects remain open.
-- Security audit sign-off: no credential leakage, no admin content bypass.
+- Phase 2C UI validation is complete, but it is not sufficient for go-live.
+- Phase 2D is the next allowed phase and requires explicit user approval before implementation starts.
+- The latest audit verdict is `NOT_GO_LIVE_READY_BUT_HEALTHY` with rating **7/10**.
+- Go-live blockers: production frontend delivery path missing; production Entra/MSAL frontend auth missing; live integrations not proven; backup/restore evidence missing; production hardening evidence missing.
+
+---
+
+## Phase 2D — Production Integration & Go-Live Hardening
+
+**Status:** Blocked pending explicit user approval. Do not start this phase
+unless the user approves Phase 2D in the current session.
+
+**Required before production:** close the audit blockers, prove live
+integrations in a production-like environment, document backup/restore and
+hardening evidence, and pass the full validation gate.
 
 ---
 
@@ -443,8 +468,10 @@ blocker fixes are complete. Current frontend integration:
                                                    ↓
                                                   2B (admin control plane)
                                                    ↓
-                                                  2C (UI hardening)
+                                                  2C (UI hardening complete)
+                                                   ↓
+                                                  2D (approval-gated hardening)
 ```
 
-**Critical path:** 1A → 1B → 1C → 1D → 1D-fixup → 1E → 1F → 2A → 2B → 2C → Production
+**Critical path:** 1A → 1B → 1C → 1D → 1D-fixup → 1E → 1F → 2A → 2B → 2C → 2D → Production
 **Parallel track:** 1I can start after 1B and run in parallel through 1H, but must not wire to APIs until 1F is complete.

@@ -7,8 +7,8 @@ every CI run must satisfy.
 
 Invariants checked:
 1. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, IMPLEMENTATION_PHASES.md,
-   FEATURE_MATRIX.md, and README.md must all reference the same current or
-   next phase (currently Phase 2C).
+   FEATURE_MATRIX.md, and README.md must all agree that Phase 2C is complete,
+   production is NOT_LIVE, and Phase 2D is the approval-gated next phase.
 2. The `.env.example` key count must match the assertion baked into
    .github/workflows/ci.yml and the count cited in CONTROL_PLANE_LOCK.md.
 3. CONTROL_PLANE_LOCK.md, CURRENT_PROJECT_STATE.md, and IMPLEMENTATION_PHASES.md
@@ -33,10 +33,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-EXPECTED_NEXT_PHASE = "2C"
-EXPECTED_NEXT_PHASE_TITLE = "UI Hardening & Acceptance Validation"
+CURRENT_COMPLETED_PHASE = "2C"
+NEXT_ALLOWED_PHASE = "2D"
+CURRENT_STATUS = "PHASE_2C_COMPLETE_NOT_LIVE"
+PRODUCTION_STATUS = "NOT_LIVE"
+FINAL_AUDIT_RECOMMENDATION = "NOT_GO_LIVE_READY_BUT_HEALTHY"
+FINAL_AUDIT_RATING = "7/10"
 PHASE_FIXUP_MARKER = "Phase 1D-fixup"
 MAX_ANCHOR_DRIFT_COMMITS = 3
+AUDIT_BLOCKERS = [
+    "production frontend delivery path missing",
+    "production Entra/MSAL frontend auth missing",
+    "live integrations not proven",
+    "backup/restore evidence missing",
+    "production hardening evidence missing",
+]
 STALE_CURRENT_STATE_PATTERNS = [
     r"PHASE_2B_SLICE_\d+_COMPLETE_NOT_LIVE",
     r"Phase 2B is in progress",
@@ -51,6 +62,14 @@ STALE_CURRENT_STATE_PATTERNS = [
     r"Phase 2C implementation\s*\|\s*Not started",
     r"Do not start Phase 2C without explicit user authorization",
     r"requires explicit user authorization before any implementation starts",
+    r"PHASE_2C_IN_PROGRESS_NOT_LIVE",
+    r"Phase 2C is in progress",
+    r"Phase 2C hardening is in progress",
+    r"Phase 2C is the current active phase",
+    r"Phase 2C Slice 1[^.\n]*in progress",
+    r"Closing in Phase 2C Slice 1",
+    r"Phase 2C browser test harness[^|\n]*\|[^|\n]*partial",
+    r"phase2b_complete_not_live",
 ]
 
 
@@ -107,22 +126,34 @@ def _control_plane_count(docs: dict[str, Path]) -> int:
     return int(match.group(1))
 
 
-def _doc_mentions_expected_phase(docs: dict[str, Path], name: str) -> bool:
+def _doc_marks_phase_2c_complete_and_phase_2d_gated(
+    docs: dict[str, Path], name: str
+) -> bool:
     raw = _read(docs[name])
-    title = re.escape(EXPECTED_NEXT_PHASE_TITLE)
-    candidates = [
-        rf"Phase {EXPECTED_NEXT_PHASE} may start",
-        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+the\s+safe\s+next\s+phase",
-        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+the\s+current\s+active\s+phase",
-        rf"Phase\s+{EXPECTED_NEXT_PHASE}\s+is\s+in\s+progress",
-        rf"safe next phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
-        rf"current active phase[^.]{{0,40}}Phase {EXPECTED_NEXT_PHASE}\b",
-        rf"READY FOR PHASE {EXPECTED_NEXT_PHASE}\b",
-        rf"PHASE_{EXPECTED_NEXT_PHASE}_IN_PROGRESS_NOT_LIVE",
-        rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| Safe next phase",
-        rf"\| {EXPECTED_NEXT_PHASE} [—-] {title} \| In progress",
-    ]
-    return any(re.search(pattern, raw) for pattern in candidates)
+    flat = re.sub(r"\s+", " ", raw)
+    phase_complete = re.search(
+        rf"({CURRENT_STATUS}|Phase\s+{CURRENT_COMPLETED_PHASE}\b"
+        r"[^.\n]{0,80}\bcomplete|Phases\s+2A-2C\s+are\s+complete)",
+        flat,
+        flags=re.IGNORECASE,
+    )
+    production_not_live = PRODUCTION_STATUS in raw
+    next_gated = re.search(
+        rf"Phase\s+{NEXT_ALLOWED_PHASE}\b[^.\n]{{0,120}}(explicit user approval|approval-gated|blocked)",
+        flat,
+        flags=re.IGNORECASE,
+    )
+    return bool(phase_complete and production_not_live and next_gated)
+
+
+def _doc_records_audit_verdict(docs: dict[str, Path], name: str) -> bool:
+    raw = _read(docs[name])
+    lower = re.sub(r"\s+", " ", raw).lower()
+    return (
+        FINAL_AUDIT_RECOMMENDATION in raw
+        and FINAL_AUDIT_RATING in raw
+        and all(blocker.lower() in lower for blocker in AUDIT_BLOCKERS)
+    )
 
 
 def _doc_marks_fixup_complete(docs: dict[str, Path], name: str) -> bool:
@@ -242,10 +273,16 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     for name in ("control_plane", "current_state", "phases", "feature_matrix", "readme"):
-        if not _doc_mentions_expected_phase(docs, name):
+        if not _doc_marks_phase_2c_complete_and_phase_2d_gated(docs, name):
             failures.append(
-                f"{docs[name].relative_to(root)} does not name '{EXPECTED_NEXT_PHASE}' "
-                f"as the current/next phase."
+                f"{docs[name].relative_to(root)} does not consistently mark "
+                "Phase 2C complete, production NOT_LIVE, and Phase 2D approval-gated."
+            )
+        if not _doc_records_audit_verdict(docs, name):
+            failures.append(
+                f"{docs[name].relative_to(root)} does not record the latest audit "
+                f"rating ({FINAL_AUDIT_RATING}), recommendation "
+                f"({FINAL_AUDIT_RECOMMENDATION}), and main blockers."
             )
 
     for name in (

@@ -23,15 +23,13 @@ tests for DecisionCenter.
 
 ## Current Boundary
 
-Phases 1A through 1I, the Phase 1D-fixup, Phase 2A, and Phase 2B are complete.
-Phase 2C is in progress for UI hardening and acceptance validation.
-Production is `NOT_LIVE`. Phase 2B closeout evidence is recorded in
-`docs/execution/PHASE_2B_REPORT.md`; the active Phase 2C plan is
-`docs/execution/PHASE_2C_PLAN.md`.
+Phases 1A through 1I, the Phase 1D-fixup, Phase 2A, Phase 2B, and Phase 2C
+are complete. Production is `NOT_LIVE`. Phase 2C closeout evidence is recorded
+in `docs/execution/PHASE_2C_REPORT.md`; Phase 2D is the next allowed phase and
+is blocked pending explicit user approval.
 
-Current active phase: Phase 2C — UI Hardening & Acceptance Validation. Do not
-deploy, do not expand Phase 2C beyond UI validation/hardening, and do not add
-unrelated product behavior.
+Current active phase: none. Do not deploy, do not start Phase 2D without
+explicit current-session approval, and do not add unrelated product behavior.
 
 Before changing behavior, read `docs/admin/CONTROL_PLANE_LOCK.md`,
 `docs/execution/IMPLEMENTATION_PHASES.md`, `docs/ai/SHARED_CONTEXT.md`, and

@@ -1,52 +1,51 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `14c3154` (Pre-2C cleanup pushed; CI run `26207850379` successful).
-> **Audit date:** 2026-05-21 (updated for Phase 2C start)
+> **Audited HEAD:** `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`
+> **Audit date:** 2026-05-24
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
-> 1I, Phase 2A, Phase 2B, pre-2C cleanup, and Phase 2C authorization —
-> verified against live repo files and successful CI evidence before Phase 2C
-> implementation.
+> 1I, Phase 2A, Phase 2B, and Phase 2C closeout — verified against live repo
+> files and the required governance validation commands.
 
 ---
 
 ## Current Project Stage
 
-DecisionCenter has completed Phase 2B (Admin Visual Control Plane
-Implementation) and is not live. Phase 2A's user workspace validation gate
-(end-to-end submit -> processing -> quality_gate passed -> approve -> final ->
-download MD, plus U-01..U-16 manual QA per `docs/design/UI_CONTRACT_v1.md`
-§9.1) passed locally on 2026-05-14. Phase 2B's A-01..A-23 manual QA matrix and
-cross-screen invariants are recorded in `docs/execution/PHASE_2B_REPORT.md`.
+DecisionCenter has completed Phase 2C (UI Hardening & Acceptance Validation)
+and is not live. Phase 2A's user workspace validation gate passed locally on
+2026-05-14. Phase 2B's admin control-plane QA matrix and cross-screen
+invariants are recorded in `docs/execution/PHASE_2B_REPORT.md`. Phase 2C's
+closeout is recorded in `docs/execution/PHASE_2C_REPORT.md`: 54/54 Playwright
+tests passed across Chromium, Firefox, and WebKit, with bundle budgets passing
+at 91.33 kB JS gzip / 120 kB budget and 6.06 kB CSS gzip / 15 kB budget.
+
 All prior phases including the Phase 1D-fixup remain closed and locked. The
 backend execution pipeline runs end-to-end with evaluation coverage:
-authentication and RBAC at Node 01;
-n8n connectors with Header Auth and `$env`-sourced credentials; Voyage
-embeddings, Cohere reranking, tiktoken chunking, per-project Qdrant
-collections, and a Redis-backed evidence cache; LLM nodes 02/03/04/11/12
-(Haiku for Light, Sonnet for Heavy) with prompt-injection protection,
-per-tier token caps, and a daily cost cap; deterministic claim checking at
-Node 13; export gating at Node 14; MinIO + PostgreSQL persistence at Node 15
-with hashed user IDs and staging artifacts; human review at Node 16;
-write-once publish to immutable final artifacts at Node 17; and a 64-case
-executable golden set with pass-rate and precision thresholds enforced in CI.
+authentication and RBAC at Node 01; n8n connectors with Header Auth and
+`$env`-sourced credentials; Voyage embeddings, Cohere reranking, tiktoken
+chunking, per-project Qdrant collections, and a Redis-backed evidence cache;
+LLM nodes with prompt-injection protection, per-tier token caps, and a daily
+cost cap; deterministic claim checking; export gating; MinIO + PostgreSQL
+persistence; human review; write-once publish; and a 64-case executable golden
+set with pass-rate and precision thresholds enforced in CI.
 
-The frontend now contains the full Phase 2A workspace implementation and the
-full Phase 2B admin visual control plane. Query Composer submits to live
-`POST /reports/staging` and loads role-scoped project context from
-`GET /workspace/context`; Reports List, Processing View, Report View, Evidence
-Panel, Export Panel, and Upload Zone consume live backend APIs. The admin area
-has seven live screens: Dashboard, System Health, Connectors, Permissions,
-Source Mapping, Audit Log, and Approval Queue. Admin endpoints are locked to
-system metadata: no report content, query text, evidence excerpts, or
+The frontend contains the Phase 2A workspace implementation, the Phase 2B
+admin visual control plane, and Phase 2C automated acceptance coverage. Query
+Composer, Reports List, Processing View, Report View, Evidence Panel, Export
+Panel, and Upload Zone consume live backend APIs. The admin area has seven
+backend-integrated screens: Dashboard, System Health, Connectors, Permissions,
+Source Mapping, Audit Log, and Approval Queue. Admin endpoints remain locked
+to system metadata: no report content, query text, evidence excerpts, or
 credential values are exposed.
 
-Phase 2C Slice 1 (Playwright E2E harness) and Slice 2 (bundle-size budget +
-performance assertions) are complete. Bundle budgets enforced: JS 120 kB gzip,
-CSS 15 kB gzip. Playwright performance tests verify Processing View and
-Report View render within 1500 ms FCP and 2000 ms content-ready budgets.
+Production is `NOT_LIVE`. Phase 2D is the next allowed phase, but it is
+blocked until explicit user approval before implementation starts. A push to
+`origin/main` is not a deployment.
 
-Production is `NOT_LIVE`. Phase 2C is the current active phase after explicit
-user authorization on 2026-05-21. A push to `origin/main` is not a deployment.
+The 2026-05-24 read-only audit verdict is
+`NOT_GO_LIVE_READY_BUT_HEALTHY` with overall rating **7/10**. Main go-live
+blockers are: production frontend delivery path missing; production
+Entra/MSAL frontend auth missing; live integrations not proven;
+backup/restore evidence missing; production hardening evidence missing.
 
 ---
 
@@ -107,7 +106,7 @@ user authorization on 2026-05-21. A push to `origin/main` is not a deployment.
 
 | Phase | Evidence |
 |---|---|
-| Phase 2C — UI Hardening & Acceptance Validation | In progress. Authorization received on 2026-05-21. Slice 1 is the Playwright browser-test harness and `make test-ui` CI gate. |
+| Phase 2C — UI Hardening & Acceptance Validation | Complete. All four slices are closed; `docs/execution/PHASE_2C_REPORT.md` records 54/54 Playwright tests across Chromium, Firefox, and WebKit plus passing bundle, accessibility, responsive, security-DOM, performance, and golden-path coverage. |
 
 ---
 
@@ -135,31 +134,35 @@ user authorization on 2026-05-21. A push to `origin/main` is not a deployment.
 | Blocker | Blocks | Evidence |
 |---|---|---|
 | Pip-audit advisories | Promotion of `pip-audit` to a hard CI gate | `pip-audit --progress-spinner off` reports 19 advisories on 9 packages; CI keeps `continue-on-error: true`. Triage list captured in `docs/admin/CONTROL_PLANE_LOCK.md`. |
+| Production frontend delivery path missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; Docker/Caddy production path does not yet prove frontend delivery. |
+| Production Entra/MSAL frontend auth missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; frontend production Bearer-token flow is not proven. |
+| Live integrations not proven | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; Entra, n8n, Microsoft Graph, SharePoint, Odoo, LLM providers, Qdrant, MinIO, and Langfuse need production-like E2E evidence. |
+| Backup/restore evidence missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; no restore rehearsal evidence recorded for production readiness. |
+| Production hardening evidence missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; secrets rotation, server hardening, and least-privilege external accounts require evidence. |
 
 ---
 
 ## Current Active Phase
 
-Phase 2C (UI Hardening & Acceptance Validation) is the current active phase.
-Phase 2C scope is test coverage, accessibility, responsive, security-DOM,
-performance, and cross-browser hardening. No new admin endpoints are
-authorized by this status.
+No implementation phase is active. Phase 2C is complete and production remains
+`NOT_LIVE`. Phase 2D is the next allowed phase, but it is blocked until the
+user explicitly approves it in the current session.
 
 ## Standing Forbidden Work
 
-Do not deploy. Do not change the locked spec unless an explicit spec-change
-ticket is approved. Do not commit secrets in workflows, docs, code, logs, or
-tests. Do not expand Phase 2C beyond UI hardening and acceptance validation.
+Do not deploy. Do not start Phase 2D without explicit current-session user
+approval. Do not change the locked spec unless an explicit spec-change ticket
+is approved. Do not commit secrets in workflows, docs, code, logs, or tests.
 
 ---
 
 ## README And Truth Doc Freshness
 
-The Phase 2B closeout refreshed `CURRENT_PROJECT_STATE.md`,
+The Phase 2C audit reconciliation refreshed `CURRENT_PROJECT_STATE.md`,
 `IMPLEMENTATION_PHASES.md`, `FEATURE_MATRIX.md`, `CONTROL_PLANE_LOCK.md`,
 `README.md`, the AI context (`SHARED_CONTEXT.md`, `AGENT_HANDOFF.md`,
-`agent-state.json`), and the drift/context checks to reflect Phase 2B
-completion.
+`agent-state.json`), and the drift/context checks to reflect Phase 2C
+completion, production `NOT_LIVE`, and Phase 2D as approval-gated.
 
 ---
 
@@ -171,5 +174,5 @@ completion.
 | Code foundation | 8/10 | Pinned dependencies, CI with config coverage + doc/AI checks (incl. anchor-currency invariant) + integration tests + drift detector, async runtime, retrieval pipeline + LLM + persistence + review gate working. |
 | Phase 2A readiness | 10/10 | Phase 2A implementation, local E2E, and U-01 through U-16 manual QA are complete. |
 | Phase 2B readiness | 10/10 | Phase 2B admin control plane implementation, A-01 through A-23 manual QA, and CI evidence are complete. |
-| Product readiness | 8/10 | Pipeline produces structured, evidence-bound reports with human approval; 64-case golden set and Arabic PDF hardening validate the core path. Production remains `NOT_LIVE`. |
-| Overall maturity | 8/10 | Strong controlled foundation; functional backend implementation through review/publish; Phase 2A workspace and Phase 2B admin UI are complete; Phase 2C hardening is in progress and production deployment remains future work. |
+| Product readiness | 7/10 | Pipeline produces structured, evidence-bound reports with human approval; Phase 2C acceptance coverage is complete. Production remains `NOT_LIVE` because go-live blockers remain. |
+| Overall maturity | 7/10 | Healthy controlled foundation with Phase 2C complete, but go-live readiness is blocked by missing production frontend delivery, production Entra/MSAL auth, live integration proof, backup/restore evidence, and production hardening evidence. Final audit recommendation: `NOT_GO_LIVE_READY_BUT_HEALTHY`. |

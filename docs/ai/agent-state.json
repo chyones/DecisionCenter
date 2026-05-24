@@ -1,10 +1,10 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
+  "current_commit": "c3ab71d9864e17c3d99da847e5f673fabe2f1dba",
   "status": "PHASE_2C_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
-  "last_completed_phase": "Phase 2B",
-  "active_phase": "Phase 2C",
+  "last_completed_phase": "Phase 2C",
+  "active_phase": "None — Phase 2D approval-gated",
   "phase_2c_closeout_date": "2026-05-24",
   "completed_phase_2a_slices": [
     "Slice 1 — API client foundation and auth wiring",
@@ -51,7 +51,7 @@
     "ci_slice4_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
     "ci_slice4_failure_cause": "documentation drift only (docs/ai/agent-state.json current_commit 4 commits behind HEAD); frontend CI job was green"
   },
-  "next_allowed_phase": "Phase 2C complete — Phase 2D requires explicit user approval before it may start",
+  "next_allowed_phase": "Phase 2D — blocked pending explicit user approval before implementation may start",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
@@ -69,8 +69,22 @@
   "requires_explicit_user_approval_for_phase_2b_slice_9": false,
   "requires_explicit_user_approval_for_phase_2b_slice_10": false,
   "requires_explicit_user_approval_for_phase_2c": false,
-  "latest_report": "docs/execution/PHASE_2C_PLAN.md",
+  "latest_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
+  "latest_read_only_audit": {
+    "date": "2026-05-24",
+    "audited_head": "c3ab71d9864e17c3d99da847e5f673fabe2f1dba",
+    "overall_rating": "7/10",
+    "final_recommendation": "NOT_GO_LIVE_READY_BUT_HEALTHY",
+    "go_live_ready": false,
+    "main_blockers": [
+      "production frontend delivery path missing",
+      "production Entra/MSAL frontend auth missing",
+      "live integrations not proven",
+      "backup/restore evidence missing",
+      "production hardening evidence missing"
+    ]
+  },
   "latest_verified_ci": {
     "commit": "d0b05e343b9717d6f3189ddbb9d263440655f93a",
     "run_id": 26356541561,

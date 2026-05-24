@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase2b_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase2c_complete_not_live-blue.svg)](#)
 
 ---
 
@@ -94,11 +94,17 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, and
-Phases 2A-2B are complete and production is `NOT_LIVE`. Phase 2C is the
-current active phase after explicit authorization on 2026-05-21.
+Phases 2A-2C are complete and production is `NOT_LIVE`. Phase 2D is the
+next allowed phase and is blocked pending explicit user approval.
 The phase-status table below is the authoritative marker for the current
 project state. Treat the files above as the current authority before changing
 code, workflows, schemas, or operational assumptions.
+
+Latest read-only audit verdict: **7/10** and
+`NOT_GO_LIVE_READY_BUT_HEALTHY`. Go-live blockers are: production frontend
+delivery path missing; production Entra/MSAL frontend auth missing; live
+integrations not proven; backup/restore evidence missing; production hardening
+evidence missing.
 
 ## AI Agent Operating Context
 
@@ -147,7 +153,7 @@ Use [docs/README.md](docs/README.md) as the full documentation index. Key suppor
 | Phase 1A scope | [docs/execution/PHASE_1A_SCOPE.md](docs/execution/PHASE_1A_SCOPE.md) |
 | Phase 2A plan | [docs/execution/PHASE_2A_PLAN.md](docs/execution/PHASE_2A_PLAN.md) |
 | Phase 2B plan | [docs/execution/PHASE_2B_PLAN.md](docs/execution/PHASE_2B_PLAN.md) |
-| Latest full-phase report | [docs/execution/PHASE_2B_REPORT.md](docs/execution/PHASE_2B_REPORT.md) |
+| Latest full-phase report | [docs/execution/PHASE_2C_REPORT.md](docs/execution/PHASE_2C_REPORT.md) |
 | Feature matrix | [docs/admin/FEATURE_MATRIX.md](docs/admin/FEATURE_MATRIX.md) |
 | RBAC matrix | [docs/security/rbac_matrix.md](docs/security/rbac_matrix.md) |
 | API contracts | [docs/contracts/](docs/contracts/) |
@@ -214,7 +220,8 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 1I — Frontend Foundation | Complete (static scaffolds, no API wiring) |
 | 2A — User Chat Workspace Implementation | Complete; E2E and U-01..U-16 manual QA passed; production `NOT_LIVE` |
 | 2B — Admin Visual Control Plane Implementation | Complete; A-01..A-23 manual QA passed; production `NOT_LIVE` |
-| 2C — UI Hardening and Acceptance Validation | In progress; UI hardening and acceptance validation only |
+| 2C — UI Hardening and Acceptance Validation | Complete; 54/54 Playwright tests passed across Chromium, Firefox, and WebKit; production `NOT_LIVE` |
+| 2D — Production Integration and Go-Live Hardening | Blocked pending explicit user approval; not started |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

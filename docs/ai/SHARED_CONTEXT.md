@@ -3,13 +3,13 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `770e62e8ed33bc1f7f86818296566cde652b9228`
+- Current verified commit (anchor): `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`
 - Current status: `PHASE_2C_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
-- Phase 2C is the current active phase (complete).
+- Active implementation phase: none. Phase 2D is blocked until explicit user approval.
 - Next allowed: Phase 2D — requires explicit user approval before implementation starts.
-- Latest plan: `docs/execution/PHASE_2C_PLAN.md`
+- Latest report: `docs/execution/PHASE_2C_REPORT.md`
 - Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
@@ -50,6 +50,14 @@ Phase 2C is complete and not live. All four slices are closed:
 `docs/execution/PHASE_2C_REPORT.md` records the full closeout evidence
 including U-01..U-16 and A-01/C-6 automated coverage, bundle evidence,
 performance timings, cross-browser notes, and CI run references.
+
+The 2026-05-24 read-only project audit at
+`c3ab71d9864e17c3d99da847e5f673fabe2f1dba` rated the repo **7/10** with
+final recommendation `NOT_GO_LIVE_READY_BUT_HEALTHY`. The project is healthy
+but not go-live ready. Main blockers are: production frontend delivery path
+missing; production Entra/MSAL frontend auth missing; live integrations not
+proven; backup/restore evidence missing; production hardening evidence
+missing.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit

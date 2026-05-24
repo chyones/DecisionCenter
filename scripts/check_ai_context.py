@@ -64,6 +64,18 @@ STALE_TEXT_PATTERNS = [
     r"Last completed phase:\s*Phase 2A",
     r"Latest full-phase report:\s*`docs/execution/PHASE_2A_REPORT.md`",
     r"Do not start Phase 2B\b",
+    r"PHASE_2C_IN_PROGRESS_NOT_LIVE",
+    r"Phase 2C is in progress",
+    r"Phase 2C hardening is in progress",
+    r"Phase 2C is the current active phase",
+]
+
+AUDIT_BLOCKERS = [
+    "production frontend delivery path missing",
+    "production Entra/MSAL frontend auth missing",
+    "live integrations not proven",
+    "backup/restore evidence missing",
+    "production hardening evidence missing",
 ]
 
 
@@ -188,16 +200,76 @@ def main() -> int:
                 )
             if state.get("requires_explicit_user_approval_for_phase_2c") is not True:
                 failures.append("Phase 2C must require explicit user approval")
+        elif status == "PHASE_2C_COMPLETE_NOT_LIVE":
+            if state.get("last_completed_phase") != "Phase 2C":
+                failures.append(
+                    "last_completed_phase must be Phase 2C when status is "
+                    "PHASE_2C_COMPLETE_NOT_LIVE"
+                )
+            active_phase = state.get("active_phase")
+            if not isinstance(active_phase, str) or "Phase 2D" not in active_phase:
+                failures.append(
+                    "active_phase must show no active implementation and the "
+                    "Phase 2D approval gate when Phase 2C is complete"
+                )
+            next_allowed = state.get("next_allowed_phase")
+            if (
+                not isinstance(next_allowed, str)
+                or "Phase 2D" not in next_allowed
+                or "explicit user approval" not in next_allowed
+            ):
+                failures.append(
+                    "next_allowed_phase must name Phase 2D and require explicit "
+                    "user approval when Phase 2C is complete"
+                )
+            if latest_report != "docs/execution/PHASE_2C_REPORT.md":
+                failures.append(
+                    "latest_report must be docs/execution/PHASE_2C_REPORT.md when "
+                    "Phase 2C is complete"
+                )
+            if state.get("requires_explicit_user_approval_for_phase_2c") is not False:
+                failures.append(
+                    "requires_explicit_user_approval_for_phase_2c must be false after "
+                    "explicit Phase 2C authorization"
+                )
+            if state.get("requires_explicit_user_approval_for_phase_2d") is not True:
+                failures.append("Phase 2D must require explicit user approval")
+
+            audit = state.get("latest_read_only_audit")
+            if not isinstance(audit, dict):
+                failures.append("latest_read_only_audit must record the latest audit result")
+            else:
+                if audit.get("overall_rating") != "7/10":
+                    failures.append("latest_read_only_audit overall_rating must be 7/10")
+                if audit.get("final_recommendation") != "NOT_GO_LIVE_READY_BUT_HEALTHY":
+                    failures.append(
+                        "latest_read_only_audit final_recommendation must be "
+                        "NOT_GO_LIVE_READY_BUT_HEALTHY"
+                    )
+                if audit.get("go_live_ready") is not False:
+                    failures.append("latest_read_only_audit go_live_ready must be false")
+                blockers = audit.get("main_blockers")
+                if not isinstance(blockers, list) or not all(
+                    blocker in blockers for blocker in AUDIT_BLOCKERS
+                ):
+                    failures.append(
+                        "latest_read_only_audit main_blockers must include the five "
+                        "go-live blockers from the latest audit"
+                    )
         elif isinstance(status, str) and status.startswith("PHASE_2C_"):
             if state.get("last_completed_phase") != "Phase 2B":
                 failures.append(
                     "last_completed_phase must remain Phase 2B while Phase 2C is active"
                 )
             if state.get("active_phase") != "Phase 2C":
-                failures.append("active_phase must be Phase 2C for Phase 2C statuses")
+                failures.append(
+                    "active_phase must be Phase 2C for active Phase 2C statuses"
+                )
             next_allowed = state.get("next_allowed_phase")
             if not isinstance(next_allowed, str) or "Phase 2C" not in next_allowed:
-                failures.append("next_allowed_phase must name Phase 2C for Phase 2C statuses")
+                failures.append(
+                    "next_allowed_phase must name Phase 2C for active Phase 2C statuses"
+                )
             if latest_report != "docs/execution/PHASE_2C_PLAN.md":
                 failures.append(
                     "latest_report must be docs/execution/PHASE_2C_PLAN.md while "
@@ -215,7 +287,11 @@ def main() -> int:
                 failures.append(
                     "phase_1e_may_start must be true when status is PHASE_1E_IN_PROGRESS_NOT_LIVE"
                 )
-        elif status in ("PHASE_1E_COMPLETE_NOT_LIVE", "PHASE_1F_IN_PROGRESS_NOT_LIVE", "PHASE_1F_COMPLETE_NOT_LIVE"):
+        elif status in (
+            "PHASE_1E_COMPLETE_NOT_LIVE",
+            "PHASE_1F_IN_PROGRESS_NOT_LIVE",
+            "PHASE_1F_COMPLETE_NOT_LIVE",
+        ):
             # Phase 1E+ gates: explicit authorization required for next phase
             pass
         else:

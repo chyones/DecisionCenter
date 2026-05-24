@@ -1,8 +1,8 @@
 # DecisionCenter — Feature Matrix
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
-> **Date:** 2026-05-21 (Phase 2C start)
-> **Status:** Phases 1A-1I plus the Phase 1D-fixup and Phases 2A-2B are complete. Phase 2C is in progress for UI hardening and acceptance validation. Production is `NOT_LIVE`.
+> **Date:** 2026-05-24 (Phase 2C audit reconciliation)
+> **Status:** Phases 1A-1I plus the Phase 1D-fixup and Phases 2A-2C are complete. Production is `NOT_LIVE`. Phase 2D is the next allowed phase and is blocked pending explicit user approval. Final audit recommendation: `NOT_GO_LIVE_READY_BUT_HEALTHY` (7/10).
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 
@@ -243,7 +243,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 | Admin Approval Queue screen | `/admin/approvals` | Live `GET /admin/approvals` list with project/state filters, offset pagination, detail panel via `GET /admin/approvals/{id}`; QG flags display; admin override approve/reject with mandatory comment and warning banner; A-10 self-block enforced server-side | Phase 2B Slice 7; frontend lint/build | implemented |
 | Admin Dashboard screen | `/admin/dashboard` | Live `GET /admin/dashboard/summary`; 6-card stat grid with clickable cards, service health dots, progress bars, recent events table; `/admin` redirects here; `getDefaultLanding('admin')` returns `/admin/dashboard` | Phase 2B Slice 8; frontend lint/build | implemented |
 | Admin nav completeness | Sidebar + Topbar | Sidebar has all 7 admin entries (Dashboard, System Health, Connectors, Permissions, Source Mapping, Audit Log, Approvals) with correct active-state highlighting; Topbar shows correct breadcrumb for every admin route | Phase 2B Slice 9; frontend lint/build | implemented |
-| Phase 2C browser test harness | `frontend/playwright.config.ts`, `frontend/e2e/*`, `make test-ui` | Playwright starts the Vite dev server, mocks backend API responses, and validates accessibility, responsive, and security-DOM invariants | Phase 2C Slice 1 in progress | partial |
+| Phase 2C UI hardening and acceptance validation | `frontend/playwright.config.ts`, `frontend/e2e/*`, `make test-ui` | Playwright starts the Vite dev server, mocks backend API responses, and validates accessibility, responsive, security-DOM, performance, bundle-budget, golden-path, and cross-browser invariants | `docs/execution/PHASE_2C_REPORT.md`: 54/54 Playwright tests passed across Chromium, Firefox, and WebKit | implemented |
 
 ---
 
@@ -280,12 +280,17 @@ reflects the versions in effect when the triage was performed.
 | ID | Gap | Location | Impact | Phase to Fix |
 |----|-----|----------|--------|--------------|
 | G4 | No `frontend/` directory exists | Repository root | No UI codebase to scaffold | Closed in 1I |
-| G5 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | Closing in Phase 2C Slice 1 |
+| G5 | No `make test:ui` target in Makefile | `Makefile` | No CI gate for UI acceptance | Closed in Phase 2C |
 | G9 | Langfuse dashboard not yet observed live | `apps/edr/llm.py` | Tracing hook exists; trace correctness in production-like config not validated | Later phase (2+) |
 | G10b | Arabic PDF lacks bidirectional shaping/reshaping | `apps/edr/exporters/pdf.py` | RTL text is not reshaped; a disclaimer is appended | Later phase (2+) |
 | G11 | `pip-audit` not promoted to a hard CI gate | `.github/workflows/ci.yml` | 19 advisories on 9 packages accepted as deferred; gate stays `continue-on-error` | Later phase (2+) |
 | G12 | Phase 2A backend read/status/cancel/upload endpoint gap | `apps/edr/app.py` | Reports List, Processing, Report View, Evidence Panel, Upload Zone originally rendered unavailable shells | Closed in Phase 2A backend additions and final QA blocker fixes |
 | G13 | Phase 2A validation gate (E2E + U-01..U-16 manual QA) not exercised | Manual QA / running stack | Phase 2A could not be marked fully complete until the gate was run | Closed in Phase 2A manual QA closeout |
+| G14 | Production frontend delivery path missing | Docker/Caddy/frontend deployment | Go-live cannot be approved until the production frontend is built and served through the intended deployment path | Phase 2D approval-gated |
+| G15 | Production Entra/MSAL frontend auth missing | Frontend auth/API client | Go-live cannot be approved until the frontend uses production Entra login and Bearer-token API calls | Phase 2D approval-gated |
+| G16 | Live integrations not proven | Entra, n8n, Graph, SharePoint, Odoo, LLMs, Qdrant, MinIO, Langfuse | Go-live cannot be approved without production-like end-to-end evidence | Phase 2D approval-gated |
+| G17 | Backup/restore evidence missing | Operations | Go-live cannot be approved without restore rehearsal evidence | Phase 2D approval-gated |
+| G18 | Production hardening evidence missing | Operations/security | Go-live cannot be approved without server hardening, secret rotation, and least-privilege evidence | Phase 2D approval-gated |
 
 Closed gaps:
 - G1 (nodes 11–17 stubs) — closed by Phase 1E/1F/1G.
