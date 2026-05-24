@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
-- **Current anchor:** `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`
+- **Current anchor:** `1edecaa889a2e06386e80081ed3fc1ab4adca66d`
 - **Closed date:** 2026-05-24
 - **Latest report:** `docs/execution/PHASE_2C_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
