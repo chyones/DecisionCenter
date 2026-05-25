@@ -91,12 +91,12 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "91f0df1f019e043799fc91bea04f39e60cfb4f1c",
-    "run_id": 26361596945,
+    "commit": "5368a9f00aaf73970f47b165418e8c671e56c859",
+    "run_id": 26387937091,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26361596945",
-    "note": "Session-verified green CI for the pre-Slice-2 anchor (91f0df1). The Phase 2D Slice 2 push CI is confirmed separately after push."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26387937091",
+    "note": "Phase 2D Slice 3 CI fix — live_probe marker + timeout + skip-on-unreachable. Smoke 22m20s, frontend 2m26s. Governance refresh 40f3f90 also green (run 26387995526)."
   },
   "latest_local_validation": {
     "date": "2026-05-25",

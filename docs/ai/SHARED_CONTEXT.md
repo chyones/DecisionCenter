@@ -63,6 +63,10 @@ but not go-live ready. Main blockers are: ~~production frontend delivery path mi
 workflow operator-run documented); backup/restore evidence missing → Slice 4;
 production hardening evidence missing → Slice 5.
 
+Latest CI verification: run 26387937091 (commit `5368a9f`) — smoke job success
+(22m20s), frontend job success (2m26s). Live probes excluded from CI via
+`live_probe` marker; they pass locally against the Docker stack.
+
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit
 persistence with sanitized operation names when MinIO/PostgreSQL writes fail.

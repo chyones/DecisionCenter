@@ -91,6 +91,8 @@ If anchor drift exceeds 3 commits, stop and fix governance before coding.
 | Frontend build | JS 92.77 kB gzip, CSS 6.06 kB gzip |
 | Bundle budget | JS ≤ 120 kB ✅, CSS ≤ 15 kB ✅ |
 | Live integration probes | 15/15 passed (infra + webhook failure-mode) |
+| CI smoke job | success (22m20s) |
+| CI frontend job | success (2m26s) |
 | doc_drift | clean |
 | ai_context | clean |
 | postflight | clean |
