@@ -3,21 +3,21 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `458450143c916d97f0560c3324c8e8dce8ce0a69` (pre-repair HEAD; Slice 5 AI-context failure)
+- Current verified commit (anchor): `18695e8a0ab852b2383d5f312925f491e3315d9d` (governance fix; CI green, run `26393853766`)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
-- Active implementation phase: Phase 2D, with Slice 6 blocked until explicit user approval.
-- Next allowed: Phase 2D Slice 6 — Real UAT Flow; requires explicit user approval before implementation starts.
-- Latest report: `docs/execution/PHASE_2D_SLICE_5_REPORT.md`
+- Active implementation phase: Phase 2D, with Slice 7 blocked until explicit user approval.
+- Next allowed: Phase 2D Slice 7 — Go-Live Gate; requires explicit user approval before implementation starts.
+- Latest report: `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
 - Phase 2D Slice 1 (production frontend delivery path): implemented and committed
 - Phase 2D Slice 2 (production Entra/MSAL auth + GET /me): implemented; production NOT_LIVE
 - Phase 2D Slice 3 (live integration validation): implemented; production NOT_LIVE
 - Phase 2D Slice 4 (backup and restore): implemented; production NOT_LIVE
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
-- Phase 2D Slice 6 (real UAT flow): not started; approval-gated
-- Phase 2D Slice 7 (go-live gate): not started; follows successful Slice 6
+- Phase 2D Slice 6 (real UAT flow): readiness implemented; live run operator-pending; production NOT_LIVE
+- Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -67,14 +67,14 @@ but not go-live ready. Main blockers are: ~~production frontend delivery path mi
 workflow operator-run documented);
 ~~backup/restore evidence missing~~ (Slice 4 ✅ — scripts, docs, rehearsal evidence);
 ~~production hardening evidence missing~~ (Slice 5 ✅ — checklist, secrets policy, automated checks).
-Remaining go-live blockers are: real UAT flow not proven (Slice 6) and
-go-live approval not completed (Slice 7). Production remains `NOT_LIVE`.
+Remaining go-live blockers are: real UAT flow not proven (Slice 6 readiness
+is implemented; the live UAT run is operator-pending) and go-live approval
+not completed (Slice 7). Production remains `NOT_LIVE`.
 
-Latest verified green CI before this repair: run 26391180459 (commit `85e427d`)
-— smoke job success (16m34s), frontend job success (2m3s). Latest pushed HEAD
-`4584501` failed in the `AI context check` step because the validator still
-enforced the older Phase 2C audit shape after Slice 5 governance was recorded.
-This repair narrows the fix to that failed governance check.
+Latest verified green CI: run 26393853766 (commit `18695e8`) — smoke and
+frontend jobs both success; the `AI context check` step is green after the
+Phase 2D governance fix. Slice 6 readiness was then added on top of this
+green anchor.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit
@@ -118,7 +118,7 @@ documentation drift check.
 
 ## Current No-Go Rules
 
-- Do not start Slice 6. It requires explicit user approval in the current session.
+- Do not start Slice 7. It requires explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not deploy.
@@ -215,6 +215,6 @@ Ignored or local-only files must not be committed (see `.gitignore` and
   before ending the session. Run `python3 scripts/check_doc_drift.py` before
   starting any new slice. If anchor drift exceeds 3 commits, stop and fix
   governance before writing any more code.
-- If a future user explicitly authorizes Slice 6, update this shared context,
+- If a future user explicitly authorizes Slice 7, update this shared context,
   the handoff, and `docs/ai/agent-state.json` only as part of that approved
   session.
