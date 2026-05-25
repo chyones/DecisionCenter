@@ -82,6 +82,11 @@ authorized operator performs the deployment/cutover steps.
 
 ### Slice 2 — Production auth
 
+**Status:** ✅ Implemented (2026-05-25) — Entra/MSAL frontend login, Bearer-token
+API calls, `GET /me` canonical-role source, and production rejection of dev bypass
+headers. Local/CI keep the RoleSwitcher bypass. Real Entra login is operator-verified.
+Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
+
 **Scope**
 
 - Implement Entra/MSAL frontend login.

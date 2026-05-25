@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
-- **Current anchor:** `1edecaa889a2e06386e80081ed3fc1ab4adca66d`
+- **Current anchor:** `e1bd28405e615f5178730bdaf1793db8f252b33e` (Phase 2D Slice 2 governance refresh; feature `4693d6c`)
 - **Closed date:** 2026-05-24
 - **Latest report:** `docs/execution/PHASE_2C_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -37,14 +37,25 @@ Production remains **not go-live ready**. Main blockers:
 - Backup/restore evidence missing.
 - Production hardening evidence missing.
 
-## Next Phase: Phase 2D
+## Phase 2D Progress
 
-**Phase 2D is blocked.** It requires explicit user approval before any
-implementation begins. No agent may start Phase 2D work without the user
-confirming in the current session.
+Phase 2D was explicitly approved and is proceeding slice by slice. Each new
+slice still requires explicit user approval before implementation; production
+stays `NOT_LIVE` until a separate go-live approval.
 
-`docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d`
-is `true`.
+- **Slice 1 — Production frontend delivery path:** implemented (Caddy SPA +
+  reverse proxy).
+- **Slice 2 — Production auth:** implemented — Microsoft Entra/MSAL login,
+  `Authorization: Bearer` API calls, a `GET /me` canonical-role source, and
+  production rejection of the dev bypass headers (`x-user-role`/`x-user-id`).
+  Local dev and CI keep the RoleSwitcher bypass. Real Entra login is
+  operator-verified (no live tenant in CI). See
+  `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
+- **Next — Slice 3 (Live Integration Validation):** approval-gated; not started.
+
+`docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
+`true`: no agent may start the next slice without explicit user approval in the
+current session.
 
 ## Current Guardrails
 

@@ -3,7 +3,8 @@
 > **Phase / Slice:** 2D Slice 2 — Production Auth
 > **Slice status (proposed on commit):** `PHASE_2D_SLICE_2_COMPLETE_NOT_LIVE`
 > **Repo status (unchanged):** `PHASE_2C_COMPLETE_NOT_LIVE`
-> **Implemented on working tree at HEAD:** `91f0df1f019e043799fc91bea04f39e60cfb4f1c`
+> **Committed:** `4693d6c` (feature) + `e1bd284` (governance) — pushed to `main`
+> **CI:** run `26384373013` on `e1bd284` (smoke + frontend)
 > **Production:** `NOT_LIVE` (no deploy, no go-live in this slice)
 > **Plan:** `/root/.claude/plans/continue-to-phase-2d-slice-2-after-ci-gr-playful-sutton.md`
 
@@ -92,6 +93,7 @@ Run on the host venv, mirroring CI (`gh` CLI is unavailable here).
 | `scripts/check_doc_drift.py` | clean |
 | `scripts/check_ai_context.py` | clean |
 | `git diff --check` | clean |
+| CI on pushed `e1bd284` | run `26384373013` (smoke + frontend) |
 
 ---
 
@@ -111,9 +113,12 @@ Per the approved plan, this slice follows the Slice 1 precedent: the
 stays `PHASE_2C_REPORT.md`; slice progress is tracked in a separate
 `phase_2d_slice_2_status` field. No edits to `check_ai_context.py`
 `ALLOWED_STATUSES` or `check_doc_drift.py` constants are required (verified:
-both checks remain clean). The governance anchor refresh
-(`current_commit`, `latest_verified_ci`, `AGENT_HANDOFF.md`, `SHARED_CONTEXT.md`,
-and Slice 2 notes in the five truth docs) is performed together with the commit
-once committing is authorized.
+both checks remain clean). The governance anchor refresh — `current_commit`,
+`latest_verified_ci`, `AGENT_HANDOFF.md`, `SHARED_CONTEXT.md`, and the
+`PHASE_2D_EXECUTION_PLAN.md` Slice 2 status — is committed alongside the code.
+The five frozen audit truth docs (CONTROL_PLANE_LOCK, CURRENT_PROJECT_STATE,
+IMPLEMENTATION_PHASES, FEATURE_MATRIX, README) are intentionally left at the
+2026-05-24 audit snapshot until a re-audit/closeout, matching the Slice 1
+precedent.
 
-**This work is not yet committed.** Production remains `NOT_LIVE`.
+Committed as `4693d6c` (feature) + `e1bd284` (governance) and pushed to `main`. Production remains `NOT_LIVE`.
