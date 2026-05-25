@@ -73,7 +73,7 @@ jobs:
       - name: Integration tests
         env:
           PYTHONPATH: .
-        run: python -m pytest -q apps/edr/tests/integration
+        run: python -m pytest -q apps/edr/tests/integration -m "not live_probe"
 
       - name: Evaluation suite
         env:

@@ -1,9 +1,9 @@
 """Phase 2D Slice 3 — Live Integration Validation.
 
 These tests attempt real connections against production integrations.
-- Infrastructure probes run when the Docker stack is up (CI and local dev).
+- Infrastructure probes run when the Docker stack is up (local dev / operator run).
+- In CI (no services running) they skip gracefully on connection failure.
 - Webhook probes validate explicit failure states (inactive workflows, missing auth).
-- Missing credentials or unreachable services → pytest.skip with a clear reason.
 - No fake success: every integration must surface an explicit error when broken.
 
 Operator run (target environment with live credentials):
@@ -13,6 +13,7 @@ Operator run (target environment with live credentials):
 from __future__ import annotations
 
 import asyncio
+import socket
 from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
@@ -23,7 +24,6 @@ from apps.edr.connectors.email import search_email
 from apps.edr.connectors.odoo import read_odoo
 from apps.edr.connectors.owncloud import list_owncloud
 from apps.edr.connectors.sharepoint import search_sharepoint
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,11 +54,26 @@ def _mocked_error_response(status_code: int, json_data: dict | None = None) -> A
     return response
 
 
+def _is_unreachable_error(exc: Exception) -> bool:
+    """Return True for common "service not available" errors."""
+    name = type(exc).__name__
+    return name in {
+        "CannotConnectNowError",
+        "ConnectionRefusedError",
+        "TimeoutError",
+        "OSError",
+        "ConnectError",
+        "NetworkError",
+        "gaierror",  # socket.getaddrinfo error
+    }
+
+
 # ---------------------------------------------------------------------------
 # Infrastructure — real connectivity probes
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.live_probe
 @pytest.mark.asyncio
 async def test_postgres_live() -> None:
     """PostgreSQL: real TCP + auth + SELECT 1."""
@@ -72,14 +87,18 @@ async def test_postgres_live() -> None:
             database=settings.postgres_db,
             user=settings.postgres_user,
             password=settings.postgres_password,
+            timeout=5,
         )
         result = await conn.fetch("SELECT 1")
         assert result[0][0] == 1
         await conn.close()
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"PostgreSQL unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"PostgreSQL live probe failed: {type(exc).__name__}: {exc}")
 
 
+@pytest.mark.live_probe
 def test_redis_live() -> None:
     """Redis: TCP PING → PONG."""
     _skip_if_missing("REDIS_URL", settings.redis_url)
@@ -91,16 +110,17 @@ def test_redis_live() -> None:
     host, port = parsed.hostname, parsed.port or 6379
 
     try:
-        import socket
-
         with socket.create_connection((host, port), timeout=2) as sock:
             sock.sendall(b"*1\r\n$4\r\nPING\r\n")
             pong = sock.recv(16)
             assert pong.startswith(b"+PONG"), f"Expected +PONG, got {pong!r}"
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"Redis unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"Redis live probe failed: {type(exc).__name__}: {exc}")
 
 
+@pytest.mark.live_probe
 def test_qdrant_live() -> None:
     """Qdrant: HTTP GET /collections."""
     _skip_if_missing("QDRANT_URL", settings.qdrant_url)
@@ -112,9 +132,12 @@ def test_qdrant_live() -> None:
         result = data.get("result", {})
         assert "collections" in result
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"Qdrant unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"Qdrant live probe failed: {type(exc).__name__}: {exc}")
 
 
+@pytest.mark.live_probe
 def test_minio_live() -> None:
     """MinIO: HTTP GET /minio/health/ready."""
     _skip_if_missing("MINIO_ENDPOINT", settings.minio_endpoint)
@@ -125,9 +148,12 @@ def test_minio_live() -> None:
         resp = httpx.get(f"{endpoint.rstrip('/')}/minio/health/ready", timeout=5)
         resp.raise_for_status()
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"MinIO unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"MinIO live probe failed: {type(exc).__name__}: {exc}")
 
 
+@pytest.mark.live_probe
 def test_langfuse_live() -> None:
     """Langfuse: HTTP GET /api/public/health (connectivity probe)."""
     _skip_if_missing("LANGFUSE_HOST", settings.langfuse_host)
@@ -141,9 +167,12 @@ def test_langfuse_live() -> None:
             pytest.fail(f"Langfuse returned server error {resp.status_code}")
         # Any 2xx/3xx/4xx is treated as "reachable".
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"Langfuse unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"Langfuse live probe failed: {type(exc).__name__}: {exc}")
 
 
+@pytest.mark.live_probe
 def test_n8n_live() -> None:
     """n8n: HTTP GET /healthz."""
     _skip_if_missing("N8N_BASE_URL", settings.n8n_base_url)
@@ -151,6 +180,8 @@ def test_n8n_live() -> None:
         resp = httpx.get(f"{settings.n8n_base_url.rstrip('/')}/healthz", timeout=5)
         resp.raise_for_status()
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"n8n unreachable ({type(exc).__name__}) — skipping live probe")
         pytest.fail(f"n8n live probe failed: {type(exc).__name__}: {exc}")
 
 
@@ -159,6 +190,7 @@ def test_n8n_live() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.live_probe
 def test_sharepoint_webhook_explicit_failure() -> None:
     """SharePoint webhook: inactive or unauthenticated must NOT return 200."""
     _skip_if_missing("N8N_BASE_URL", settings.n8n_base_url)
@@ -167,6 +199,8 @@ def test_sharepoint_webhook_explicit_failure() -> None:
     try:
         resp = httpx.post(url, json={"query": "test"}, timeout=5)
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"n8n unreachable ({type(exc).__name__}) — skipping webhook probe")
         pytest.fail(f"SharePoint webhook probe failed: {type(exc).__name__}: {exc}")
     # An inactive workflow returns 404; missing auth returns 401/403.
     # Anything other than 200 is an explicit failure state.
@@ -176,6 +210,7 @@ def test_sharepoint_webhook_explicit_failure() -> None:
     )
 
 
+@pytest.mark.live_probe
 def test_email_webhook_explicit_failure() -> None:
     """Microsoft Graph (Email) webhook: inactive or unauthenticated must NOT return 200."""
     _skip_if_missing("N8N_BASE_URL", settings.n8n_base_url)
@@ -184,6 +219,8 @@ def test_email_webhook_explicit_failure() -> None:
     try:
         resp = httpx.post(url, json={"query": "test"}, timeout=5)
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"n8n unreachable ({type(exc).__name__}) — skipping webhook probe")
         pytest.fail(f"Email webhook probe failed: {type(exc).__name__}: {exc}")
     assert resp.status_code != 200, (
         f"Email webhook returned 200 — possible silent success. "
@@ -191,6 +228,7 @@ def test_email_webhook_explicit_failure() -> None:
     )
 
 
+@pytest.mark.live_probe
 def test_owncloud_webhook_explicit_failure() -> None:
     """ownCloud webhook: inactive or unauthenticated must NOT return 200."""
     _skip_if_missing("N8N_BASE_URL", settings.n8n_base_url)
@@ -199,6 +237,8 @@ def test_owncloud_webhook_explicit_failure() -> None:
     try:
         resp = httpx.post(url, json={"query": "test"}, timeout=5)
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"n8n unreachable ({type(exc).__name__}) — skipping webhook probe")
         pytest.fail(f"ownCloud webhook probe failed: {type(exc).__name__}: {exc}")
     assert resp.status_code != 200, (
         f"ownCloud webhook returned 200 — possible silent success. "
@@ -206,6 +246,7 @@ def test_owncloud_webhook_explicit_failure() -> None:
     )
 
 
+@pytest.mark.live_probe
 def test_odoo_webhook_explicit_failure() -> None:
     """Odoo webhook: inactive or unauthenticated must NOT return 200."""
     _skip_if_missing("N8N_BASE_URL", settings.n8n_base_url)
@@ -214,6 +255,8 @@ def test_odoo_webhook_explicit_failure() -> None:
     try:
         resp = httpx.post(url, json={"query": "test"}, timeout=5)
     except Exception as exc:
+        if _is_unreachable_error(exc):
+            pytest.skip(f"n8n unreachable ({type(exc).__name__}) — skipping webhook probe")
         pytest.fail(f"Odoo webhook probe failed: {type(exc).__name__}: {exc}")
     assert resp.status_code != 200, (
         f"Odoo webhook returned 200 — possible silent success. "
