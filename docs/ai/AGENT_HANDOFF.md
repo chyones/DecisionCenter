@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
-- **Current anchor:** `db34b07e97ea663e61e8bef867786fab5303eae0` (Slice 3 governance refresh + ruff fix)
+- **Current anchor:** `5368a9f00aaf73970f47b165418e8c671e56c859` (Slice 3 CI fix — live_probe skip + timeout)
 - **Closed date:** 2026-05-24
 - **Latest report:** `docs/execution/PHASE_2C_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
