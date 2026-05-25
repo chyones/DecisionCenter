@@ -11,6 +11,7 @@
 - **Production:** `NOT_LIVE`
 - **Active phase:** None — Phase 2D is approval-gated
 - **Phase 2D Slice 1:** Production frontend delivery path — implemented
+- **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE); Phase 2D remains approval-gated
 
 Phase 2C is closed. All four slices are complete:
 

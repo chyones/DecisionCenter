@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "1edecaa889a2e06386e80081ed3fc1ab4adca66d",
+  "current_commit": "4693d6cdda4cf543b22b50a5b4ac416bf2e37d46",
   "status": "PHASE_2C_COMPLETE_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -41,7 +41,11 @@
   ],
   "phase_2c_test_evidence": {
     "total_playwright_tests": 54,
-    "browsers": ["Chromium", "Firefox", "WebKit"],
+    "browsers": [
+      "Chromium",
+      "Firefox",
+      "WebKit"
+    ],
     "tests_per_browser": 18,
     "result": "54/54 passed",
     "bundle_js_gzip_kb": 91.33,
@@ -87,21 +91,27 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "d0b05e343b9717d6f3189ddbb9d263440655f93a",
-    "run_id": 26356541561,
+    "commit": "91f0df1f019e043799fc91bea04f39e60cfb4f1c",
+    "run_id": 26361596945,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26356541561",
-    "note": "Last fully-green CI run (Slice 3). Slice 4 commit 770e62e frontend job was green (54/54 tests) but smoke job failed on doc-drift only; fixed by this closeout commit."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26361596945",
+    "note": "Session-verified green CI for the pre-Slice-2 anchor (91f0df1). The Phase 2D Slice 2 push CI is confirmed separately after push."
   },
   "latest_local_validation": {
-    "date": "2026-05-24",
-    "test_ui": "54 passed — 18 × 3 browsers (Chromium, Firefox, WebKit)",
+    "date": "2026-05-25",
+    "context": "Phase 2D Slice 2 — production auth (host venv, mirrors CI)",
+    "ruff": "clean",
+    "compileall": "clean",
+    "smoke": "2 passed",
+    "integration": "479 passed (incl. 20 new test_me_endpoint cases)",
+    "eval": "passed (--min-pass-rate 0.95 --min-precision 0.90)",
     "frontend_lint": "clean",
-    "frontend_build": "success, JS gzip 91.33 kB / 120 kB budget, CSS gzip 6.06 kB / 15 kB budget",
+    "frontend_build": "success, JS 90.59 kB gzip / 120 budget, CSS 5.92 kB / 15 budget",
     "bundle_check": "pass",
-    "doc_drift": "clean (after governance refresh)",
-    "ai_context": "clean (after governance refresh)",
+    "test_ui": "54 passed — Chromium, Firefox, WebKit",
+    "doc_drift": "clean",
+    "ai_context": "clean",
     "postflight": "clean"
   },
   "must_not_deploy": true,
@@ -121,5 +131,6 @@
     "cd frontend && npm run test:ui",
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
-  ]
+  ],
+  "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE"
 }
