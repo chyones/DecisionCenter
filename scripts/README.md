@@ -14,6 +14,7 @@ outside product workflow behavior unless a later phase explicitly authorizes tha
 | `restore_postgres.py` | Restores the PostgreSQL database from a SQL dump |
 | `restore_minio.py` | Restores the MinIO bucket from a tarball |
 | `verify_backup.py` | Verifies backup file integrity and optionally checks live service linkage |
+| `check_hardening.py` | Production hardening posture checker (read-only, CI-safe) |
 
 ## Usage
 

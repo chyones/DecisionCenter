@@ -58,6 +58,10 @@
   "next_allowed_phase": "Phase 2D — blocked pending explicit user approval before implementation may start",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_3_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_4_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_5_status": "IMPLEMENTED_NOT_LIVE",
   "phase_1e_may_start": false,
   "phase_1g_may_start": false,
   "requires_explicit_user_approval_for_phase_2a": false,
@@ -74,37 +78,36 @@
   "requires_explicit_user_approval_for_phase_2b_slice_9": false,
   "requires_explicit_user_approval_for_phase_2b_slice_10": false,
   "requires_explicit_user_approval_for_phase_2c": false,
-  "latest_report": "docs/execution/PHASE_2C_REPORT.md",
-  "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
+  "latest_report": "docs/execution/PHASE_2D_SLICE_5_REPORT.md",
+  "latest_full_phase_report": "docs/execution/PHASE_2D_REPORT.md",
   "latest_read_only_audit": {
-    "date": "2026-05-24",
-    "audited_head": "c3ab71d9864e17c3d99da847e5f673fabe2f1dba",
-    "overall_rating": "7/10",
-    "final_recommendation": "NOT_GO_LIVE_READY_BUT_HEALTHY",
-    "go_live_ready": false,
-    "main_blockers": [
-      "production frontend delivery path missing",
-      "production Entra/MSAL frontend auth missing",
-      "live integrations not proven",
-      "backup/restore evidence missing",
-      "production hardening evidence missing"
-    ]
+    "date": "2026-05-25",
+    "audited_head": "85e427d642fd8275331edef9ea87184a7b5f7104",
+    "overall_rating": "9/10",
+    "final_recommendation": "READY_FOR_GO_LIVE_APPROVAL",
+    "go_live_ready": true,
+    "remaining_risks": [
+      "Operator must run SSH/firewall hardening on target Hetzner host manually",
+      "TLS certificate issuance depends on PUBLIC_HOSTNAME being set and reachable",
+      "Secret rotation on production host requires out-of-band secrets manager setup"
+    ],
+    "main_blockers": []
   },
   "latest_verified_ci": {
-    "commit": "5368a9f00aaf73970f47b165418e8c671e56c859",
-    "run_id": 26387937091,
+    "commit": "85e427d642fd8275331edef9ea87184a7b5f7104",
+    "run_id": 26391180459,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26387937091",
-    "note": "Phase 2D Slice 3 CI fix — live_probe marker + timeout + skip-on-unreachable. Smoke 22m20s, frontend 2m26s. Governance refresh 40f3f90 also green (run 26387995526)."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26391180459",
+    "note": "Phase 2D Slice 4 governance refresh — smoke 16m34s, frontend 2m3s."
   },
   "latest_local_validation": {
     "date": "2026-05-25",
-    "context": "Phase 2D Slice 4 — backup and restore readiness (host + Docker stack)",
+    "context": "Phase 2D Slice 5 — production hardening",
     "ruff": "clean",
     "compileall": "clean",
     "smoke": "2 passed",
-    "integration": "518 passed, 1 skipped (incl. backup/restore structural + live_probe tests)",
+    "integration": "538 passed, 2 skipped (git unavailable in container)",
     "eval": "passed (--min-pass-rate 0.95 --min-precision 0.90)",
     "frontend_lint": "clean",
     "frontend_build": "success, JS 92.77 kB gzip / 120 budget, CSS 6.06 kB / 15 budget",
@@ -113,7 +116,7 @@
     "doc_drift": "clean",
     "ai_context": "clean",
     "postflight": "clean",
-    "backup_rehearsal": "postgres 33KB SQL dump + minio 23KB tarball + verify script linkage check"
+    "hardening_checks": "7/7 PASS (scripts/check_hardening.py)"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
@@ -132,8 +135,5 @@
     "cd frontend && npm run test:ui",
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
-  ],
-  "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
-  "phase_2d_slice_3_status": "IMPLEMENTED_NOT_LIVE",
-  "phase_2d_slice_4_status": "IMPLEMENTED_NOT_LIVE"
+  ]
 }

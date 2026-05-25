@@ -14,7 +14,8 @@
 - Phase 2D Slice 1 (production frontend delivery path): implemented and committed
 - Phase 2D Slice 2 (production Entra/MSAL auth + GET /me): implemented; production NOT_LIVE
 - Phase 2D Slice 3 (live integration validation): implemented; production NOT_LIVE
-- Phase 2D Slice 4 (backup and restore): implemented; production NOT_LIVE; Phase 2D remains approval-gated
+- Phase 2D Slice 4 (backup and restore): implemented; production NOT_LIVE
+- Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE; Phase 2D remains approval-gated
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -63,7 +64,7 @@ but not go-live ready. Main blockers are: ~~production frontend delivery path mi
 ~~live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI;
 workflow operator-run documented);
 ~~backup/restore evidence missing~~ (Slice 4 ✅ — scripts, docs, rehearsal evidence);
-production hardening evidence missing → Slice 5.
+~~production hardening evidence missing~~ (Slice 5 ✅ — checklist, secrets policy, automated checks).
 
 Latest CI verification: run 26387937091 (commit `5368a9f`) — smoke job success
 (22m20s), frontend job success (2m26s). Live probes excluded from CI via

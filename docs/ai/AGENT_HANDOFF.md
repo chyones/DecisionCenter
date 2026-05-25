@@ -13,7 +13,8 @@
 - **Phase 2D Slice 1:** Production frontend delivery path — implemented
 - **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE)
 - **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE)
-- **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE); Phase 2D remains approval-gated
+- **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE)
+- **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE); Phase 2D remains approval-gated
 
 Phase 2C is closed. All four slices are complete:
 
@@ -37,7 +38,7 @@ Production remains **not go-live ready**. Main blockers:
 - ~~Production Entra/MSAL frontend auth missing~~ (Slice 2 ✅)
 - ~~Live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI; workflow operator-run documented)
 - ~~Backup/restore evidence missing~~ (Slice 4 ✅ — scripts, docs, rehearsal evidence complete)
-- Production hardening evidence missing → Slice 5
+- ~~Production hardening evidence missing~~ (Slice 5 ✅ — checklist, secrets policy, automated checks, operator evidence)
 
 ## Phase 2D Progress
 
@@ -56,7 +57,11 @@ stays `NOT_LIVE` until a separate go-live approval.
 - **Slice 4 — Backup and Restore:** implemented — PostgreSQL + MinIO backup/restore
   scripts, operator runbook, DR policy, and rehearsal evidence. See
   `docs/execution/PHASE_2D_SLICE_4_REPORT.md`.
-- **Next — Slice 5 (Production Hardening):** approval-gated; not started.
+- **Slice 5 — Production Hardening:** implemented — hardening checklist, secrets policy,
+  automated `check_hardening.py` script, and operator-run SSH/firewall evidence.
+  See `docs/execution/PHASE_2D_SLICE_5_REPORT.md`.
+- **Next — go-live approval:** Phase 2D is complete. A separate explicit go-live
+  approval is required before production can be declared live.
 
 `docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
 `true`: no agent may start the next slice without explicit user approval in the
