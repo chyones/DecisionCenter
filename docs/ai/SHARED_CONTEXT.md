@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `f6730ec4d4e32ef7b9fba91e834ce8b1cb444ed8` (Slice 3 governance refresh)
+- Current verified commit (anchor): `db34b07e97ea663e61e8bef867786fab5303eae0` (Slice 3 governance refresh + ruff fix)
 - Current status: `PHASE_2C_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
