@@ -1,7 +1,8 @@
 import { Button } from '../components';
-import { Menu, ChevronRight } from 'lucide-react';
+import { Menu, ChevronRight, LogOut } from 'lucide-react';
 import { useRole } from '../routing/RoleContext';
 import { useHashPath } from '../routing/useHashPath';
+import { productionAuthEnabled, signOut } from '../auth/msalConfig';
 
 export interface TopbarProps {
   onSidebarToggle?: () => void;
@@ -81,6 +82,15 @@ export function Topbar({ onSidebarToggle }: TopbarProps) {
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-overlay text-label font-medium text-text-secondary">
           U
         </div>
+        {productionAuthEnabled && (
+          <Button
+            variant="ghost"
+            size="compact"
+            onClick={() => void signOut()}
+            icon={<LogOut className="h-4 w-4" aria-hidden="true" />}
+            aria-label="Sign out"
+          />
+        )}
       </div>
     </header>
   );

@@ -139,6 +139,11 @@ class WorkspaceContextResponse(BaseModel):
     can_access_odoo_budget: bool
 
 
+class MeResponse(BaseModel):
+    user_id_hash: str
+    role: str
+
+
 class EvidencePanelEntry(BaseModel):
     evidence_id: str
     citation_label: str
@@ -198,6 +203,11 @@ def _extract_claims(
     Bypass mode is active when ENTRA_CLIENT_ID is not configured — for local dev
     and CI only. In bypass mode, pass X-User-Role header to set the role.
     """
+    if settings.app_env == "production" and (x_user_role or x_user_id):
+        raise HTTPException(
+            status_code=400,
+            detail="dev bypass headers are not accepted in production",
+        )
     if settings.entra_client_id and settings.entra_tenant_id:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Authorization: Bearer <token> required")
@@ -624,6 +634,25 @@ async def stage_report(
         "exported_formats": list(exports.keys()),
         "exports": exports,
     }
+
+
+@app.get("/me", response_model=MeResponse)
+async def get_me(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> MeResponse:
+    """Return the caller's resolved canonical role and hashed user id.
+
+    Identity metadata only — a hashed user id plus the canonical role, never any
+    business data — so every authenticated canonical role (admin included) may
+    call it. The production frontend uses this as the authoritative role source
+    after Entra login. Server-side RBAC on every other route is unaffected.
+    """
+    claims = _require_claims(claims)
+    role = _validated_role(claims)
+    return MeResponse(
+        user_id_hash=hash_user_id(claims.user_id) if claims.user_id else "",
+        role=role.value,
+    )
 
 
 @app.get("/workspace/context", response_model=WorkspaceContextResponse)

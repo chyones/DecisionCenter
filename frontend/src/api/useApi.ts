@@ -1,13 +1,15 @@
 /**
- * React hook — binds `RoleContext` to the API client for dev bypass auth.
+ * React hook — binds auth to the API client.
  *
- * Phase 2A Slice 1: dev mode sends `X-User-Role` header matching the current
- * static role. Production will switch to Bearer token once Entra SSO is wired.
+ * Production (`productionAuthEnabled`): attaches `Authorization: Bearer <token>`
+ * acquired from MSAL. Dev/CI: sends the `X-User-Role` bypass header matching the
+ * current RoleContext role. Phase 2D Slice 2.
  */
 
 import { useMemo } from 'react';
 
 import { useRole } from '../routing';
+import { acquireAccessToken, productionAuthEnabled } from '../auth/msalConfig';
 import { ApiClient } from './client';
 
 export function useApi(): ApiClient {
@@ -17,11 +19,15 @@ export function useApi(): ApiClient {
   return useMemo(
     () =>
       new ApiClient({
-        getAuthHeaders: () => ({
-          // Dev bypass mode: backend accepts X-User-Role when Entra is not configured.
-          'x-user-role': role,
-          'x-user-id': userId,
-        }),
+        getAuthHeaders: productionAuthEnabled
+          ? async () => {
+              const token = await acquireAccessToken();
+              return { authorization: `Bearer ${token}` };
+            }
+          : () => ({
+              'x-user-role': role,
+              'x-user-id': userId,
+            }),
       }),
     [role, userId],
   );
