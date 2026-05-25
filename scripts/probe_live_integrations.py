@@ -135,7 +135,7 @@ def _webhook(name: str, path_setting: str | None) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"FAIL — {type(exc).__name__}: {exc}"
     if resp.status_code == 200:
-        return False, f"FAIL — returned 200 (possible silent success)"
+        return False, "FAIL — returned 200 (possible silent success)"
     return True, f"EXPLICIT_FAILURE — {resp.status_code}"
 
 
