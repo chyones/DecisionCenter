@@ -13,6 +13,16 @@
 > red in the `AI context check` step, and Slice 6 (Real UAT Flow) plus Slice 7
 > (Go-Live Gate) remain not started. Any older recommendation in this document
 > to continue to Slice 2 is superseded by the current CI repair gate.
+> **2026-05-25 Slice 6 live-UAT update:** Slices 1-6 are now implemented and
+> CI is green at HEAD `e1992b1` (run `26395931904`). Slice 6 (Real UAT Flow)
+> readiness — runbook, `scripts/uat_check.py`, `scripts/uat_flow.py`, and the
+> `docs/evidence/uat/` path — is in place, but **no real live UAT evidence
+> exists yet** (`docs/evidence/uat/` holds only `README.md`). The next action
+> before Slice 7 is to **run the real UAT on the target environment and save
+> redacted evidence** to `docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md`. Slice 7
+> (Go-Live Gate) remains blocked until that Slice 6 evidence exists and
+> explicit user approval is given. Verdict: `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`.
+> Production remains `NOT_LIVE`.
 
 ---
 
@@ -374,4 +384,16 @@ Slices 1-5 are implemented, but the latest pushed HEAD CI is red in the
 failure and obtain a green CI result. After CI is green, Slice 6 (Real UAT
 Flow) is the next plan-defined slice and still requires explicit user approval
 in the active session. This document authorizes no implementation, deployment,
+production cutover, or go-live.
+
+**Current recommendation at `e1992b1` (2026-05-25):**
+`RUN_REAL_LIVE_UAT_AND_CAPTURE_REDACTED_EVIDENCE_BEFORE_SLICE_7`
+
+Slices 1-6 are implemented and CI is green (run `26395931904`). Slice 6
+readiness is in place, but no real live UAT evidence exists. The next valid
+action is an operator live UAT run on the target environment with redacted
+evidence saved to `docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md`. Slice 7
+(Go-Live Gate) remains blocked until that evidence exists and explicit user
+approval is given. Verdict: `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`. Production
+remains `NOT_LIVE`; this document authorizes no implementation, deployment,
 production cutover, or go-live.

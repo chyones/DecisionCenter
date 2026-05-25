@@ -27,6 +27,7 @@ The matching automated harness lives in:
   (`frontend/e2e/golden-path.spec.ts`) uses `page.route()` mocks and is **not**
   acceptable as UAT evidence. Final UAT proof must come from `scripts/uat_flow.py`
   (or manual cURL) executed against a running stack with real connectors.
+- **Local dev-bypass is NOT acceptable as real UAT proof.** The `X-User-Role`/`X-User-Id` dev bypass (and any mocked path) prove nothing about real login or live connectors; only a real Entra/MSAL Bearer token exercised against live services counts as Slice 6 evidence.
 - **No deploy. No go-live.** This runbook proves readiness; it never cuts over.
 - **No secrets in git.** Bearer tokens, passwords, and connector credentials are
   read from the environment or entered interactively. They are never written to

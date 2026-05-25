@@ -221,7 +221,7 @@ The repo is structured for **vibe coding** with Claude Code: each session implem
 | 2A — User Chat Workspace Implementation | Complete; E2E and U-01..U-16 manual QA passed; production `NOT_LIVE` |
 | 2B — Admin Visual Control Plane Implementation | Complete; A-01..A-23 manual QA passed; production `NOT_LIVE` |
 | 2C — UI Hardening and Acceptance Validation | Complete; 54/54 Playwright tests passed across Chromium, Firefox, and WebKit; production `NOT_LIVE` |
-| 2D — Production Integration and Go-Live Hardening | Blocked pending explicit user approval; not started |
+| 2D — Production Integration and Go-Live Hardening | In progress; Slices 1-6 implemented (production `NOT_LIVE`), Slice 6 live UAT operator-pending, Slice 7 Go-Live Gate blocked pending explicit user approval |
 
 Every node in `apps/edr/graph/` carries a docstring referencing the relevant spec section so Claude Code can implement it directly from the contract.
 

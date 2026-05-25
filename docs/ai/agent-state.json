@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "18695e8a0ab852b2383d5f312925f491e3315d9d",
+  "current_commit": "e1992b125af08efc955de8560e0f41287a9f5eba",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -55,7 +55,7 @@
     "ci_slice4_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
     "ci_slice4_failure_cause": "documentation drift only (docs/ai/agent-state.json current_commit 4 commits behind HEAD); frontend CI job was green"
   },
-  "next_allowed_phase": "Phase 2D Slice 7 — Go-Live Gate; blocked pending explicit user approval before implementation may start",
+  "next_allowed_phase": "Run real live UAT on the target environment and capture redacted evidence (docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md) before Phase 2D Slice 7 — Go-Live Gate; Slice 7 remains blocked pending explicit user approval and does not start automatically.",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
   "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
@@ -83,7 +83,7 @@
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_read_only_audit": {
     "date": "2026-05-25",
-    "audited_head": "18695e8a0ab852b2383d5f312925f491e3315d9d",
+    "audited_head": "e1992b125af08efc955de8560e0f41287a9f5eba",
     "overall_rating": "not re-rated",
     "final_recommendation": "NOT_GO_LIVE_READY",
     "go_live_ready": false,
@@ -100,20 +100,21 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "18695e8a0ab852b2383d5f312925f491e3315d9d",
-    "run_id": 26393853766,
+    "commit": "e1992b125af08efc955de8560e0f41287a9f5eba",
+    "run_id": 26395931904,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26393853766",
-    "note": "Phase 2D governance fix — smoke + frontend both green at HEAD 18695e8."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26395931904",
+    "note": "Phase 2D Slice 6 readiness — smoke + frontend both green at HEAD e1992b1."
   },
   "latest_local_validation": {
     "date": "2026-05-25",
-    "context": "Phase 2D Slice 6 — real UAT flow readiness",
+    "context": "Phase 2D Slice 6 live-UAT-pending documentation reconciliation",
     "uat_check": "6/6 PASS (scripts/uat_check.py)",
-    "slice6_tests": "16 passed, 1 deselected (live_probe) — test_phase2d_slice6_uat.py",
-    "ruff": "clean (apps scripts)",
-    "compileall": "clean"
+    "uat_flow": "SKIP (no target/credentials) — does not fake success",
+    "doc_drift": "clean",
+    "ai_context": "clean",
+    "postflight": "clean"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
@@ -132,5 +133,23 @@
     "cd frontend && npm run test:ui",
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
-  ]
+  ],
+  "next_action": "Run real live UAT and capture redacted evidence before Slice 7.",
+  "phase_2d_slice_6_live_uat": {
+    "implementation": "IMPLEMENTED_CI_GREEN",
+    "evidence_exists": false,
+    "evidence_file": null,
+    "evidence_dir": "docs/evidence/uat/",
+    "status": "LIVE_UAT_PENDING",
+    "reason": "target environment credentials not available in this session",
+    "required_operator_prerequisites": [
+      "real Entra tenant configured (ENTRA_CLIENT_ID + ENTRA_TENANT_ID)",
+      "report-capable user real Entra access token",
+      "separate reviewer real Entra access token",
+      "live connectors configured (n8n -> SharePoint/ownCloud/Email/Odoo, Qdrant/Redis/PostgreSQL/MinIO)",
+      "project with a complete source mapping"
+    ],
+    "dev_bypass_not_acceptable": true,
+    "verdict": "PHASE_2D_SLICE_6_LIVE_UAT_PENDING"
+  }
 }

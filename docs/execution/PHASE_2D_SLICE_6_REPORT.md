@@ -10,6 +10,14 @@ operator action on the target environment (a live Entra tenant and live
 connectors are required and are not available in CI). Production remains
 `NOT_LIVE`. Slice 7 (Go-Live Gate) remains approval-gated.
 
+## Live UAT Evidence Status
+
+- **Evidence file:** missing — `docs/evidence/uat/` contains only `README.md`; no `UAT_RUN_<YYYY-MM-DD>.md` exists.
+- **Completion status:** not complete. Slice 6 stays `IMPLEMENTED_NOT_LIVE`; it does **not** advance to `COMPLETE_NOT_LIVE`.
+- **Reason:** target environment credentials not available (no real Entra tenant, no real tokens, no live connectors in this session). `scripts/uat_flow.py` correctly SKIPs without a target and never fakes success; local dev-bypass is not acceptable as real UAT proof.
+- **Required next action:** an authorized operator must run the live UAT on the target environment (see "Operator Run" above) and commit the redacted evidence file.
+- **Final verdict:** `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`
+
 ## Scope
 
 Create a real, non-mocked UAT readiness and evidence path covering:

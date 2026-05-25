@@ -3,12 +3,12 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `18695e8a0ab852b2383d5f312925f491e3315d9d` (governance fix; CI green, run `26393853766`)
+- Current verified commit (anchor): `e1992b125af08efc955de8560e0f41287a9f5eba` (Slice 6 readiness; CI green, run `26395931904`)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
 - Active implementation phase: Phase 2D, with Slice 7 blocked until explicit user approval.
-- Next allowed: Phase 2D Slice 7 — Go-Live Gate; requires explicit user approval before implementation starts.
+- Next real action: run the operator live UAT on the target environment and save redacted evidence — this is an operator action, not coding. Phase 2D Slice 7 — Go-Live Gate remains blocked: it requires that Slice 6 live-UAT evidence plus explicit user approval, and does not start automatically.
 - Latest report: `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
 - Phase 2D Slice 1 (production frontend delivery path): implemented and committed
@@ -16,7 +16,7 @@
 - Phase 2D Slice 3 (live integration validation): implemented; production NOT_LIVE
 - Phase 2D Slice 4 (backup and restore): implemented; production NOT_LIVE
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
-- Phase 2D Slice 6 (real UAT flow): readiness implemented; live run operator-pending; production NOT_LIVE
+- Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
@@ -71,10 +71,16 @@ Remaining go-live blockers are: real UAT flow not proven (Slice 6 readiness
 is implemented; the live UAT run is operator-pending) and go-live approval
 not completed (Slice 7). Production remains `NOT_LIVE`.
 
-Latest verified green CI: run 26393853766 (commit `18695e8`) — smoke and
-frontend jobs both success; the `AI context check` step is green after the
-Phase 2D governance fix. Slice 6 readiness was then added on top of this
-green anchor.
+Latest verified green CI: run 26395931904 (commit `e1992b1`) — smoke and
+frontend jobs both success. Slice 6 readiness is implemented and CI-green, but
+the **real live UAT evidence does not exist**: `docs/evidence/uat/` holds only
+`README.md` (no `UAT_RUN_<YYYY-MM-DD>.md`). Current verdict:
+`PHASE_2D_SLICE_6_LIVE_UAT_PENDING`. The next real action is an operator live
+UAT run on the target environment (real Entra tenant, real report-capable plus
+separate reviewer tokens, live connectors, a mapped project) with redacted
+evidence saved — an operator action, not coding. Local dev-bypass is not
+acceptable as real UAT proof. Slice 6 stays `IMPLEMENTED_NOT_LIVE` (not
+complete) and Slice 7 stays blocked until that evidence exists.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit

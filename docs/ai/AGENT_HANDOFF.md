@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `18695e8a0ab852b2383d5f312925f491e3315d9d` (governance fix; CI green, run `26393853766`)
+- **Current anchor:** `e1992b125af08efc955de8560e0f41287a9f5eba` (Slice 6 readiness; CI green, run `26395931904`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -15,8 +15,29 @@
 - **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE)
 - **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE)
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
-- **Phase 2D Slice 6:** Real UAT Flow — readiness implemented (NOT_LIVE); live run operator-pending
+- **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## Live UAT Evidence Status (Slice 6)
+
+- **Current verdict:** `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`
+- **Slice 6 implementation:** complete and **CI-green** (run `26395931904`, HEAD `e1992b1`).
+- **Live UAT evidence:** **MISSING.** `docs/evidence/uat/` contains only `README.md`; there is no `UAT_RUN_<YYYY-MM-DD>.md` file.
+- **Why it cannot be generated here:** no real target environment, no real Entra tokens, no live connectors. `scripts/uat_flow.py` correctly SKIPs (exit 0) without a target — it never fakes success. Local dev-bypass (`X-User-Role`) is **not** acceptable as real UAT proof.
+- **Slice 6 is NOT complete.** Status stays `IMPLEMENTED_NOT_LIVE`; it does not advance to `COMPLETE_NOT_LIVE` until a real, redacted live-UAT run exists.
+- **The next real action is the operator live UAT run — not coding.**
+- **Slice 7 (Go-Live Gate):** BLOCKED — requires Slice 6 live-UAT evidence and a separate explicit user approval.
+- **Production:** `NOT_LIVE`. **Go Live:** `NOT READY`.
+
+### Operator prerequisites for the live UAT run
+
+- Real Entra tenant configured (`ENTRA_CLIENT_ID` + `ENTRA_TENANT_ID`; real-token mode).
+- Report-capable user real Entra access token (`UAT_BEARER_TOKEN`).
+- Separate reviewer real Entra access token (`UAT_REVIEWER_TOKEN`).
+- Live connectors configured (n8n -> SharePoint/ownCloud/Email/Odoo; Qdrant/Redis/PostgreSQL/MinIO).
+- A project with a complete source mapping (`UAT_PROJECT_CODE`).
+
+See `docs/operations/uat_runbook.md` and `docs/evidence/uat/README.md` for steps and redaction rules.
 
 Phase 2C is closed. All four slices are complete:
 
@@ -112,8 +133,8 @@ If anchor drift exceeds 3 commits, stop and fix governance before coding.
 | Frontend build | JS 92.77 kB gzip, CSS 6.06 kB gzip |
 | Bundle budget | JS ≤ 120 kB ✅, CSS ≤ 15 kB ✅ |
 | Live integration probes | 15/15 passed (infra + webhook failure-mode) |
-| CI smoke job | success (22m20s) |
-| CI frontend job | success (2m26s) |
+| CI smoke job | success — run 26395931904 (HEAD e1992b1) |
+| CI frontend job | success — run 26395931904 (HEAD e1992b1) |
 | doc_drift | clean |
 | ai_context | clean |
 | postflight | clean |
