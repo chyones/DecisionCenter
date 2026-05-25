@@ -12,7 +12,8 @@
 - **Active phase:** None — Phase 2D is approval-gated
 - **Phase 2D Slice 1:** Production frontend delivery path — implemented
 - **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE)
-- **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE); Phase 2D remains approval-gated
+- **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE)
+- **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE); Phase 2D remains approval-gated
 
 Phase 2C is closed. All four slices are complete:
 
@@ -35,7 +36,7 @@ Production remains **not go-live ready**. Main blockers:
 - ~~Production frontend delivery path missing~~ (Slice 1 ✅)
 - ~~Production Entra/MSAL frontend auth missing~~ (Slice 2 ✅)
 - ~~Live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI; workflow operator-run documented)
-- Backup/restore evidence missing → Slice 4
+- ~~Backup/restore evidence missing~~ (Slice 4 ✅ — scripts, docs, rehearsal evidence complete)
 - Production hardening evidence missing → Slice 5
 
 ## Phase 2D Progress
@@ -52,7 +53,10 @@ stays `NOT_LIVE` until a separate go-live approval.
   Local dev and CI keep the RoleSwitcher bypass. Real Entra login is
   operator-verified (no live tenant in CI). See
   `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
-- **Next — Slice 4 (Backup and Restore):** approval-gated; not started.
+- **Slice 4 — Backup and Restore:** implemented — PostgreSQL + MinIO backup/restore
+  scripts, operator runbook, DR policy, and rehearsal evidence. See
+  `docs/execution/PHASE_2D_SLICE_4_REPORT.md`.
+- **Next — Slice 5 (Production Hardening):** approval-gated; not started.
 
 `docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
 `true`: no agent may start the next slice without explicit user approval in the

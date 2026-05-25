@@ -1,4 +1,4 @@
-.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test test-ui build-frontend
+.PHONY: up down logs ps smoke test eval format init-qdrant init-minio phase2a-e2e load-test test-ui build-frontend backup-postgres backup-minio verify-backup
 
 up:
 	docker compose up -d --build
@@ -41,3 +41,12 @@ test-ui:
 
 build-frontend:
 	cd frontend && npm ci && npm run build
+
+backup-postgres:
+	python3 scripts/backup_postgres.py --output-dir backups
+
+backup-minio:
+	docker compose exec app python3 scripts/backup_minio.py --output-dir backups
+
+verify-backup:
+	@docker compose exec app python3 scripts/verify_backup.py --verify-restored

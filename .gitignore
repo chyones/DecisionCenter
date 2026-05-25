@@ -24,3 +24,8 @@ n8n-data/
 logs/
 *.log
 docker-compose.override.yml
+
+# Backup artifacts (operator-generated, never committed)
+backups/
+*.sql
+*.tar.gz

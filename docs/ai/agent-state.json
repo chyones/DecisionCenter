@@ -100,11 +100,11 @@
   },
   "latest_local_validation": {
     "date": "2026-05-25",
-    "context": "Phase 2D Slice 3 — live integration validation (host venv + Docker, mirrors CI)",
+    "context": "Phase 2D Slice 4 — backup and restore readiness (host + Docker stack)",
     "ruff": "clean",
     "compileall": "clean",
     "smoke": "2 passed",
-    "integration": "496 passed (incl. 15 new live integration probes + failure-mode tests)",
+    "integration": "518 passed, 1 skipped (incl. backup/restore structural + live_probe tests)",
     "eval": "passed (--min-pass-rate 0.95 --min-precision 0.90)",
     "frontend_lint": "clean",
     "frontend_build": "success, JS 92.77 kB gzip / 120 budget, CSS 6.06 kB / 15 budget",
@@ -112,7 +112,8 @@
     "test_ui": "54 passed — Chromium, Firefox, WebKit",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "postflight": "clean"
+    "postflight": "clean",
+    "backup_rehearsal": "postgres 33KB SQL dump + minio 23KB tarball + verify script linkage check"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
@@ -133,5 +134,6 @@
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
   "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
-  "phase_2d_slice_3_status": "IMPLEMENTED_NOT_LIVE"
+  "phase_2d_slice_3_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_4_status": "IMPLEMENTED_NOT_LIVE"
 }
