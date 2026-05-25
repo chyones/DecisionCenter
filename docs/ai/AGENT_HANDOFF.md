@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
-- **Current anchor:** `e1bd28405e615f5178730bdaf1793db8f252b33e` (Phase 2D Slice 2 governance refresh; feature `4693d6c`)
+- **Current anchor:** `dbb71d59b662f40ab77e2453dfc31b4bbc4ea20e` (pre-Slice-3 HEAD)
 - **Closed date:** 2026-05-24
 - **Latest report:** `docs/execution/PHASE_2C_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -11,7 +11,8 @@
 - **Production:** `NOT_LIVE`
 - **Active phase:** None — Phase 2D is approval-gated
 - **Phase 2D Slice 1:** Production frontend delivery path — implemented
-- **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE); Phase 2D remains approval-gated
+- **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE)
+- **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE); Phase 2D remains approval-gated
 
 Phase 2C is closed. All four slices are complete:
 
@@ -31,11 +32,11 @@ returned final recommendation `NOT_GO_LIVE_READY_BUT_HEALTHY`.
 
 Production remains **not go-live ready**. Main blockers:
 
-- Production frontend delivery path missing.
-- Production Entra/MSAL frontend auth missing.
-- Live integrations not proven.
-- Backup/restore evidence missing.
-- Production hardening evidence missing.
+- ~~Production frontend delivery path missing~~ (Slice 1 ✅)
+- ~~Production Entra/MSAL frontend auth missing~~ (Slice 2 ✅)
+- ~~Live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI; workflow operator-run documented)
+- Backup/restore evidence missing → Slice 4
+- Production hardening evidence missing → Slice 5
 
 ## Phase 2D Progress
 
@@ -51,7 +52,7 @@ stays `NOT_LIVE` until a separate go-live approval.
   Local dev and CI keep the RoleSwitcher bypass. Real Entra login is
   operator-verified (no live tenant in CI). See
   `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
-- **Next — Slice 3 (Live Integration Validation):** approval-gated; not started.
+- **Next — Slice 4 (Backup and Restore):** approval-gated; not started.
 
 `docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
 `true`: no agent may start the next slice without explicit user approval in the
@@ -87,11 +88,12 @@ If anchor drift exceeds 3 commits, stop and fix governance before coding.
 |---|---|
 | Playwright 54 tests (3 browsers) | 54/54 passed |
 | Frontend lint | clean |
-| Frontend build | JS 91.33 kB gzip, CSS 6.06 kB gzip |
+| Frontend build | JS 92.77 kB gzip, CSS 6.06 kB gzip |
 | Bundle budget | JS ≤ 120 kB ✅, CSS ≤ 15 kB ✅ |
-| doc_drift | clean (this commit) |
-| ai_context | clean (this commit) |
-| postflight | clean (this commit) |
+| Live integration probes | 15/15 passed (infra + webhook failure-mode) |
+| doc_drift | clean |
+| ai_context | clean |
+| postflight | clean |
 
 ## Required Validation
 

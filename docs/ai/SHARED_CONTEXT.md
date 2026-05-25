@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `e1bd28405e615f5178730bdaf1793db8f252b33e` (Phase 2D Slice 2 governance refresh)
+- Current verified commit (anchor): `dbb71d59b662f40ab77e2453dfc31b4bbc4ea20e` (pre-Slice-3 HEAD)
 - Current status: `PHASE_2C_COMPLETE_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -12,7 +12,8 @@
 - Latest report: `docs/execution/PHASE_2C_REPORT.md`
 - Latest full-phase report: `docs/execution/PHASE_2C_REPORT.md`
 - Phase 2D Slice 1 (production frontend delivery path): implemented and committed
-- Phase 2D Slice 2 (production Entra/MSAL auth + GET /me): implemented; production NOT_LIVE; Phase 2D remains approval-gated
+- Phase 2D Slice 2 (production Entra/MSAL auth + GET /me): implemented; production NOT_LIVE
+- Phase 2D Slice 3 (live integration validation): implemented; production NOT_LIVE; Phase 2D remains approval-gated
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -56,10 +57,11 @@ performance timings, cross-browser notes, and CI run references.
 The 2026-05-24 read-only project audit at
 `c3ab71d9864e17c3d99da847e5f673fabe2f1dba` rated the repo **7/10** with
 final recommendation `NOT_GO_LIVE_READY_BUT_HEALTHY`. The project is healthy
-but not go-live ready. Main blockers are: production frontend delivery path
-missing; production Entra/MSAL frontend auth missing; live integrations not
-proven; backup/restore evidence missing; production hardening evidence
-missing.
+but not go-live ready. Main blockers are: ~~production frontend delivery path missing~~ (Slice 1 ✅);
+~~production Entra/MSAL frontend auth missing~~ (Slice 2 ✅);
+~~live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI;
+workflow operator-run documented); backup/restore evidence missing → Slice 4;
+production hardening evidence missing → Slice 5.
 
 Pre-2C cleanup is complete at anchor `32b039c`: accidental Phase 2C
 Playwright/UI-test wiring was removed, and Node 15 now reports degraded audit

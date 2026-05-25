@@ -100,14 +100,14 @@
   },
   "latest_local_validation": {
     "date": "2026-05-25",
-    "context": "Phase 2D Slice 2 — production auth (host venv, mirrors CI)",
+    "context": "Phase 2D Slice 3 — live integration validation (host venv + Docker, mirrors CI)",
     "ruff": "clean",
     "compileall": "clean",
     "smoke": "2 passed",
-    "integration": "479 passed (incl. 20 new test_me_endpoint cases)",
+    "integration": "496 passed (incl. 15 new live integration probes + failure-mode tests)",
     "eval": "passed (--min-pass-rate 0.95 --min-precision 0.90)",
     "frontend_lint": "clean",
-    "frontend_build": "success, JS 90.59 kB gzip / 120 budget, CSS 5.92 kB / 15 budget",
+    "frontend_build": "success, JS 92.77 kB gzip / 120 budget, CSS 6.06 kB / 15 budget",
     "bundle_check": "pass",
     "test_ui": "54 passed — Chromium, Firefox, WebKit",
     "doc_drift": "clean",
@@ -132,5 +132,6 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE"
+  "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
+  "phase_2d_slice_3_status": "IMPLEMENTED_NOT_LIVE"
 }
