@@ -92,10 +92,18 @@ Total: 7 passed, 0 failed
 | `APP_ENV` not `production` | Set in production `.env` | Operator |
 | `PUBLIC_HOSTNAME` not set | Set to real domain | Operator |
 
+## Governance Correction
+
+The Phase 2D execution plan defines Slice 6 (Real UAT Flow) and Slice 7
+(Go-Live Gate). Slice 5 closes the production-hardening readiness work, but it
+does not complete Phase 2D and does not authorize go-live.
+
 ## Next Gate
 
-Phase 2D is now complete (Slices 1–5). A separate go-live approval is required
-before production can be declared live. Production remains `NOT_LIVE`.
+Slice 6 (Real UAT Flow) remains approval-gated and must prove real login,
+report submission, evidence retrieval, quality gate, approval, publish, and
+download with no mocked backend responses. Slice 7 (Go-Live Gate) follows only
+after Slice 6 passes. Production remains `NOT_LIVE`.
 
 ## Related Documents
 

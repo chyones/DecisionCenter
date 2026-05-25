@@ -2,19 +2,21 @@
 
 ## Current State
 
-- **Status:** `PHASE_2C_COMPLETE_NOT_LIVE`
-- **Current anchor:** `69e230479d7cee2cd3b3531b0b740d8481f1de1a` (Slice 4 — backup/restore readiness)
+- **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
+- **Current anchor:** `458450143c916d97f0560c3324c8e8dce8ce0a69` (pre-repair HEAD; Slice 5 AI-context failure)
 - **Closed date:** 2026-05-24
-- **Latest report:** `docs/execution/PHASE_2C_REPORT.md`
+- **Latest report:** `docs/execution/PHASE_2D_SLICE_5_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
 - **Last completed phase:** Phase 2C — UI Hardening & Acceptance Validation
 - **Production:** `NOT_LIVE`
-- **Active phase:** None — Phase 2D is approval-gated
+- **Active phase:** Phase 2D — Slice 6 approval-gated
 - **Phase 2D Slice 1:** Production frontend delivery path — implemented
 - **Phase 2D Slice 2:** Production Entra/MSAL auth + GET /me — implemented (NOT_LIVE)
 - **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE)
 - **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE)
-- **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE); Phase 2D remains approval-gated
+- **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
+- **Phase 2D Slice 6:** Real UAT Flow — not started; approval-gated
+- **Phase 2D Slice 7:** Go-Live Gate — not started; follows successful Slice 6
 
 Phase 2C is closed. All four slices are complete:
 
@@ -39,6 +41,8 @@ Production remains **not go-live ready**. Main blockers:
 - ~~Live integrations not proven~~ (Slice 3 ✅ — infrastructure proven in CI; workflow operator-run documented)
 - ~~Backup/restore evidence missing~~ (Slice 4 ✅ — scripts, docs, rehearsal evidence complete)
 - ~~Production hardening evidence missing~~ (Slice 5 ✅ — checklist, secrets policy, automated checks, operator evidence)
+- Real UAT flow not proven (Slice 6)
+- Go-live approval not completed (Slice 7)
 
 ## Phase 2D Progress
 
@@ -60,7 +64,11 @@ stays `NOT_LIVE` until a separate go-live approval.
 - **Slice 5 — Production Hardening:** implemented — hardening checklist, secrets policy,
   automated `check_hardening.py` script, and operator-run SSH/firewall evidence.
   See `docs/execution/PHASE_2D_SLICE_5_REPORT.md`.
-- **Next — go-live approval:** Phase 2D is complete. A separate explicit go-live
+- **Next — Slice 6 Real UAT Flow:** not started. The execution plan defines
+  Slice 6 and Slice 7, so Phase 2D is not complete after Slice 5. Slice 6 must
+  prove real login -> submit -> evidence retrieval -> quality gate -> approval
+  -> publish -> download with no mocked backend responses.
+- **Then — Slice 7 Go-Live Gate:** not started. A separate explicit go-live
   approval is required before production can be declared live.
 
 `docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
@@ -70,7 +78,7 @@ current session.
 ## Current Guardrails
 
 - Do not deploy; production remains `NOT_LIVE`.
-- Do not start Phase 2D without explicit user approval in the current session.
+- Do not start Slice 6 without explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
 - Do not expose business report content, query text, evidence excerpts, or

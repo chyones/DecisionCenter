@@ -51,6 +51,10 @@ ALLOWED_STATUSES = {
     "PHASE_2D_SLICE_1_COMPLETE_NOT_LIVE",
     "PHASE_2D_SLICE_2_COMPLETE_NOT_LIVE",
     "PHASE_2D_SLICE_3_COMPLETE_NOT_LIVE",
+    "PHASE_2D_SLICE_4_COMPLETE_NOT_LIVE",
+    "PHASE_2D_SLICE_5_COMPLETE_NOT_LIVE",
+    "PHASE_2D_SLICE_6_COMPLETE_NOT_LIVE",
+    "PHASE_2D_GO_LIVE_GATE_READY_NOT_LIVE",
     "PHASE_2D_IN_PROGRESS_NOT_LIVE",
     "PHASE_2D_COMPLETE_NOT_LIVE",
 }
@@ -81,6 +85,20 @@ AUDIT_BLOCKERS = [
     "live integrations not proven",
     "backup/restore evidence missing",
     "production hardening evidence missing",
+]
+
+PHASE_2D_REPORTS = {
+    1: Path("docs/execution/PHASE_2D_EXECUTION_PLAN.md"),
+    2: Path("docs/execution/PHASE_2D_SLICE_2_REPORT.md"),
+    3: Path("docs/execution/PHASE_2D_SLICE_3_REPORT.md"),
+    4: Path("docs/execution/PHASE_2D_SLICE_4_REPORT.md"),
+    5: Path("docs/execution/PHASE_2D_SLICE_5_REPORT.md"),
+    6: Path("docs/execution/PHASE_2D_SLICE_6_REPORT.md"),
+}
+
+PHASE_2D_REMAINING_BLOCKERS = [
+    "real UAT flow not proven",
+    "go-live approval not completed",
 ]
 
 
@@ -139,6 +157,148 @@ def _load_state(path: Path) -> dict[str, Any]:
     return state
 
 
+def _implemented_phase_2d_slices(state: dict[str, Any]) -> list[int]:
+    implemented: list[int] = []
+    for number in range(1, 7):
+        value = state.get(f"phase_2d_slice_{number}_status")
+        if value in {"IMPLEMENTED_NOT_LIVE", "COMPLETE_NOT_LIVE"}:
+            implemented.append(number)
+    return implemented
+
+
+def _validate_phase_2d_progress(
+    *, root: Path, state: dict[str, Any], latest_report: str | None, status: str
+) -> list[str]:
+    failures: list[str] = []
+    implemented = _implemented_phase_2d_slices(state)
+    highest = max(implemented, default=0)
+
+    if highest == 0:
+        failures.append("Phase 2D progress status requires at least Slice 1 evidence")
+        return failures
+
+    missing_prior = [
+        number
+        for number in range(1, highest + 1)
+        if number not in implemented
+    ]
+    if missing_prior:
+        failures.append(
+            "Phase 2D slice statuses must be contiguous; missing "
+            + ", ".join(f"Slice {number}" for number in missing_prior)
+        )
+
+    for number in range(highest + 1, 7):
+        if state.get(f"phase_2d_slice_{number}_status") in {
+            "IMPLEMENTED_NOT_LIVE",
+            "COMPLETE_NOT_LIVE",
+        }:
+            failures.append(
+                f"phase_2d_slice_{number}_status cannot be implemented before "
+                f"Slice {highest + 1}"
+            )
+
+    status_match = re.fullmatch(r"PHASE_2D_SLICE_(\d+)_COMPLETE_NOT_LIVE", status)
+    if status_match and int(status_match.group(1)) != highest:
+        failures.append(
+            f"status {status} does not match highest implemented Phase 2D slice "
+            f"({highest})"
+        )
+
+    if state.get("production_status") != "NOT_LIVE":
+        failures.append("Phase 2D progress must keep production_status NOT_LIVE")
+    if state.get("last_completed_phase") != "Phase 2C":
+        failures.append(
+            "last_completed_phase must remain Phase 2C until the full Phase 2D "
+            "go-live gate is complete"
+        )
+
+    active_phase = state.get("active_phase")
+    if not isinstance(active_phase, str) or "Phase 2D" not in active_phase:
+        failures.append("active_phase must name Phase 2D while Phase 2D is in progress")
+
+    next_allowed = state.get("next_allowed_phase")
+    expected_next = highest + 1
+    if highest < 6:
+        if (
+            not isinstance(next_allowed, str)
+            or f"Slice {expected_next}" not in next_allowed
+            or "explicit user approval" not in next_allowed
+        ):
+            failures.append(
+                f"next_allowed_phase must name Phase 2D Slice {expected_next} "
+                "and require explicit user approval"
+            )
+    elif highest == 6:
+        if (
+            not isinstance(next_allowed, str)
+            or "Slice 7" not in next_allowed
+            or "explicit user approval" not in next_allowed
+        ):
+            failures.append(
+                "next_allowed_phase must name Phase 2D Slice 7 and require "
+                "explicit user approval after Slice 6"
+            )
+
+    expected_report = PHASE_2D_REPORTS.get(highest)
+    if expected_report is None:
+        failures.append(f"No expected report mapping for Phase 2D Slice {highest}")
+    elif latest_report != expected_report.as_posix():
+        failures.append(
+            f"latest_report must be {expected_report.as_posix()} for current "
+            f"Phase 2D Slice {highest} progress"
+        )
+
+    latest_full_phase_report = state.get("latest_full_phase_report")
+    if latest_full_phase_report != "docs/execution/PHASE_2C_REPORT.md":
+        failures.append(
+            "latest_full_phase_report must remain docs/execution/PHASE_2C_REPORT.md "
+            "until Phase 2D Slice 7/go-live gate closeout exists"
+        )
+
+    if state.get("requires_explicit_user_approval_for_phase_2d") is not True:
+        failures.append("Phase 2D next-slice work must require explicit user approval")
+
+    audit = state.get("latest_read_only_audit")
+    if not isinstance(audit, dict):
+        failures.append("latest_read_only_audit must record the current re-audit result")
+    else:
+        if audit.get("go_live_ready") is not False:
+            failures.append("Phase 2D in progress cannot be go_live_ready")
+        blockers = audit.get("main_blockers")
+        if not isinstance(blockers, list) or not all(
+            blocker in blockers for blocker in PHASE_2D_REMAINING_BLOCKERS
+        ):
+            failures.append(
+                "latest_read_only_audit main_blockers must include the remaining "
+                "Phase 2D blockers: real UAT flow and go-live approval"
+            )
+        recommendation = audit.get("final_recommendation")
+        if isinstance(recommendation, str) and "GO_LIVE" in recommendation and "NOT" not in recommendation:
+            failures.append(
+                "latest_read_only_audit final_recommendation must not claim "
+                "go-live readiness before Slice 6 and Slice 7 evidence exist"
+            )
+
+    combined_ai_docs = "\n".join(
+        (root / path).read_text(encoding="utf-8")
+        for path in (Path("docs/ai/SHARED_CONTEXT.md"), Path("docs/ai/AGENT_HANDOFF.md"))
+        if (root / path).exists()
+    )
+    stale_patterns = [
+        r"Do not start Phase 2D\.",
+        r"Phase 2D is complete",
+        r"Next\s+—\s+go-live approval",
+    ]
+    for pattern in stale_patterns:
+        if re.search(pattern, combined_ai_docs, flags=re.IGNORECASE):
+            failures.append(
+                f"docs/ai context contains stale Phase 2D progress marker: {pattern}"
+            )
+
+    return failures
+
+
 def main() -> int:
     root = _repo_root()
     failures: list[str] = []
@@ -176,6 +336,19 @@ def main() -> int:
             failures.append("agent-state.json latest_report must be a non-empty string")
         elif not (root / latest_report).exists():
             failures.append(f"latest_report does not exist: {latest_report}")
+
+        latest_full_phase_report = state.get("latest_full_phase_report")
+        if (
+            latest_full_phase_report is not None
+            and (
+                not isinstance(latest_full_phase_report, str)
+                or not latest_full_phase_report
+                or not (root / latest_full_phase_report).exists()
+            )
+        ):
+            failures.append(
+                "latest_full_phase_report must reference an existing report when present"
+            )
 
         status = state.get("status")
         if status not in ALLOWED_STATUSES:
@@ -261,6 +434,21 @@ def main() -> int:
                         "latest_read_only_audit main_blockers must include the five "
                         "go-live blockers from the latest audit"
                     )
+        elif (
+            status == "PHASE_2D_IN_PROGRESS_NOT_LIVE"
+            or (
+                isinstance(status, str)
+                and re.fullmatch(r"PHASE_2D_SLICE_\d+_COMPLETE_NOT_LIVE", status)
+            )
+        ):
+            failures.extend(
+                _validate_phase_2d_progress(
+                    root=root,
+                    state=state,
+                    latest_report=latest_report if isinstance(latest_report, str) else None,
+                    status=status,
+                )
+            )
         elif isinstance(status, str) and status.startswith("PHASE_2C_"):
             if state.get("last_completed_phase") != "Phase 2B":
                 failures.append(

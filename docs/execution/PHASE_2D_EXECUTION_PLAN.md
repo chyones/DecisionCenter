@@ -105,6 +105,10 @@ Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
 
 ### Slice 3 — Live integration validation
 
+**Status:** ✅ Implemented (2026-05-25) — probe harness, failure-mode tests,
+and operator instructions are recorded in
+`docs/execution/PHASE_2D_SLICE_3_REPORT.md`. Production remains `NOT_LIVE`.
+
 **Scope**
 
 - Validate n8n.
@@ -128,6 +132,10 @@ Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
 
 ### Slice 4 — Backup, restore, and data safety
 
+**Status:** ✅ Implemented (2026-05-25) — PostgreSQL/MinIO backup and restore
+scripts, runbook, DR policy, and rehearsal evidence are recorded in
+`docs/execution/PHASE_2D_SLICE_4_REPORT.md`. Production remains `NOT_LIVE`.
+
 **Scope**
 
 - Define and test PostgreSQL backup.
@@ -145,6 +153,11 @@ Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
 - Restored system evidence proves audit/report data can be recovered.
 
 ### Slice 5 — Production hardening
+
+**Status:** ✅ Implemented (2026-05-25) — hardening checklist, secrets policy,
+automated checker, and operator-readiness evidence are recorded in
+`docs/execution/PHASE_2D_SLICE_5_REPORT.md`. Production remains `NOT_LIVE`.
+Slice 6 and Slice 7 are still required by this plan.
 
 **Scope**
 
@@ -166,6 +179,8 @@ Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
 
 ### Slice 6 — Real UAT flow
 
+**Status:** Not started — approval-gated after Slice 5 CI is green.
+
 **Scope**
 
 - Use real login.
@@ -186,6 +201,8 @@ Production remains `NOT_LIVE`. See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`.
 - Business-sensitive screenshots/logs are redacted before being committed to docs.
 
 ### Slice 7 — Go-live gate
+
+**Status:** Not started — blocked until Slice 6 real UAT evidence exists.
 
 **Scope**
 

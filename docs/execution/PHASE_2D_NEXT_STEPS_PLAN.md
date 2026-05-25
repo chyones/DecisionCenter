@@ -7,6 +7,12 @@
 > **Author context:** Read-only verification of the live repo at HEAD `91f0df1`.
 > **Date:** 2026-05-25
 > **Predecessor plan:** `docs/execution/PHASE_2D_EXECUTION_PLAN.md` (authored at HEAD `538dd2e`, before Slice 1 landed).
+> **2026-05-25 re-audit update:** This file remains the governing Slice 2-7
+> roadmap, but its original baseline was captured before Slices 2-5 landed. At
+> current re-audit HEAD `4584501`, Slices 1-5 are implemented, latest HEAD CI is
+> red in the `AI context check` step, and Slice 6 (Real UAT Flow) plus Slice 7
+> (Go-Live Gate) remain not started. Any older recommendation in this document
+> to continue to Slice 2 is superseded by the current CI repair gate.
 
 ---
 
@@ -358,10 +364,14 @@ tree is clean apart from the intentionally-untouched untracked `CLAUDE.md`, and
 all required evidence files were read and are internally consistent. There is no
 repo drift and no missing evidence.
 
-**Recommendation:** `CONTINUE_TO_PHASE_2D_SLICE_2_AFTER_CI_GREEN`
+**Historical recommendation at `91f0df1`:** `CONTINUE_TO_PHASE_2D_SLICE_2_AFTER_CI_GREEN`
 
-This recommendation is conditioned on the standing governance gate: Phase 2D
-implementation (including Slice 2) must not begin until the user explicitly
-approves it in the active session
-(`requires_explicit_user_approval_for_phase_2d` = `true`). This document is a
-planning artifact only and authorizes no implementation, deployment, or go-live.
+**Current re-audit recommendation at `4584501`:**
+`FIX_LATEST_HEAD_AI_CONTEXT_CI_FAILURE_BEFORE_ANY_NEW_SLICE`
+
+Slices 1-5 are implemented, but the latest pushed HEAD CI is red in the
+`AI context check` step. The next valid work is to fix that exact governance
+failure and obtain a green CI result. After CI is green, Slice 6 (Real UAT
+Flow) is the next plan-defined slice and still requires explicit user approval
+in the active session. This document authorizes no implementation, deployment,
+production cutover, or go-live.

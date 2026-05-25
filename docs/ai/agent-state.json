@@ -1,10 +1,10 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "47da0176c0503458e842631bae1970e9e458b727",
-  "status": "PHASE_2C_COMPLETE_NOT_LIVE",
+  "current_commit": "458450143c916d97f0560c3324c8e8dce8ce0a69",
+  "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
-  "active_phase": "None — Phase 2D approval-gated",
+  "active_phase": "Phase 2D — Slice 6 approval-gated",
   "phase_2c_closeout_date": "2026-05-24",
   "completed_phase_2a_slices": [
     "Slice 1 — API client foundation and auth wiring",
@@ -55,7 +55,7 @@
     "ci_slice4_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
     "ci_slice4_failure_cause": "documentation drift only (docs/ai/agent-state.json current_commit 4 commits behind HEAD); frontend CI job was green"
   },
-  "next_allowed_phase": "Phase 2D — blocked pending explicit user approval before implementation may start",
+  "next_allowed_phase": "Phase 2D Slice 6 — Real UAT Flow; blocked pending explicit user approval before implementation may start",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
   "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
@@ -79,19 +79,24 @@
   "requires_explicit_user_approval_for_phase_2b_slice_10": false,
   "requires_explicit_user_approval_for_phase_2c": false,
   "latest_report": "docs/execution/PHASE_2D_SLICE_5_REPORT.md",
-  "latest_full_phase_report": "docs/execution/PHASE_2D_REPORT.md",
+  "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_read_only_audit": {
     "date": "2026-05-25",
-    "audited_head": "85e427d642fd8275331edef9ea87184a7b5f7104",
-    "overall_rating": "9/10",
-    "final_recommendation": "READY_FOR_GO_LIVE_APPROVAL",
-    "go_live_ready": true,
-    "remaining_risks": [
-      "Operator must run SSH/firewall hardening on target Hetzner host manually",
-      "TLS certificate issuance depends on PUBLIC_HOSTNAME being set and reachable",
-      "Secret rotation on production host requires out-of-band secrets manager setup"
+    "audited_head": "458450143c916d97f0560c3324c8e8dce8ce0a69",
+    "overall_rating": "not re-rated",
+    "final_recommendation": "NOT_GO_LIVE_READY",
+    "go_live_ready": false,
+    "closed_blockers": [
+      "production frontend delivery path missing",
+      "production Entra/MSAL frontend auth missing",
+      "live integrations not proven",
+      "backup/restore evidence missing",
+      "production hardening evidence missing"
     ],
-    "main_blockers": []
+    "main_blockers": [
+      "real UAT flow not proven",
+      "go-live approval not completed"
+    ]
   },
   "latest_verified_ci": {
     "commit": "85e427d642fd8275331edef9ea87184a7b5f7104",
@@ -103,12 +108,12 @@
   },
   "latest_local_validation": {
     "date": "2026-05-25",
-    "context": "Phase 2D Slice 5 — production hardening",
+    "context": "Phase 2D governance repair after Slice 5 AI-context CI failure",
     "ruff": "clean",
     "compileall": "clean",
     "smoke": "2 passed",
     "integration": "538 passed, 2 skipped (git unavailable in container)",
-    "eval": "passed (--min-pass-rate 0.95 --min-precision 0.90)",
+    "eval": "passed (make eval; 64/64 cases, precision 92.19%)",
     "frontend_lint": "clean",
     "frontend_build": "success, JS 92.77 kB gzip / 120 budget, CSS 6.06 kB / 15 budget",
     "bundle_check": "pass",
