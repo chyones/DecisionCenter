@@ -3,7 +3,7 @@
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Derived from:** `docs/PRE_START_IMPLEMENTATION_PLAN.md` Section 7 & 9
 > **Date:** 2026-05-24
-> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2C are complete. Production is `NOT_LIVE`. Phase 2D is the next allowed phase and is blocked pending explicit user approval.
+> **Status:** Phases 1A–1I plus the Phase 1D-fixup and Phases 2A–2C are complete. Phase 2D is in progress (Slices 1–6 implemented `NOT_LIVE`); Slice 6 live-UAT evidence is operator-pending, and Slice 7 (Go-Live Gate) is blocked pending Slice 6 evidence plus a separate explicit user approval. Production is `NOT_LIVE`.
 
 This file is the authoritative execution sequence for implementation. The locked
 workflow spec remains the behavioral source of truth, and its Section 31 now mirrors
@@ -448,12 +448,36 @@ blocker fixes are complete. Current frontend integration:
 
 ## Phase 2D — Production Integration & Go-Live Hardening
 
-**Status:** Blocked pending explicit user approval. Do not start this phase
-unless the user approves Phase 2D in the current session.
+**Status:** In progress. Slices 1–6 are implemented (`IMPLEMENTED_NOT_LIVE`)
+and CI is green at HEAD `d2353a9` (run `26397522011`). Slice 6 (Real UAT Flow)
+readiness is in place, but the live UAT run has not produced evidence yet:
+`docs/evidence/uat/` holds only `README.md` (no `UAT_RUN_<YYYY-MM-DD>.md`).
+Slice 6 stays `IMPLEMENTED_NOT_LIVE` — it does **not** advance to
+`COMPLETE_NOT_LIVE` until a real, redacted operator UAT run exists. Slice 7
+(Go-Live Gate) has **not** started and is **blocked** until that evidence
+exists and a separate explicit user approval is given in the active session
+(`docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
+`true`). Production is `NOT_LIVE`.
 
-**Required before production:** close the audit blockers, prove live
-integrations in a production-like environment, document backup/restore and
-hardening evidence, and pass the full validation gate.
+**Implemented slices (NOT_LIVE):**
+
+| Slice | Scope | Status |
+|---|---|---|
+| 1 | Production frontend delivery path (Caddy SPA + reverse proxy) | `IMPLEMENTED_NOT_LIVE` |
+| 2 | Production Entra/MSAL auth + `GET /me` (dev bypass rejected in prod) | `IMPLEMENTED_NOT_LIVE` |
+| 3 | Live integration validation (infrastructure proven in CI; operator workflow documented) | `IMPLEMENTED_NOT_LIVE` |
+| 4 | Backup and restore (scripts, runbook, DR policy, rehearsal evidence) | `IMPLEMENTED_NOT_LIVE` |
+| 5 | Production hardening (checklist, secrets policy, `check_hardening.py`, operator evidence) | `IMPLEMENTED_NOT_LIVE` |
+| 6 | Real UAT flow readiness (runbook, `uat_check.py`, `uat_flow.py`, evidence path) | `IMPLEMENTED_NOT_LIVE` — live-UAT evidence missing |
+| 7 | Go-Live Gate | **Not started — BLOCKED** |
+
+**Required before production:** Slice 6 live UAT must be executed by an
+authorized operator on the target environment (real Entra tenant, real
+report-capable and reviewer tokens, live n8n + Qdrant/Redis/PostgreSQL/MinIO
+connectors, a mapped project) and the redacted evidence written to
+`docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md`. After that, Slice 7 still
+requires a separate explicit user approval before any go-live cutover. A push
+to `origin/main` is not a deployment.
 
 ---
 

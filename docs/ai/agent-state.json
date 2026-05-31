@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "e1992b125af08efc955de8560e0f41287a9f5eba",
+  "current_commit": "d2353a937ab16b5c578cf8f803ccbdccc6cd3a43",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -100,16 +100,16 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "e1992b125af08efc955de8560e0f41287a9f5eba",
-    "run_id": 26395931904,
+    "commit": "d2353a937ab16b5c578cf8f803ccbdccc6cd3a43",
+    "run_id": 26397522011,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26395931904",
-    "note": "Phase 2D Slice 6 readiness — smoke + frontend both green at HEAD e1992b1."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26397522011",
+    "note": "Phase 2D Slice 6 governance truth reconciliation — smoke + frontend both green at HEAD d2353a9."
   },
   "latest_local_validation": {
-    "date": "2026-05-25",
-    "context": "Phase 2D Slice 6 live-UAT-pending documentation reconciliation",
+    "date": "2026-05-31",
+    "context": "Phase 2D Slice 6 governance-only truth reconciliation (Track B); live UAT evidence still missing",
     "uat_check": "6/6 PASS (scripts/uat_check.py)",
     "uat_flow": "SKIP (no target/credentials) — does not fake success",
     "doc_drift": "clean",

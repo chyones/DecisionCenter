@@ -2,7 +2,7 @@
 
 > **Source of truth:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md`
 > **Date:** 2026-05-24 (Phase 2C audit reconciliation)
-> **Status:** Phases 1A-1I plus the Phase 1D-fixup and Phases 2A-2C are complete. Production is `NOT_LIVE`. Phase 2D is the next allowed phase and is blocked pending explicit user approval. Final audit recommendation: `NOT_GO_LIVE_READY_BUT_HEALTHY` (7/10).
+> **Status:** Phases 1A-1I plus the Phase 1D-fixup and Phases 2A-2C are complete. Phase 2D is in progress: Slices 1-6 are implemented `NOT_LIVE` and CI is green at HEAD `d2353a9` (run `26397522011`); Slice 6 (Real UAT Flow) readiness is in place but the live-UAT evidence file (`docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md`) does not exist yet, so Slice 6 stays `IMPLEMENTED_NOT_LIVE`. Slice 7 (Go-Live Gate) has not started and is blocked pending Slice 6 evidence plus a separate explicit user approval. Production is `NOT_LIVE`. Final audit recommendation: `NOT_GO_LIVE_READY_BUT_HEALTHY` (7/10).
 > **Control-plane lock:** `docs/admin/CONTROL_PLANE_LOCK.md`
 > **RBAC lock:** `docs/security/rbac_matrix.md` uses the spec's 9 canonical roles.
 

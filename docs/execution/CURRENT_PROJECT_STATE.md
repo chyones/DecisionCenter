@@ -1,10 +1,13 @@
 # DecisionCenter — Current Project State
 
-> **Audited HEAD:** `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`
-> **Audit date:** 2026-05-24
+> **Audited HEAD:** `d2353a937ab16b5c578cf8f803ccbdccc6cd3a43`
+> **Audit date:** 2026-05-31 (Phase 2D Slice 6 governance truth reconciliation, Track B)
 > **Audit scope:** Phases 0, 1A, 1B, 1B.5, 1C, 1D, 1D-fixup, 1E, 1F, 1G, 1H,
-> 1I, Phase 2A, Phase 2B, and Phase 2C closeout — verified against live repo
-> files and the required governance validation commands.
+> 1I, Phase 2A, Phase 2B, Phase 2C closeout, **and Phase 2D Slices 1–6
+> (`IMPLEMENTED_NOT_LIVE`)** — verified against live repo files and the
+> required governance validation commands. Phase 2C audit baseline (`c3ab71d`,
+> 2026-05-24) is preserved in the per-phase rows below; this header reflects
+> the current Phase 2D-in-progress state at HEAD `d2353a9`.
 
 ---
 
@@ -37,15 +40,27 @@ Source Mapping, Audit Log, and Approval Queue. Admin endpoints remain locked
 to system metadata: no report content, query text, evidence excerpts, or
 credential values are exposed.
 
-Production is `NOT_LIVE`. Phase 2D is the next allowed phase, but it is
-blocked until explicit user approval before implementation starts. A push to
-`origin/main` is not a deployment.
+Production is `NOT_LIVE`. Phase 2D is **in progress**: Slices 1–6 have been
+explicitly approved and implemented (each `IMPLEMENTED_NOT_LIVE`); CI at HEAD
+`d2353a9` is green (run `26397522011`). Slice 6 (Real UAT Flow) readiness is
+in place, but the live UAT run has not produced evidence yet —
+`docs/evidence/uat/` holds only `README.md` (no `UAT_RUN_<YYYY-MM-DD>.md`) —
+so Slice 6 stays `IMPLEMENTED_NOT_LIVE` and does **not** advance to
+`COMPLETE_NOT_LIVE`. Current verdict:
+`PHASE_2D_SLICE_6_LIVE_UAT_PENDING_NOT_LIVE`. Slice 7 (Go-Live Gate) has not
+started and is **blocked** until that evidence exists and a separate explicit
+user approval is given in the active session. A push to `origin/main` is not a
+deployment.
 
 The 2026-05-24 read-only audit verdict is
-`NOT_GO_LIVE_READY_BUT_HEALTHY` with overall rating **7/10**. Main go-live
-blockers are: production frontend delivery path missing; production
-Entra/MSAL frontend auth missing; live integrations not proven;
-backup/restore evidence missing; production hardening evidence missing.
+`NOT_GO_LIVE_READY_BUT_HEALTHY` with overall rating **7/10**. Five of the
+original five Phase-2C-era go-live blockers have been **implemented** by
+Phase 2D Slices 1–5 (production frontend delivery path; production
+Entra/MSAL frontend auth; live integrations; backup/restore; production
+hardening) but remain `NOT_LIVE` until the operator live UAT (Slice 6) and a
+go-live approval (Slice 7) close them. Remaining open blockers are: **real
+UAT flow not proven** (Slice 6 live UAT evidence missing) and **go-live
+approval not completed** (Slice 7).
 
 ---
 
@@ -110,6 +125,23 @@ backup/restore evidence missing; production hardening evidence missing.
 
 ---
 
+## Phase 2D Progress
+
+Phase 2D is in progress. Each slice was explicitly approved before
+implementation. Production remains `NOT_LIVE`.
+
+| Phase / Slice | Status | Evidence |
+|---|---|---|
+| Phase 2D Slice 1 — Production frontend delivery path | `IMPLEMENTED_NOT_LIVE` | Caddy SPA + reverse proxy; commit `1edecaa`; CI green. |
+| Phase 2D Slice 2 — Production Entra/MSAL auth + `GET /me` | `IMPLEMENTED_NOT_LIVE` | MSAL login, `Authorization: Bearer` API calls, canonical-role `GET /me`, production rejection of `x-user-role`/`x-user-id` bypass headers; local dev and CI retain the RoleSwitcher bypass; real Entra login is operator-verified (no live tenant in CI). See `docs/execution/PHASE_2D_SLICE_2_REPORT.md`. |
+| Phase 2D Slice 3 — Live integration validation | `IMPLEMENTED_NOT_LIVE` | Live integration probes (infra + webhook failure-mode) green; `live_probe` marker excluded from CI integration run. See `docs/execution/PHASE_2D_SLICE_3_REPORT.md`. |
+| Phase 2D Slice 4 — Backup and restore | `IMPLEMENTED_NOT_LIVE` | PostgreSQL + MinIO backup/restore scripts, operator runbook, DR policy, rehearsal evidence. See `docs/execution/PHASE_2D_SLICE_4_REPORT.md`. |
+| Phase 2D Slice 5 — Production hardening | `IMPLEMENTED_NOT_LIVE` | Hardening checklist, secrets policy, automated `check_hardening.py`, and operator-run SSH/firewall evidence. See `docs/execution/PHASE_2D_SLICE_5_REPORT.md`. |
+| Phase 2D Slice 6 — Real UAT flow readiness | `IMPLEMENTED_NOT_LIVE` — live-UAT evidence **MISSING** | Operator UAT runbook (`docs/operations/uat_runbook.md`), CI-safe readiness checker (`scripts/uat_check.py` — 6/6 PASS), real-backend no-mock driver (`scripts/uat_flow.py`), integration test (`apps/edr/tests/integration/test_phase2d_slice6_uat.py`), evidence path (`docs/evidence/uat/README.md`). The dated `docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md` does not exist. Verdict: `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`. See `docs/execution/PHASE_2D_SLICE_6_REPORT.md`. |
+| Phase 2D Slice 7 — Go-Live Gate | **Not started — BLOCKED** | Requires Slice 6 live-UAT evidence and a separate explicit user approval. `requires_explicit_user_approval_for_phase_2d = true`. |
+
+---
+
 ## Blockers
 
 ### Already Resolved
@@ -129,30 +161,46 @@ backup/restore evidence missing; production hardening evidence missing.
 | Governance anchor drift after Phase 2A Slices 6–9 | Slice 9 closeout (this audit) re-anchored governance at HEAD `e37b0c1`; extended `scripts/check_ai_context.py` to recognize Slice 6–9 statuses and added an anchor-currency invariant to `scripts/check_doc_drift.py`. |
 | Phase 2A backend read/status/cancel/upload endpoint gap (G12) | Closed in Phase 2A backend additions and final QA blocker fixes: workspace context, report listing/status/content, cancel, upload, and server-side RBAC are implemented and covered by integration tests. |
 
+### Implemented by Phase 2D Slices 1–5 (NOT_LIVE — close at go-live)
+
+| Original Phase-2C-era blocker | Phase 2D resolution | Status |
+|---|---|---|
+| Production frontend delivery path missing | Slice 1 — Caddy SPA + reverse proxy | `IMPLEMENTED_NOT_LIVE` |
+| Production Entra/MSAL frontend auth missing | Slice 2 — MSAL + `GET /me`; prod rejects dev bypass | `IMPLEMENTED_NOT_LIVE` |
+| Live integrations not proven | Slice 3 — Live integration probes + documented operator workflow | `IMPLEMENTED_NOT_LIVE` |
+| Backup/restore evidence missing | Slice 4 — Backup/restore scripts, runbook, DR policy, rehearsal evidence | `IMPLEMENTED_NOT_LIVE` |
+| Production hardening evidence missing | Slice 5 — Checklist, secrets policy, `check_hardening.py`, operator evidence | `IMPLEMENTED_NOT_LIVE` |
+
 ### Remaining
 
 | Blocker | Blocks | Evidence |
 |---|---|---|
 | Pip-audit advisories | Promotion of `pip-audit` to a hard CI gate | `pip-audit --progress-spinner off` reports 19 advisories on 9 packages; CI keeps `continue-on-error: true`. Triage list captured in `docs/admin/CONTROL_PLANE_LOCK.md`. |
-| Production frontend delivery path missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; Docker/Caddy production path does not yet prove frontend delivery. |
-| Production Entra/MSAL frontend auth missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; frontend production Bearer-token flow is not proven. |
-| Live integrations not proven | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; Entra, n8n, Microsoft Graph, SharePoint, Odoo, LLM providers, Qdrant, MinIO, and Langfuse need production-like E2E evidence. |
-| Backup/restore evidence missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; no restore rehearsal evidence recorded for production readiness. |
-| Production hardening evidence missing | Go-live | Audit at `c3ab71d9864e17c3d99da847e5f673fabe2f1dba`; secrets rotation, server hardening, and least-privilege external accounts require evidence. |
+| Real UAT flow not proven (Slice 6 live-UAT evidence) | Slice 6 closeout + Slice 7 start + go-live | Slice 6 readiness is `IMPLEMENTED_CI_GREEN` (run `26397522011` at HEAD `d2353a9`); `docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md` does not exist; `scripts/uat_flow.py` correctly SKIPs without a target. Requires an authorized operator on the target environment. |
+| Go-live approval not completed (Slice 7) | Production cutover | Slice 7 has not started; `requires_explicit_user_approval_for_phase_2d = true`; depends on Slice 6 evidence. |
 
 ---
 
 ## Current Active Phase
 
-No implementation phase is active. Phase 2C is complete and production remains
-`NOT_LIVE`. Phase 2D is the next allowed phase, but it is blocked until the
-user explicitly approves it in the current session.
+Phase 2D is the active implementation phase. Slices 1–6 are committed
+(`IMPLEMENTED_NOT_LIVE`); CI is green at HEAD `d2353a9` (run `26397522011`).
+**No coding work is currently authorized.** The next required action is an
+operator live UAT on the target environment (Slice 6 evidence capture); this
+is an out-of-band human-operator action, not an AI task. Slice 7 (Go-Live
+Gate) is not started and is blocked until Slice 6 evidence exists and a
+separate explicit user approval is given.
+`docs/ai/agent-state.json.requires_explicit_user_approval_for_phase_2d` is
+`true`. Production remains `NOT_LIVE`.
 
 ## Standing Forbidden Work
 
-Do not deploy. Do not start Phase 2D without explicit current-session user
-approval. Do not change the locked spec unless an explicit spec-change ticket
-is approved. Do not commit secrets in workflows, docs, code, logs, or tests.
+Do not deploy. Do not change `production_status` from `NOT_LIVE`. Do not start
+Phase 2D Slice 7 without explicit current-session user approval. Do not
+fabricate UAT evidence; do not create `docs/evidence/uat/UAT_RUN_*.md` without
+a real target and real tokens. Do not weaken `_require_admin` or any RBAC
+check. Do not change the locked spec unless an explicit spec-change ticket is
+approved. Do not commit secrets in workflows, docs, code, logs, or tests.
 
 ---
 
@@ -163,6 +211,14 @@ The Phase 2C audit reconciliation refreshed `CURRENT_PROJECT_STATE.md`,
 `README.md`, the AI context (`SHARED_CONTEXT.md`, `AGENT_HANDOFF.md`,
 `agent-state.json`), and the drift/context checks to reflect Phase 2C
 completion, production `NOT_LIVE`, and Phase 2D as approval-gated.
+
+The 2026-05-31 Phase 2D Slice 6 governance truth reconciliation (Track B)
+refreshed `agent-state.json.current_commit` to HEAD `d2353a9` and
+`latest_verified_ci` to run `26397522011`, and reconciled the stale Phase 2D
+narratives in `IMPLEMENTATION_PHASES.md`, `FEATURE_MATRIX.md`, and this file
+so they record Slices 1–6 as `IMPLEMENTED_NOT_LIVE` and Slice 7 as blocked.
+No code changed; production remains `NOT_LIVE`; Slice 6 was **not** marked
+complete and no UAT evidence was fabricated.
 
 ---
 
