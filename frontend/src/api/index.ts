@@ -66,4 +66,11 @@ export {
   type ApprovalQueueDetail,
   type AdminOverrideRequest,
   type AdminOverrideResponse,
+  type ConnectorState,
+  type ConnectorGroup,
+  type ConnectorDataSource,
+  type Readiness,
+  type ReportGeneration,
+  type ConnectorTruth,
+  type ConnectorTruthReport,
 } from './types';

@@ -23,6 +23,7 @@ from apps.edr.graph.state import DecisionState
 from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.admin import services_catalog
+from apps.edr.admin import connector_status
 from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
 
@@ -1477,6 +1478,26 @@ async def probe_admin_service(
     )
 
 
+@app.get(
+    "/admin/connectors/truth",
+    response_model=connector_status.ConnectorTruthReport,
+)
+async def admin_connectors_truth(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    probe: Annotated[bool, Query()] = True,
+) -> connector_status.ConnectorTruthReport:
+    """Admin-only connector truth report (Connector Status Truth model).
+
+    Honest per-connector states (NOT_CONFIGURED / CONFIGURED_NOT_TESTED /
+    LIVE_OK / AUTH_FAILED / ...) plus a readiness banner. Never reports a
+    connector green without a real live probe. No credential values are ever
+    returned (C-6) — only non-secret config key names and presence booleans.
+    ``?probe=false`` returns the config-only view (skips live network probes).
+    """
+    _require_admin(claims)
+    return connector_status.build_report(run_probes=probe)
+
+
 # ---------------------------------------------------------------------------
 # Phase 2B Slice 3 — System Health + cost monitor
 # Implements GET /admin/health/live and GET /admin/cost per
@@ -1559,9 +1580,12 @@ def _probe_with_latency(name: str) -> tuple[str, int]:
             f"{settings.langfuse_host.rstrip('/')}/api/public/health"
         ),
     }
-    # Workflow services: probe n8n base URL (same lightweight check)
-    for wf_name in ("sharepoint", "microsoft_graph", "owncloud", "odoo"):
-        check_map[wf_name] = check_map["n8n"]
+    # Workflow connectors (sharepoint/microsoft_graph/owncloud/odoo) are NOT
+    # health-checkable from n8n reachability: n8n being up proves nothing about
+    # the downstream integration. Mapping them to the n8n check was false green.
+    # They are intentionally absent here, so check_map.get(name) is None and the
+    # service reports ("unknown", 0). The authoritative, honest per-connector
+    # truth lives in GET /admin/connectors/truth (apps/edr/admin/connector_status).
 
     check = check_map.get(name)
     if check is None:

@@ -236,3 +236,37 @@ complete and no UAT evidence was fabricated.
 ## Spec Changes
 
 - **2026-05-31 — Owner-operator governance model** (`docs/execution/SPEC_CHANGE_2026-05-31_owner_operator_model.md`; owner-approved; `IMPLEMENTED_NOT_LIVE` on branch `feat/owner-operator-model`): the `admin` role is elevated to a full owner (business powers + system settings), report visibility is shared across owner roles, and self-approval is allowed (two-person rule removed). The automated quality/claim gate, audit logging, and the project-scoped email allowlist remain in force. Production remains `NOT_LIVE`; Slice 6 UAT and Slice 7 go-live approval are unaffected and still required.
+
+
+## Connector Status Truth (added 2026-06-01)
+
+The dashboard and Connectors screen now report **honest connector states** and
+never claim an unconfigured or unproven integration is working. Source of truth:
+`apps/edr/admin/connector_status.py`; admin endpoint `GET /admin/connectors/truth`.
+
+Truth states: `NOT_CONFIGURED`, `CONFIGURED_NOT_TESTED`, `AUTH_FAILED`,
+`PERMISSION_FAILED`, `NETWORK_FAILED`, `CONNECTED_NO_DATA`, `LIVE_OK`,
+`MOCK_ONLY`, `DISABLED`, `UNKNOWN`. A connector is shown green only on a real
+`LIVE_OK` probe — container-up, route-exists and fixture-exists are not evidence.
+Fixture/mock data is capped at `MOCK_ONLY` and can never be `LIVE_OK`.
+
+Real current connector states (config-derived; live probes execute in-container):
+
+- Core platform (PostgreSQL, Redis, Qdrant, MinIO): live-probed — reachability is
+  the liveness proof → `LIVE_OK` when reachable.
+- Public edge (Cloudflare Tunnel + Caddy): live-probed via HTTPS `/healthz`.
+- Microsoft Entra authentication: `CONFIGURED_NOT_TESTED` — no server-side token
+  validation exists, so login is not asserted green here.
+- n8n, SharePoint, email / mailbox, ownCloud, Odoo: `NOT_CONFIGURED` — required
+  webhook token / connector credentials are absent (Odoo lacks
+  `ODOO_URL`/`ODOO_DATABASE`/`ODOO_USERNAME`/`ODOO_API_KEY`; ownCloud lacks its
+  username/password). They are never shown green from n8n reachability.
+- AI providers (Anthropic, Voyage, Cohere): `NOT_CONFIGURED` → report generation
+  is `BLOCKED` until the provider keys are set.
+
+Readiness banner: `READY_FOR_UAT` only when every required dependency is
+`LIVE_OK`; `PARTIAL_READY` when core/edge/login are up but connectors/providers
+are pending; `NOT_READY` otherwise. Production remains NOT_LIVE; this change did
+not alter that. The legacy `_probe_with_latency` no longer maps workflow
+connectors to n8n reachability (that was false green) — they report `unknown`
+there and their authoritative status is the truth endpoint.

@@ -505,3 +505,69 @@ export class ApiError extends Error {
 export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError;
 }
+
+
+// ---------------------------------------------------------------------------
+// Connector Status Truth model — honest per-connector states.
+// Backend: apps/edr/admin/connector_status.py · GET /admin/connectors/truth
+// ---------------------------------------------------------------------------
+
+export type ConnectorState =
+  | 'NOT_CONFIGURED'
+  | 'CONFIGURED_NOT_TESTED'
+  | 'AUTH_FAILED'
+  | 'PERMISSION_FAILED'
+  | 'NETWORK_FAILED'
+  | 'CONNECTED_NO_DATA'
+  | 'LIVE_OK'
+  | 'MOCK_ONLY'
+  | 'DISABLED'
+  | 'UNKNOWN';
+
+export type ConnectorGroup =
+  | 'core_platform'
+  | 'auth'
+  | 'external_connector'
+  | 'ai_provider'
+  | 'edge';
+
+export type ConnectorDataSource = 'live' | 'mock' | 'fixture' | 'none';
+export type Readiness = 'READY_FOR_UAT' | 'PARTIAL_READY' | 'NOT_READY';
+export type ReportGeneration = 'READY' | 'DEGRADED' | 'BLOCKED';
+
+export interface ConnectorTruth {
+  name: string;
+  display_name: string;
+  group: ConnectorGroup;
+  state: ConnectorState;
+  summary: string;
+  configured: boolean;
+  missing_required_config: string[];
+  secret_present: boolean;
+  auth_ok: boolean | null;
+  network_ok: boolean | null;
+  permission_ok: boolean | null;
+  live_data_ok: boolean | null;
+  data_source: ConnectorDataSource;
+  last_probe_at: string | null;
+  last_success_at: string | null;
+  last_error_safe: string | null;
+  sample_count: number | null;
+  evidence: string;
+  required_for_go_live: boolean;
+  blocks_go_live: boolean;
+}
+
+export interface ConnectorTruthReport {
+  readiness: Readiness;
+  readiness_reason: string;
+  report_generation: ReportGeneration;
+  report_generation_reason: string;
+  generated_at: string;
+  core_platform: ConnectorTruth[];
+  auth: ConnectorTruth[];
+  external_connectors: ConnectorTruth[];
+  ai_providers: ConnectorTruth[];
+  edge: ConnectorTruth[];
+  blocking: string[];
+}

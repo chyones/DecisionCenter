@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useApi } from '../api';
 import type { DashboardSummary, DashboardServiceStatus } from '../api/types';
 import { useToasts } from '../components/ToastProvider';
+import { ConnectorTruthPanel } from './ConnectorTruthPanel';
 
 function StatCard({ title, value, sub, bar, barPercent, barColor, onClick }: {
   title: string; value: string; sub?: string;
@@ -27,12 +28,17 @@ function StatCard({ title, value, sub, bar, barPercent, barColor, onClick }: {
 }
 
 function ServiceDot({ svc }: { svc: DashboardServiceStatus }) {
+  // Reachability probe only: ok = reachable, error = unreachable, unknown =
+  // not health-checkable here (e.g. workflow connectors — see Connectors page).
   const color = svc.status === 'ok' ? 'text-success'
     : svc.status === 'error' ? 'text-error' : 'text-text-muted';
+  const label = svc.status === 'ok' ? 'reachable'
+    : svc.status === 'error' ? 'unreachable' : 'not checked here';
   return (
     <div className="flex items-center gap-2 text-body text-text-secondary">
       <span className={`text-lg leading-none ${color}`}>●</span>
       <span>{svc.display_name}</span>
+      <span className="text-caption text-text-muted">({label})</span>
     </div>
   );
 }
@@ -84,7 +90,7 @@ export function AdminDashboardScreen() {
 
   return (
     <div className="p-6">
-      <div className="mb-8 flex items-baseline justify-between">
+      <div className="mb-6 flex items-baseline justify-between">
         <h1 className="text-display font-semibold text-text-primary">Dashboard</h1>
         <div className="flex items-center gap-4">
           {data && (
@@ -102,12 +108,18 @@ export function AdminDashboardScreen() {
         </div>
       </div>
 
+      {/* Authoritative readiness banner — never green unless live probes pass */}
+      <div className="mb-8">
+        <ConnectorTruthPanel variant="banner" />
+      </div>
+
       {/* Stat grid */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <StatCard
-          title="Services"
-          value={`${data?.services_ok ?? 0}/${data?.services_total ?? 0} ok`}
-          onClick={() => window.location.replace('#/admin/health')}
+          title="Core/infra probes"
+          value={`${data?.services_ok ?? 0}/${data?.services_total ?? 0} reachable`}
+          sub="reachability only — see Connectors for truth"
+          onClick={() => window.location.replace('#/admin/connectors')}
         />
         <StatCard
           title="Approvals"
@@ -144,9 +156,16 @@ export function AdminDashboardScreen() {
         />
       </div>
 
-      {/* External Services grid */}
+      {/* Reachability grid — NOT connector health. Workflow connectors read
+          "not checked here"; their real status is on the Connectors page. */}
       <div className="mb-8">
-        <h2 className="mb-3 text-title font-semibold text-text-primary">External Services</h2>
+        <h2 className="mb-1 text-title font-semibold text-text-primary">
+          Core &amp; infrastructure reachability
+        </h2>
+        <p className="mb-3 text-caption text-text-muted">
+          Reachability probes only. External connector truth (Odoo, ownCloud,
+          SharePoint, email, AI providers) is on the Connectors page.
+        </p>
         <div className="grid grid-cols-3 gap-3">
           {data?.services.map((svc) => (
             <ServiceDot key={svc.name} svc={svc} />

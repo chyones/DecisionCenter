@@ -162,3 +162,15 @@ For any future Phase 2D implementation, run the full gate:
 - `python3 scripts/check_doc_drift.py`
 - `python3 scripts/check_ai_context.py`
 - `python3 scripts/agent_postflight.py --allow-no-evidence`
+
+
+## Connector status truth (2026-06-01)
+
+Dashboard/Connectors now show honest connector states — see
+`apps/edr/admin/connector_status.py` and `GET /admin/connectors/truth`. A
+connector is green only on a real `LIVE_OK` live probe; fixture/mock data is
+capped at `MOCK_ONLY`. Current reality: core platform + public edge are
+live-probed; Entra auth is `CONFIGURED_NOT_TESTED`; n8n / SharePoint / email /
+ownCloud / Odoo are `NOT_CONFIGURED` (missing webhook token / connector creds);
+AI providers are `NOT_CONFIGURED`, so report generation is `BLOCKED`. Readiness
+is `PARTIAL_READY` at best and production stays NOT_LIVE.
