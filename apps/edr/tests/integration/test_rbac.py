@@ -1,13 +1,16 @@
 """Phase 1B integration tests: RBAC enforcement in node_01_auth.
 
-Three required cases (spec Phase 1B validation gate):
+Owner-operator model (SPEC_CHANGE 2026-05-31): admin is a full owner and is
+report-capable; only auditor is denied report generation.
+
+Required cases (spec Phase 1B validation gate):
   1. Authorized user  — valid role + known project → rbac_status = "authorized"
-  2. Unauthorized user — admin role + known project → RbacDeniedError
-  3. Unknown project  — valid role + unknown project_code → RbacDeniedError
+  2. Unknown project  — valid role + unknown project_code → RbacDeniedError
+  3. Auditor          — read-only role → RbacDeniedError (cannot generate)
 
 Additional coverage:
   4. Missing role → RbacDeniedError
-  5. All 9 roles enumerated (8 report-capable + 1 admin that is denied)
+  5. All 9 roles enumerated (8 report-capable incl. admin + auditor read-only)
 """
 import asyncio
 
@@ -39,9 +42,11 @@ def test_authorized_user() -> None:
     assert "node_01_auth" in result.visited_nodes
 
 
-def test_unauthorized_user_admin_role() -> None:
-    with pytest.raises(RbacDeniedError, match="cannot generate business reports"):
-        asyncio.run(node_01_auth.run(_state("admin")))
+def test_admin_role_is_report_capable() -> None:
+    # Owner-operator model: admin is a full owner and may generate reports.
+    result = asyncio.run(node_01_auth.run(_state("admin")))
+    assert result.outputs["rbac_status"] == "authorized"
+    assert result.outputs["rbac_role"] == "admin"
 
 
 def test_unknown_project_code() -> None:
@@ -93,9 +98,10 @@ def test_auditor_role_denied_for_report_generation() -> None:
         asyncio.run(node_01_auth.run(_state(Role.AUDITOR.value)))
 
 
-def test_admin_role_denied() -> None:
-    with pytest.raises(RbacDeniedError):
-        asyncio.run(node_01_auth.run(_state(Role.ADMIN.value)))
+def test_admin_role_authorized_with_known_project() -> None:
+    # Owner-operator model: admin is report-capable (was denied pre-2026-05-31).
+    result = asyncio.run(node_01_auth.run(_state(Role.ADMIN.value)))
+    assert result.outputs["rbac_status"] == "authorized"
 
 
 def test_9_roles_total() -> None:

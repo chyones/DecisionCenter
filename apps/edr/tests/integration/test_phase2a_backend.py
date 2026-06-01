@@ -171,11 +171,12 @@ async def test_workspace_context_empty_for_non_report_role() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workspace_context_denies_admin() -> None:
-    with pytest.raises(HTTPException) as exc:
-        await get_workspace_context(claims=_claims(role=Role.ADMIN.value))
+async def test_workspace_context_allows_admin_owner() -> None:
+    """Owner-operator: admin is a full owner and may use the workspace."""
+    response = await get_workspace_context(claims=_claims(role=Role.ADMIN.value))
 
-    assert exc.value.status_code == 403
+    assert response.can_generate_report is True
+    assert response.can_approve is True
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +193,7 @@ async def test_list_reports_scopes_to_own_user_for_normal_role() -> None:
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
         response = await list_reports(
-            claims=_claims(user_id="user-42", role=Role.EXECUTIVE.value),
+            claims=_claims(user_id="user-42", role=Role.FINANCE.value),
             state=None,
             project_code=None,
             date_from=None,
@@ -258,9 +259,12 @@ async def test_list_reports_auditor_sees_all_users() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_reports_admin_is_forbidden() -> None:
-    """Admin must not see any business reports (CONTROL_PLANE_LOCK)."""
-    with pytest.raises(HTTPException) as exc:
+async def test_list_reports_admin_sees_all() -> None:
+    """Owner-operator: admin is a full owner and sees all owners' reports."""
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.list_audits = AsyncMock(return_value=([], 0))
+    with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
         await list_reports(
             claims=_claims(role=Role.ADMIN.value),
             state=None,
@@ -270,7 +274,7 @@ async def test_list_reports_admin_is_forbidden() -> None:
             limit=50,
             offset=0,
         )
-    assert exc.value.status_code == 403
+    assert mock_pg.list_audits.call_args.kwargs["user_id_hash"] is None
 
 
 @pytest.mark.asyncio
@@ -359,18 +363,18 @@ async def test_get_report_returns_404_when_unknown() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_report_denies_admin() -> None:
-    """Admin role cannot view any report metadata."""
+async def test_get_report_allows_admin_owner() -> None:
+    """Owner-operator: admin is a full owner and may view report metadata."""
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row())
+    mock_pg.get_review_decisions = AsyncMock(return_value=[])
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
-        with pytest.raises(HTTPException) as exc:
-            await get_report(
-                request_id="req-2a-001", claims=_claims(role=Role.ADMIN.value)
-            )
-    assert exc.value.status_code == 403
+        detail = await get_report(
+            request_id="req-2a-001", claims=_claims(role=Role.ADMIN.value)
+        )
+    assert detail.request_id == "req-2a-001"
 
 
 @pytest.mark.asyncio
@@ -387,7 +391,7 @@ async def test_get_report_denies_other_user_in_entra_mode() -> None:
         with pytest.raises(HTTPException) as exc:
             await get_report(
                 request_id="req-2a-001",
-                claims=_claims(user_id="attacker", role=Role.EXECUTIVE.value),
+                claims=_claims(user_id="attacker", role=Role.FINANCE.value),
             )
     assert exc.value.status_code == 403
 
@@ -446,17 +450,17 @@ async def test_get_status_returns_404_for_unknown_report() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_status_denies_admin() -> None:
+async def test_get_status_allows_admin_owner() -> None:
+    """Owner-operator: admin is a full owner and may read report status."""
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row())
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
-        with pytest.raises(HTTPException) as exc:
-            await get_report_status(
-                request_id="req-2a-001", claims=_claims(role=Role.ADMIN.value)
-            )
-    assert exc.value.status_code == 403
+        status = await get_report_status(
+            request_id="req-2a-001", claims=_claims(role=Role.ADMIN.value)
+        )
+    assert status.is_terminal is True
 
 
 # ---------------------------------------------------------------------------
@@ -465,17 +469,24 @@ async def test_get_status_denies_admin() -> None:
 
 
 @pytest.mark.asyncio
-async def test_report_content_hides_needs_review_from_requester() -> None:
+async def test_report_content_shows_needs_review_to_owner_requester() -> None:
+    """Owner-operator: an owner who is the requester may review their own
+    needs_review draft (self-approval allowed)."""
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(
         return_value=_audit_row(quality_gate_status="needs_review")
     )
 
+    def get_object(_request_id: str, filename: str, prefix: str = "staging") -> bytes:
+        if filename == "quality-gate-result.json":
+            return b'{"checks":[{"verdict":"needs_review","reason":"Reviewer required"}]}'
+        if filename == "executive-decision-report.md":
+            return b"# Executive Decision Report\n\nDraft body."
+        raise FileNotFoundError(filename)
+
     mock_minio = MagicMock()
-    mock_minio.get_object.return_value = (
-        b'{"checks":[{"verdict":"needs_review","reason":"Reviewer required"}]}'
-    )
+    mock_minio.get_object.side_effect = get_object
 
     with (
         patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
@@ -487,8 +498,10 @@ async def test_report_content_hides_needs_review_from_requester() -> None:
         )
 
     assert response.state == "needs_review"
-    assert response.content_available is False
-    assert response.markdown is None
+    assert response.is_requester is True
+    assert response.can_review is True
+    assert response.content_available is True
+    assert response.markdown is not None
     assert response.quality_gate_flags == ["Reviewer required"]
 
 
@@ -540,19 +553,31 @@ async def test_report_content_allows_reviewer_to_view_staged_draft() -> None:
 
 
 @pytest.mark.asyncio
-async def test_report_content_denies_admin() -> None:
+async def test_report_content_allows_admin_owner() -> None:
+    """Owner-operator: admin is a full owner and may view report content."""
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row())
 
-    with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
-        with pytest.raises(HTTPException) as exc:
-            await get_report_content(
-                request_id="req-2a-001",
-                claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
-            )
+    def get_object(_request_id: str, filename: str, prefix: str = "staging") -> bytes:
+        if filename == "executive-decision-report.md":
+            return b"# Executive Decision Report\n\nBody."
+        raise FileNotFoundError(filename)
 
-    assert exc.value.status_code == 403
+    mock_minio = MagicMock()
+    mock_minio.get_object.side_effect = get_object
+
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.get_minio_store", return_value=mock_minio),
+    ):
+        response = await get_report_content(
+            request_id="req-2a-001",
+            claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
+        )
+
+    assert response.content_available is True
+    assert response.markdown is not None
 
 
 # ---------------------------------------------------------------------------
@@ -578,14 +603,28 @@ async def test_cancel_report_sets_state_and_records_decision() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancel_report_denies_admin() -> None:
-    with pytest.raises(HTTPException) as exc:
-        await cancel_report(
+async def test_cancel_report_admin_can_cancel_own() -> None:
+    """Owner-operator: cancel stays requester-only; admin may cancel its own."""
+    admin_hash = hash_user_id("admin-1")
+    mock_pg = MagicMock()
+    mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_audit = AsyncMock(
+        return_value=_audit_row(user_id_hash=admin_hash, review_state="staging")
+    )
+    mock_pg.insert_review_decision = AsyncMock(return_value=None)
+    mock_pg.update_review_state = AsyncMock(return_value=None)
+
+    with (
+        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.settings.entra_client_id", "test-client-id"),
+        patch("apps.edr.app.settings.entra_tenant_id", "test-tenant-id"),
+    ):
+        response = await cancel_report(
             request_id="req-2a-001",
             claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
         )
 
-    assert exc.value.status_code == 403
+    assert response.state == "cancelled"
 
 
 @pytest.mark.asyncio
@@ -680,16 +719,22 @@ async def test_upload_accepts_pdf_and_writes_to_minio() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_denies_admin() -> None:
-    upload = _upload_file()
+async def test_upload_allows_admin_owner() -> None:
+    """Owner-operator: admin is a full owner and may upload workspace files."""
+    mock_minio = MagicMock()
+    mock_minio.put_upload.return_value = "uploads/HASH/UID/doc.pdf"
 
-    with pytest.raises(HTTPException) as exc:
-        await upload_file(
+    upload = _upload_file()
+    upload.headers = {"content-type": "application/pdf"}  # type: ignore[attr-defined]
+
+    with patch("apps.edr.app.get_minio_store", return_value=mock_minio):
+        response = await upload_file(
             claims=_claims(user_id="admin-1", role=Role.ADMIN.value),
             file=upload,
         )
 
-    assert exc.value.status_code == 403
+    assert response.filename == "doc.pdf"
+    mock_minio.put_upload.assert_called_once()
 
 
 @pytest.mark.asyncio

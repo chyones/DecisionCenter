@@ -83,26 +83,33 @@ async def test_approve_writes_approval_record_with_hashed_reviewer_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_approve_blocks_self_approval() -> None:
+async def test_approve_allows_self_approval() -> None:
+    """Owner-operator: self-approval is allowed (two-person rule removed,
+    SPEC_CHANGE 2026-05-31). The automated quality gate still gates publish."""
     from apps.edr.app import approve_report
 
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_make_audit_row(user_id="user-42"))
+    mock_pg.insert_review_decision = AsyncMock(return_value=None)
+    mock_pg.update_review_state = AsyncMock(return_value=None)
 
+    publish = MagicMock()
+    publish.outputs = {"publish_status": "ok"}
     with (
         patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.node_17_publish.run", AsyncMock(return_value=publish)),
         patch("apps.edr.app.settings.entra_client_id", "test-client-id"),
         patch("apps.edr.app.settings.entra_tenant_id", "test-tenant-id"),
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await approve_report(
-                request_id="req-1g-001",
-                body=MagicMock(comment=""),
-                claims=MagicMock(user_id="user-42", role="executive"),
-            )
-    assert exc_info.value.status_code == 403
-    assert "self-approval" in str(exc_info.value.detail).lower()
+        response = await approve_report(
+            request_id="req-1g-001",
+            body=MagicMock(comment=""),
+            claims=MagicMock(user_id="user-42", role="executive"),
+        )
+    assert response["new_state"] == "approved"
+    assert response["action"] == "approve"
+    assert mock_pg.insert_review_decision.call_args.kwargs["reviewer_id_hash"] == hash_user_id("user-42")
 
 
 @pytest.mark.asyncio
@@ -129,43 +136,34 @@ async def test_approve_blocks_auditor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_approve_admin_override_requires_comment() -> None:
+async def test_approve_admin_approves_via_normal_path() -> None:
+    """Owner-operator: admin is a full owner and approves via the normal path
+    (action 'approve', no mandatory comment). The metadata-only override stays a
+    separate /admin/approvals endpoint."""
     from apps.edr.app import approve_report
 
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
-    mock_pg.get_audit = AsyncMock(return_value=_make_audit_row())
+    mock_pg.get_audit = AsyncMock(return_value=_make_audit_row(user_id="user-42"))
     mock_pg.insert_review_decision = AsyncMock(return_value=None)
     mock_pg.update_review_state = AsyncMock(return_value=None)
 
-    # Missing comment
+    publish = MagicMock()
+    publish.outputs = {"publish_status": "ok"}
     with (
         patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
-        patch("apps.edr.app.settings.entra_client_id", "test-client-id"),
-        patch("apps.edr.app.settings.entra_tenant_id", "test-tenant-id"),
-    ):
-        with pytest.raises(HTTPException) as exc_info:
-            await approve_report(
-                request_id="req-1g-001",
-                body=MagicMock(comment=None),
-                claims=MagicMock(user_id="admin-01", role=Role.ADMIN.value),
-            )
-    assert exc_info.value.status_code == 400
-    assert "mandatory comment" in str(exc_info.value.detail).lower()
-
-    # With comment — succeeds and creates admin_override action
-    with (
-        patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
+        patch("apps.edr.app.node_17_publish.run", AsyncMock(return_value=publish)),
         patch("apps.edr.app.settings.entra_client_id", "test-client-id"),
         patch("apps.edr.app.settings.entra_tenant_id", "test-tenant-id"),
     ):
         response = await approve_report(
             request_id="req-1g-001",
-            body=MagicMock(comment="Emergency override"),
+            body=MagicMock(comment=None),
             claims=MagicMock(user_id="admin-01", role=Role.ADMIN.value),
         )
-    assert response["action"] == "admin_override"
-    assert mock_pg.insert_review_decision.call_args.kwargs["action"] == "admin_override"
+    assert response["action"] == "approve"
+    assert response["new_state"] == "approved"
+    assert mock_pg.insert_review_decision.call_args.kwargs["action"] == "approve"
 
 
 # ---------------------------------------------------------------------------
