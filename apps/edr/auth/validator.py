@@ -5,6 +5,24 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# Effective-role precedence (highest privilege first). Entra returns the ``roles``
+# app-role claim as an *unordered* array, so a user assigned several app roles must
+# resolve to a single effective role by privilege, not by array position. In the
+# owner-operator model ``admin`` is a full owner plus system operator and outranks
+# all. Mirrors the 9 roles in apps/edr/rbac/roles.py with admin promoted to the top.
+_ROLE_PRECEDENCE: tuple[str, ...] = (
+    "admin",
+    "executive",
+    "project_manager",
+    "finance",
+    "commercial",
+    "document_control",
+    "procurement",
+    "legal",
+    "auditor",
+)
+
+
 @dataclass
 class JWTClaims:
     user_id: str
@@ -48,9 +66,15 @@ class EntraJWTValidator:
         )
         roles_claim = payload.get("roles", [])
         roles: tuple[str, ...] = tuple(r for r in roles_claim if isinstance(r, str))
-        # Single-role mode keeps backward compatibility with existing nodes;
-        # callers that need multi-role decisions should use ``roles``.
-        primary = roles[0] if roles else None
+        # Resolve the single effective role by privilege precedence rather than
+        # positionally: Entra's ``roles`` array is unordered, so a user assigned
+        # both (e.g.) executive and admin must resolve to admin regardless of order.
+        # Falls back to the first role for any value outside the precedence list.
+        # ``roles`` stays available for callers that need the full multi-role set.
+        primary = next(
+            (r for r in _ROLE_PRECEDENCE if r in roles),
+            roles[0] if roles else None,
+        )
         return JWTClaims(
             user_id=payload["oid"],
             role=primary,

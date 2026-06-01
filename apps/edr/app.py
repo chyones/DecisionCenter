@@ -23,6 +23,7 @@ from apps.edr.graph.state import DecisionState
 from apps.edr.graph import node_17_publish
 from apps.edr.persistence import get_minio_store, get_postgres_store, hash_user_id
 from apps.edr.admin import services_catalog
+from apps.edr.admin import connector_status
 from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
 
@@ -253,9 +254,9 @@ def _check_reviewer_rbac(claims: JWTClaims) -> str:
     if role_enum == Role.AUDITOR:
         raise HTTPException(status_code=403, detail="Auditor cannot approve, reject, or request revision.")
 
-    if role_enum == Role.ADMIN:
-        return "admin_override"
-
+    # Owner-operator model (SPEC_CHANGE 2026-05-31): admin is a full owner and
+    # approves via the normal path. Admin retains the separate metadata-only
+    # override endpoints under /admin/approvals.
     if not perms.can_approve:
         raise HTTPException(status_code=403, detail="Role is not authorized to review reports.")
 
@@ -371,34 +372,31 @@ def _check_can_read_own_report(
 ) -> None:
     """Authorize a read against a single audit row.
 
-    Rules (server-enforced; the UX guards in the frontend are cosmetic):
-    - admin: forbidden — admins must not see business data per
-      ``docs/admin/CONTROL_PLANE_LOCK.md`` and the locked UI contract.
+    Owner-operator model (SPEC_CHANGE 2026-05-31): shared decision-support for
+    ~5 equal company owners.
+    - owner roles (``can_view_all_reports``: executive, admin): read all reports.
     - auditor: allowed (read-only across all projects).
     - everyone else: only when the requester's hashed user_id matches the
       stored ``user_id_hash``.
     """
-    # In bypass mode without configured Entra, only enforce admin denial when
-    # a role is given. The download endpoint uses the same pattern.
     if settings.entra_client_id and settings.entra_tenant_id:
         if claims is None or not claims.user_id:
             raise HTTPException(status_code=401, detail="Authentication required.")
 
     role_str = claims.role if claims else None
-    if role_str == Role.ADMIN.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to view report data.",
-        )
 
-    # Bypass mode (no Entra): role is the only signal. Block admin (above);
-    # allow everyone else through. The download endpoint applies the same
-    # relaxation in bypass mode.
+    # Bypass mode (no Entra): role is the only signal; allow any role through.
     if not (settings.entra_client_id and settings.entra_tenant_id):
         return
 
     if role_str == Role.AUDITOR.value:
         return
+
+    try:
+        if ROLE_PERMISSIONS[Role(role_str)].can_view_all_reports:
+            return
+    except (ValueError, KeyError):
+        pass
 
     requester_hash = hash_user_id(claims.user_id) if claims else ""
     if requester_hash != audit.get("user_id_hash", ""):
@@ -419,26 +417,27 @@ def _can_review_report(claims: JWTClaims, audit: dict[str, Any]) -> bool:
         role = _validated_role(claims)
     except HTTPException:
         return False
-    if role in (Role.ADMIN, Role.AUDITOR):
+    if role == Role.AUDITOR:
         return False
     perms = _role_permissions(role)
-    if not perms.can_approve:
-        return False
-    return not _is_requester(claims, audit)
+    # Owner-operator model: self-approval allowed, so a requester may review
+    # their own report; two-person rule removed (SPEC_CHANGE 2026-05-31).
+    return perms.can_approve
 
 
 def _check_can_read_report_content(claims: JWTClaims, audit: dict[str, Any]) -> None:
     role = _validated_role(claims)
-    if role == Role.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to view report content.",
-        )
 
     if not (settings.entra_client_id and settings.entra_tenant_id):
         return
 
-    if _is_requester(claims, audit) or role == Role.AUDITOR or _can_review_report(claims, audit):
+    perms = _role_permissions(role)
+    if (
+        _is_requester(claims, audit)
+        or role == Role.AUDITOR
+        or perms.can_view_all_reports
+        or _can_review_report(claims, audit)
+    ):
         return
 
     raise HTTPException(status_code=403, detail="Not authorized to access this report.")
@@ -662,11 +661,6 @@ async def get_workspace_context(
     """Return the role-scoped workspace context used by the Phase 2A UI."""
     claims = _require_claims(claims)
     role = _validated_role(claims)
-    if role == Role.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to access the user workspace.",
-        )
     perms = _role_permissions(role)
 
     projects: list[WorkspaceProject] = []
@@ -716,14 +710,9 @@ async def list_reports(
     claims = _require_claims(claims)
     role = _validated_role(claims)
 
-    if role == Role.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to list reports.",
-        )
-
-    if role == Role.AUDITOR:
-        scoped_user_hash: str | None = None  # all users
+    perms = _role_permissions(role)
+    if role == Role.AUDITOR or perms.can_view_all_reports:
+        scoped_user_hash: str | None = None  # all reports (owners + auditor)
     else:
         if not claims.user_id:
             raise HTTPException(status_code=401, detail="Authentication required.")
@@ -879,7 +868,7 @@ async def get_report_content(
 
     if audit.get("quality_gate_status") == "failed":
         unavailable_reason = "Download blocked: quality gate failed."
-    elif state == "needs_review" and is_requester:
+    elif state == "needs_review" and is_requester and not can_review:
         unavailable_reason = "Report content is hidden until reviewer approval."
     else:
         markdown = _load_text_artifact(
@@ -928,11 +917,6 @@ async def cancel_report(
     audit row plus a ``review_decisions`` entry — the audit trail is preserved.
     """
     claims = _require_claims(claims)
-    if claims.role == Role.ADMIN.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to cancel workspace reports.",
-        )
 
     pg = get_postgres_store()
     await pg.init_schema()
@@ -1029,11 +1013,6 @@ async def upload_file(
     to a future query.
     """
     claims = _require_claims(claims)
-    if claims.role == Role.ADMIN.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to upload workspace files.",
-        )
 
     safe_name = _safe_filename(file.filename or "")
     _validate_upload_type(safe_name, file.content_type)
@@ -1100,10 +1079,9 @@ async def approve_report(
     if audit is None:
         raise HTTPException(status_code=404, detail="Report not found.")
 
-    # Block self-approval
+    # Owner-operator model: self-approval allowed (two-person rule removed,
+    # SPEC_CHANGE 2026-05-31). The automated quality gate still gates publish.
     reviewer_hash = hash_user_id(claims.user_id)
-    if reviewer_hash == audit.get("user_id_hash", ""):
-        raise HTTPException(status_code=403, detail="Self-approval is not allowed.")
 
     # Block if already finalized or rejected
     current_state = audit.get("review_state", "staging")
@@ -1154,10 +1132,8 @@ async def reject_report(
     if audit is None:
         raise HTTPException(status_code=404, detail="Report not found.")
 
-    # Block self-rejection (treat as self-approval blocking)
+    # Owner-operator model: self-action allowed (SPEC_CHANGE 2026-05-31).
     reviewer_hash = hash_user_id(claims.user_id)
-    if reviewer_hash == audit.get("user_id_hash", ""):
-        raise HTTPException(status_code=403, detail="Self-rejection is not allowed.")
 
     current_state = audit.get("review_state", "staging")
     if current_state == "final":
@@ -1190,9 +1166,8 @@ async def request_revision(
     if audit is None:
         raise HTTPException(status_code=404, detail="Report not found.")
 
+    # Owner-operator model: self-action allowed (SPEC_CHANGE 2026-05-31).
     reviewer_hash = hash_user_id(claims.user_id)
-    if reviewer_hash == audit.get("user_id_hash", ""):
-        raise HTTPException(status_code=403, detail="Self-revision-request is not allowed.")
 
     current_state = audit.get("review_state", "staging")
     if current_state == "final":
@@ -1239,12 +1214,6 @@ async def _download_artifact(
             status_code=403,
             detail="Download blocked: quality gate failed.",
         )
-    if claims and claims.role == Role.ADMIN.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role is not authorized to download report content.",
-        )
-
     # Authorization (skip in bypass mode)
     if settings.entra_client_id and settings.entra_tenant_id:
         if claims is None or not claims.user_id:
@@ -1254,8 +1223,13 @@ async def _download_artifact(
         stored_hash = audit.get("user_id_hash", "")
         role = claims.role
 
-        # Auditor can access read-only report content; admin remains metadata-only.
+        # Auditor reads all; owner roles (can_view_all_reports) read all.
         allowed = requester_hash == stored_hash or role == Role.AUDITOR.value
+        try:
+            if ROLE_PERMISSIONS[Role(role)].can_view_all_reports:
+                allowed = True
+        except (ValueError, KeyError):
+            pass
         if not allowed:
             raise HTTPException(
                 status_code=403,
@@ -1504,6 +1478,26 @@ async def probe_admin_service(
     )
 
 
+@app.get(
+    "/admin/connectors/truth",
+    response_model=connector_status.ConnectorTruthReport,
+)
+async def admin_connectors_truth(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    probe: Annotated[bool, Query()] = True,
+) -> connector_status.ConnectorTruthReport:
+    """Admin-only connector truth report (Connector Status Truth model).
+
+    Honest per-connector states (NOT_CONFIGURED / CONFIGURED_NOT_TESTED /
+    LIVE_OK / AUTH_FAILED / ...) plus a readiness banner. Never reports a
+    connector green without a real live probe. No credential values are ever
+    returned (C-6) — only non-secret config key names and presence booleans.
+    ``?probe=false`` returns the config-only view (skips live network probes).
+    """
+    _require_admin(claims)
+    return connector_status.build_report(run_probes=probe)
+
+
 # ---------------------------------------------------------------------------
 # Phase 2B Slice 3 — System Health + cost monitor
 # Implements GET /admin/health/live and GET /admin/cost per
@@ -1586,9 +1580,12 @@ def _probe_with_latency(name: str) -> tuple[str, int]:
             f"{settings.langfuse_host.rstrip('/')}/api/public/health"
         ),
     }
-    # Workflow services: probe n8n base URL (same lightweight check)
-    for wf_name in ("sharepoint", "microsoft_graph", "owncloud", "odoo"):
-        check_map[wf_name] = check_map["n8n"]
+    # Workflow connectors (sharepoint/microsoft_graph/owncloud/odoo) are NOT
+    # health-checkable from n8n reachability: n8n being up proves nothing about
+    # the downstream integration. Mapping them to the n8n check was false green.
+    # They are intentionally absent here, so check_map.get(name) is None and the
+    # service reports ("unknown", 0). The authoritative, honest per-connector
+    # truth lives in GET /admin/connectors/truth (apps/edr/admin/connector_status).
 
     check = check_map.get(name)
     if check is None:

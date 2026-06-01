@@ -11,7 +11,10 @@
 # (mounted from ./frontend/dist) and proxies backend routes to app:8000.
 # The backend does not use an /api prefix, so each route family is listed
 # explicitly. Hash-based routing means the SPA fallback (try_files) is safe.
-{$PUBLIC_HOSTNAME:localhost} {
+# NOTE: every backend route family the SPA calls MUST be listed here — any path
+# not matched below falls through to the SPA and returns index.html. ``/me`` (the
+# Slice 2 role-resolution endpoint) belongs in this list for that reason.
+http://{$PUBLIC_HOSTNAME:localhost} {
 	encode zstd gzip
 
 	# Strip the noisy server header and add baseline security headers.
@@ -26,6 +29,16 @@
 	# Backend API routes — proxied explicitly because the backend does not use
 	# an /api prefix and we must not change backend business logic in Slice 1.
 	handle /healthz* {
+		reverse_proxy app:8000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	# Identity/role-resolution endpoint — the production SPA reads the caller's
+	# canonical role from GET /me after Entra login. Must reach the backend.
+	handle /me* {
 		reverse_proxy app:8000 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
@@ -81,6 +94,9 @@
 :80 {
 	# Backend API routes
 	handle /healthz* {
+		reverse_proxy app:8000
+	}
+	handle /me* {
 		reverse_proxy app:8000
 	}
 	handle /reports* {

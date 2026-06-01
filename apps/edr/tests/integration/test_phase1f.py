@@ -414,14 +414,14 @@ async def test_download_blocks_unauthorized_user() -> None:
             await download_report(
                 request_id="req-1f-001",
                 fmt="md",
-                claims=MagicMock(user_id="attacker-99", role="executive"),
+                claims=MagicMock(user_id="attacker-99", role="finance"),
             )
     assert exc_info.value.status_code == 403
     assert "not authorized" in str(exc_info.value.detail).lower()
 
 
 @pytest.mark.asyncio
-async def test_download_allows_auditor_but_blocks_admin() -> None:
+async def test_download_allows_auditor_and_admin_owner() -> None:
     from apps.edr.app import download_report
 
     mock_pg = MagicMock()
@@ -450,14 +450,14 @@ async def test_download_allows_auditor_but_blocks_admin() -> None:
         )
     assert response.status_code == 200
 
+    # Owner-operator model: admin is a full owner and may download any report.
     with (
         patch("apps.edr.app.get_postgres_store", return_value=mock_pg),
         patch("apps.edr.app.get_minio_store", return_value=mock_minio),
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            await download_report(
-                request_id="req-1f-001",
-                fmt="md",
-                claims=MagicMock(user_id="different-user", role=Role.ADMIN.value),
-            )
-    assert exc_info.value.status_code == 403
+        admin_response = await download_report(
+            request_id="req-1f-001",
+            fmt="md",
+            claims=MagicMock(user_id="different-user", role=Role.ADMIN.value),
+        )
+    assert admin_response.status_code == 200

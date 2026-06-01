@@ -1,4 +1,12 @@
-"""Canonical 9-role RBAC model. Source: docs/security/rbac_matrix.md."""
+"""Canonical 9-role RBAC model. Source: docs/security/rbac_matrix.md.
+
+Owner-operator model (docs/execution/SPEC_CHANGE_2026-05-31_owner_operator_model.md):
+DecisionCenter is used by ~5 equal company owners plus an owner who is also the
+system operator. ``admin`` is therefore a full owner (generate/approve/read +
+system settings), report visibility is shared among owner roles, and two-person
+approval is removed. Email scope stays project-scoped (own-mailbox off; the
+per-project mailbox allowlist remains the authority).
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -27,8 +35,13 @@ class RolePermissions:
     can_access_odoo_actual_cost: bool
     can_approve: bool
     can_access_audit_logs: bool
-    # Admin role cannot generate business reports (spec Section 9)
+    # Owner-operator model: admin is a full owner and may generate business
+    # reports. Default True; only auditor opts out.
     can_generate_report: bool = True
+    # Owner roles (executive, admin) may view ALL owners' reports — shared
+    # decision-support for equal owners. Auditor also reads all (read-only),
+    # handled explicitly in the API layer.
+    can_view_all_reports: bool = False
 
 
 ROLE_PERMISSIONS: dict[Role, RolePermissions] = {
@@ -41,6 +54,7 @@ ROLE_PERMISSIONS: dict[Role, RolePermissions] = {
         can_access_odoo_actual_cost=True,
         can_approve=True,
         can_access_audit_logs=True,
+        can_view_all_reports=True,
     ),
     Role.PROJECT_MANAGER: RolePermissions(
         can_access_sharepoint=True,
@@ -113,16 +127,20 @@ ROLE_PERMISSIONS: dict[Role, RolePermissions] = {
         can_access_audit_logs=True,
         can_generate_report=False,
     ),
+    # Owner-operator: admin is a full owner (business powers) PLUS system
+    # settings. Email stays project-scoped: own-mailbox off, shared mailboxes
+    # on (governed by the per-project Source Mapping allowlist).
     Role.ADMIN: RolePermissions(
-        can_access_sharepoint=False,
-        can_access_owncloud=False,
+        can_access_sharepoint=True,
+        can_access_owncloud=True,
         can_access_own_mailbox=False,
-        can_access_shared_mailboxes=False,
-        can_access_odoo_budget=False,
-        can_access_odoo_actual_cost=False,
-        can_approve=False,
+        can_access_shared_mailboxes=True,
+        can_access_odoo_budget=True,
+        can_access_odoo_actual_cost=True,
+        can_approve=True,
         can_access_audit_logs=True,
-        can_generate_report=False,
+        can_generate_report=True,
+        can_view_all_reports=True,
     ),
 }
 
