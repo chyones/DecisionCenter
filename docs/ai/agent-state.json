@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "f7d2b6632921c4d6dcabfa565c4161289a97bc68",
+  "current_commit": "0335cd76c24ae91f77d872da64e54a0eeeeb17cb",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -142,7 +142,10 @@
       "Evidence panel confirmation from generated report",
       "Final confirmation that public_edge + caddy_routing show Live (requires admin session to call GET /admin/connectors/truth?probe=true)"
     ],
-    "next_expected_verdict": "PUBLIC_EDGE_AND_CADDY_ROUTING_VALIDATED_NOT_PUBLIC_LIVE (after admin clicks 'Re-run live probes' in dashboard)"
+    "next_expected_verdict": "PUBLIC_EDGE_AND_CADDY_ROUTING_VALIDATED_NOT_PUBLIC_LIVE (after admin clicks 'Re-run live probes' in dashboard)",
+    "system_health_workflow_connectors": "Mirrored to authoritative connector truth (connector_status.classify) instead of the old hard-coded ('unknown', 0). Live-verified with the running app env: Odoo -> ok (LIVE_OK, 100 records, ~1.8s round-trip), SharePoint -> unknown (CONFIGURED_NOT_TESTED, no safe server-side probe), Microsoft Graph -> unknown (CONFIGURED_NOT_TESTED), ownCloud -> error (NOT_CONFIGURED, OWNCLOUD_USERNAME missing). No false greens; consistent with the Connectors & APIs page.",
+    "system_health_change": "apps/edr/app.py: _probe_with_latency now maps workflow connectors via connector_status.classify + _CONNECTOR_STATE_TO_HEALTH; admin_health_live offloads the blocking probe via fastapi.concurrency.run_in_threadpool so the Odoo webhook probe (timeout up to 10s) never blocks the event loop. 28/28 test_phase2b_health_cost tests pass in the container env.",
+    "system_health_note": "Each System Health poll now triggers a real Odoo webhook fetch (~1.8s) — honest live truth at the cost of per-poll load; probe runs in a thread."
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
@@ -162,7 +165,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Admin: click 'Re-run live probes' in the Connectors & APIs dashboard (valid Entra admin session) to confirm public_edge and caddy_routing flip to Live now that the running container executes the sync 'def' handler. For permanence, rebuild the app image from the committed host repo (docker compose build app && docker compose up -d app) so the fix survives container recreation. Then run real live UAT and capture redacted evidence before Slice 7.",
+  "next_action": "Admin: refresh the System Health panel — Odoo now shows ok (live), SharePoint/Graph show unknown (no safe probe), ownCloud shows error (not configured). public_edge + caddy_routing already validated on the Connectors page. For permanence, rebuild the app image from the committed host repo (docker compose build app && docker compose up -d app) so both the connector-truth async fix and the System Health truth-mirroring survive container recreation. Then run real live UAT and capture redacted evidence before Slice 7.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": false,

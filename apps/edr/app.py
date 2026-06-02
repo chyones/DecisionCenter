@@ -12,6 +12,7 @@ from urllib.request import urlopen
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from apps.edr.auth.validator import EntraJWTValidator, JWTClaims
@@ -1562,11 +1563,32 @@ _HEALTH_SLA_MS: dict[str, int] = {
 }
 
 
+#: Maps the authoritative connector-truth state to the System Health tri-state.
+#  Workflow connectors (Odoo/SharePoint/Graph/ownCloud) are surfaced from the
+#  same truth as GET /admin/connectors/truth so System Health never shows a
+#  false green and stays consistent with the Connectors page.
+_CONNECTOR_STATE_TO_HEALTH: dict[connector_status.ConnectorState, str] = {
+    connector_status.ConnectorState.LIVE_OK: "ok",
+    connector_status.ConnectorState.CONNECTED_NO_DATA: "ok",
+    connector_status.ConnectorState.CONFIGURED_NOT_TESTED: "unknown",
+    connector_status.ConnectorState.MOCK_ONLY: "unknown",
+    connector_status.ConnectorState.DISABLED: "unknown",
+    connector_status.ConnectorState.UNKNOWN: "unknown",
+    connector_status.ConnectorState.NOT_CONFIGURED: "error",
+    connector_status.ConnectorState.AUTH_FAILED: "error",
+    connector_status.ConnectorState.PERMISSION_FAILED: "error",
+    connector_status.ConnectorState.NETWORK_FAILED: "error",
+}
+
+
 def _probe_with_latency(name: str) -> tuple[str, int]:
     """Run the registered health check for *name* and return (status, latency_ms).
 
     Infrastructure services reuse the existing ``_check_*`` helpers.
-    Workflow services are probed via n8n reachability (same as Slice 2).
+    Workflow connectors mirror the authoritative connector_status.classify()
+    truth (same source as GET /admin/connectors/truth) so there is no false
+    green: Odoo runs a live probe, SharePoint/Graph stay unknown (no safe
+    server-side probe), ownCloud reports error when config is missing.
     """
     check_map = {
         "postgres": _check_postgres,
@@ -1580,25 +1602,31 @@ def _probe_with_latency(name: str) -> tuple[str, int]:
             f"{settings.langfuse_host.rstrip('/')}/api/public/health"
         ),
     }
-    # Workflow connectors (sharepoint/microsoft_graph/owncloud/odoo) are NOT
-    # health-checkable from n8n reachability: n8n being up proves nothing about
-    # the downstream integration. Mapping them to the n8n check was false green.
-    # They are intentionally absent here, so check_map.get(name) is None and the
-    # service reports ("unknown", 0). The authoritative, honest per-connector
-    # truth lives in GET /admin/connectors/truth (apps/edr/admin/connector_status).
-
     check = check_map.get(name)
-    if check is None:
-        return ("unknown", 0)
+    if check is not None:
+        t0 = time.monotonic()
+        try:
+            check()
+            status = "ok"
+        except Exception:
+            status = "error"
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return (status, latency_ms)
 
-    t0 = time.monotonic()
-    try:
-        check()
-        status = "ok"
-    except Exception:
-        status = "error"
-    latency_ms = int((time.monotonic() - t0) * 1000)
-    return (status, latency_ms)
+    # Workflow connectors: mirror the authoritative per-connector truth from
+    # connector_status.classify() instead of n8n reachability (which was a
+    # false green). Odoo runs a real live probe; SharePoint/Graph have no safe
+    # server-side probe (-> unknown); ownCloud -> error when config missing.
+    spec = connector_status.CONNECTOR_SPEC_BY_NAME.get(name)
+    if spec is not None:
+        t0 = time.monotonic()
+        truth = connector_status.classify(spec, run_probe=True)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        status = _CONNECTOR_STATE_TO_HEALTH.get(truth.state, "unknown")
+        # Latency is only meaningful when we actually reached the service.
+        return (status, latency_ms if status == "ok" else 0)
+
+    return ("unknown", 0)
 
 
 @app.get("/admin/health/live")
@@ -1614,7 +1642,7 @@ async def admin_health_live(
     services: list[HealthServiceStatus] = []
 
     for name in services_catalog.SERVICE_REGISTRY.keys():
-        status, latency_ms = _probe_with_latency(name)
+        status, latency_ms = await run_in_threadpool(_probe_with_latency, name)
         sla_ms = _HEALTH_SLA_MS.get(name, 500)
 
         # Fetch 24h sparkline buckets (up to 24 hourly averages)
