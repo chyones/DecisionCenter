@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "0bacfe899f10ca282586906b715cdc95c47f98b5",
+  "current_commit": "df716b2683c0bc66f81a509f1b28f02b42959cb7",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -109,12 +109,27 @@
   },
   "latest_local_validation": {
     "date": "2026-06-02",
-    "context": "Phase 2D \u2014 Odoo connector truth probe implemented (fix/odoo-connector-truth-probe); connector_status._probe_odoo live, 22 truth tests pass",
-    "uat_check": "SKIP (not run this session)",
-    "uat_flow": "SKIP (no target/credentials) \u2014 does not fake success",
-    "doc_drift": "clean after anchor update",
+    "context": "Phase 2D \u2014 Odoo server-side truth path validated: _probe_odoo confirmed LIVE_OK with 100 live Odoo evidence items from inside the app container; container env defect fixed because N8N_WEBHOOK_TOKEN was empty after raw Docker socket recreation; n8n workflow odoo_read active=1; webhook path odoo-read; /admin/health/live keeps Odoo unknown,0 intentionally because System Health is infrastructure-only; browser-authenticated report generation still requires real Entra session.",
+    "odoo_connector_truth": "LIVE_OK",
+    "odoo_sample_count": 100,
+    "odoo_system_health": "unknown,0 (intentional \u2014 workflow connectors not in health check_map)",
+    "container_env_defect_found": true,
+    "container_env_defect": "N8N_WEBHOOK_TOKEN was empty in the running app container; fixed by recreating the app container with .env values.",
+    "uat_check": "SKIP (real Entra browser auth not available server-side)",
+    "uat_flow": "SKIP (does not fake browser-authenticated success)",
+    "entra_auth_test": "REQUIRES_BROWSER (real Entra JWT needed)",
+    "report_generation_test": "REQUIRES_BROWSER (authenticated report generation not tested)",
+    "evidence_panel_test": "REQUIRES_BROWSER (generated report evidence panel not tested)",
+    "doc_drift": "clean",
     "ai_context": "clean",
-    "postflight": "not run"
+    "postflight": "clean",
+    "confirmed_verdict": "ODOO_SERVER_SIDE_TRUTH_PATH_VALIDATED_LIVE_OK_NOT_PUBLIC_LIVE",
+    "blocked_browser_only_items": [
+      "Real Entra admin login (PKCE/MSAL browser flow)",
+      "Authenticated report generation with Entra JWT",
+      "Evidence panel confirmation from generated report"
+    ],
+    "next_expected_verdict": "ODOO_AUTHENTICATED_REPORT_PATH_VALIDATED_NOT_PUBLIC_LIVE"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
