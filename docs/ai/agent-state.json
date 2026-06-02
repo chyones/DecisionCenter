@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "5c63c749692a140678d1a4c6d586746a101b07fe",
+  "current_commit": "f7d2b6632921c4d6dcabfa565c4161289a97bc68",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -109,21 +109,24 @@
   },
   "latest_local_validation": {
     "date": "2026-06-02",
-    "context": "Phase 2D — Odoo LIVE_OK (100 items). Public edge + Caddy routing: infrastructure correct and validated externally (curl from host + nsenter from container namespace both return HTTP 200 in <100ms). Root cause of TimeoutError in live probe: async deadlock — admin_connectors_truth was 'async def', causing blocking urlopen('https://vantage.elrace.com/healthz') to freeze the uvicorn event loop; the returning /healthz request could not be served, producing a consistent 2-second TimeoutError. Fix applied: changed 'async def' to 'def' in apps/edr/app.py:1485 so FastAPI runs the handler in a thread pool, freeing the event loop. Container restart required for fix to take effect. Production remains NOT_PUBLIC_LIVE.",
+    "context": "Phase 2D — Odoo LIVE_OK (100 items). Public edge + Caddy routing infrastructure is correct and validated externally (curl from host + nsenter from container net+mount namespace + the exact urllib probe from the container's own Python all return HTTP 200 in <120ms). Root cause of the persistent TimeoutError in the live in-process probe was TWO layered issues: (1) async deadlock — admin_connectors_truth was 'async def', so the blocking urlopen('https://vantage.elrace.com/healthz') froze the single uvicorn event loop and the returning self-hairpin /healthz request could never be served, producing a consistent 2-second TimeoutError; (2) DEPLOYMENT — the app image is built with 'build: .' and the source is NOT bind-mounted, so the code is baked into the image at build time. 'docker compose restart app' reuses the existing image and therefore kept running the OLD 'async def' code; restarting alone never picked up the host-side fix. Resolution: host repo fix committed (f7d2b66, apps/edr/app.py:1485 'async def' -> 'def'); the live container's filesystem (/proc/<pid>/root/app/apps/edr/app.py) was patched identically, its bytecode cache cleared, and the uvicorn process restarted — the running container now executes the sync 'def' handler (verified). Production remains NOT_PUBLIC_LIVE.",
     "odoo_connector_truth": "LIVE_OK",
     "odoo_sample_count": 100,
     "odoo_system_health": "unknown,0 (intentional — workflow connectors not in health check_map)",
-    "public_edge": "LIVE_OK (infra) / TimeoutError in probe until restart",
-    "caddy_routing": "LIVE_OK (infra) / TimeoutError in probe until restart",
-    "public_edge_healthz_result": "HTTP/2 200 application/json {status:ok,workflow_nodes:18,postgres:ok,redis:ok,qdrant:ok,minio:ok} — confirmed from host and container namespace",
+    "public_edge": "INFRA_LIVE_OK; in-process probe fix now LIVE in running container; awaiting in-browser admin 'Re-run live probes' to confirm dashboard flips to Live",
+    "caddy_routing": "INFRA_LIVE_OK; in-process probe fix now LIVE in running container; awaiting in-browser admin 'Re-run live probes' to confirm dashboard flips to Live",
+    "public_edge_healthz_result": "HTTP/2 200 application/json {status:ok,workflow_nodes:18,postgres:ok,redis:ok,qdrant:ok,minio:ok} — confirmed from host, container namespace, and container's own Python urllib",
     "caddy_routing_spa_root_result": "HTTP/2 200 text/html; charset=utf-8 — DecisionCenter SPA served correctly",
     "cloudflare_tunnel": "RUNNING — tunnel decisioncenter f39448f2-1898-41af-a055-fc98439088e1 routes vantage.elrace.com → http://caddy:80 (confirmed by traffic flow)",
     "dns_vantage": "104.21.45.56, 172.67.210.102 (Cloudflare anycast — correct)",
-    "probe_handler_bug": "async def admin_connectors_truth blocked uvicorn event loop during urlopen; self-referential hairpin via Cloudflare created deadlock; 2-second timeout hit consistently",
-    "probe_handler_fix": "apps/edr/app.py:1485 changed from 'async def' to 'def'; FastAPI now runs handler in anyio thread pool; event loop stays free to serve returning /healthz; fix in repo, container restart pending",
-    "container_restart_pending": true,
-    "container_restart_required_before": "probe can show LIVE_OK in dashboard",
-    "nsenter_probe_result": "HTTP 200 in 99ms from container network+mount namespace (nsenter -n -m) — confirms infrastructure is correct",
+    "probe_handler_bug": "async def admin_connectors_truth blocked the single uvicorn event loop during a blocking urlopen; the self-referential hairpin via Cloudflare could not be served, so the 2-second timeout was hit every time",
+    "probe_handler_fix": "apps/edr/app.py:1485 changed from 'async def' to 'def' so FastAPI runs the handler in the anyio thread pool, keeping the event loop free to serve the returning /healthz. Committed to repo at f7d2b66 AND hot-patched into the running container's baked-in copy (code is not bind-mounted), then uvicorn restarted.",
+    "deployment_gotcha": "app service uses 'build: .' with NO source bind-mount; 'docker compose restart app' does NOT load host code edits — only an image rebuild (docker compose build app && docker compose up -d app) makes a code change permanent across container recreation.",
+    "container_restart_pending": false,
+    "live_container_patched": true,
+    "image_rebuild_pending": true,
+    "image_rebuild_required_for": "permanence — the live hot-patch lives only in the container writable layer and is lost if the container is recreated/rebuilt; rebuild from the committed host repo (HEAD has the fix) to bake it in",
+    "nsenter_probe_result": "HTTP 200 in 116ms from container net+mount namespace using the container's own Python urllib (exact probe code) — confirms infrastructure + probe code are correct",
     "uat_check": "SKIP (real Entra browser auth not available server-side)",
     "uat_flow": "SKIP (does not fake browser-authenticated success)",
     "entra_auth_test": "REQUIRES_BROWSER (real Entra JWT needed)",
@@ -132,13 +135,14 @@
     "doc_drift": "clean",
     "ai_context": "clean",
     "postflight": "clean (allow-no-evidence)",
-    "confirmed_verdict": "PUBLIC_EDGE_CADDY_ROUTING_CODE_FIX_APPLIED_RESTART_PENDING_NOT_PUBLIC_LIVE",
+    "confirmed_verdict": "PUBLIC_EDGE_CADDY_ROUTING_PROBE_FIX_LIVE_IN_CONTAINER_AWAITING_BROWSER_PROBE_NOT_PUBLIC_LIVE",
     "blocked_browser_only_items": [
       "Real Entra admin login (PKCE/MSAL browser flow)",
       "Authenticated report generation with Entra JWT",
-      "Evidence panel confirmation from generated report"
+      "Evidence panel confirmation from generated report",
+      "Final confirmation that public_edge + caddy_routing show Live (requires admin session to call GET /admin/connectors/truth?probe=true)"
     ],
-    "next_expected_verdict": "PUBLIC_EDGE_AND_CADDY_ROUTING_VALIDATED_NOT_PUBLIC_LIVE (after app container restart)"
+    "next_expected_verdict": "PUBLIC_EDGE_AND_CADDY_ROUTING_VALIDATED_NOT_PUBLIC_LIVE (after admin clicks 'Re-run live probes' in dashboard)"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,
@@ -158,7 +162,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Restart app container to load async-def fix; re-run live probe from browser to confirm public_edge and caddy_routing show LIVE_OK. Then run real live UAT and capture redacted evidence before Slice 7.",
+  "next_action": "Admin: click 'Re-run live probes' in the Connectors & APIs dashboard (valid Entra admin session) to confirm public_edge and caddy_routing flip to Live now that the running container executes the sync 'def' handler. For permanence, rebuild the app image from the committed host repo (docker compose build app && docker compose up -d app) so the fix survives container recreation. Then run real live UAT and capture redacted evidence before Slice 7.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": false,
