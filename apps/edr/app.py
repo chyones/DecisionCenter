@@ -1482,7 +1482,7 @@ async def probe_admin_service(
     "/admin/connectors/truth",
     response_model=connector_status.ConnectorTruthReport,
 )
-async def admin_connectors_truth(
+def admin_connectors_truth(
     claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
     probe: Annotated[bool, Query()] = True,
 ) -> connector_status.ConnectorTruthReport:
