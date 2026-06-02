@@ -102,9 +102,9 @@ def test_missing_owncloud_credentials_is_not_configured(owncloud_unconfigured) -
     assert truth.blocks_go_live is True
 
 
-def test_configured_odoo_without_live_probe_is_not_green(monkeypatch) -> None:
-    """Even fully configured, Odoo has no safe server-side data probe — so it is
-    CONFIGURED_NOT_TESTED, never LIVE_OK, until a real data probe succeeds."""
+@pytest.fixture
+def odoo_configured(monkeypatch):
+    """Patch settings so Odoo counts as configured. Probe must be mocked separately."""
     monkeypatch.setattr(cs.settings, "odoo_url", "https://odoo.example.com", raising=False)
     monkeypatch.setattr(cs.settings, "odoo_database", "prod", raising=False)
     monkeypatch.setattr(cs.settings, "odoo_username", "svc", raising=False)
@@ -113,11 +113,123 @@ def test_configured_odoo_without_live_probe_is_not_green(monkeypatch) -> None:
     monkeypatch.setattr(cs.settings, "n8n_base_url", "http://n8n:5678", raising=False)
     monkeypatch.setattr(cs.settings, "n8n_webhook_token", "tok", raising=False)
 
-    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+def _fake_evidence_response(count: int = 3) -> cs.ProbeFacts:
+    """Successful probe facts simulating a real Odoo webhook returning evidence."""
+    return cs.ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="live",
+        sample_count=count,
+        evidence=f"Odoo webhook live: {count} evidence item(s) returned (source_type=odoo)",
+    )
+
+
+def test_configured_odoo_with_probe_skipped_is_not_green(odoo_configured, monkeypatch) -> None:
+    """run_probe=False ⇒ CONFIGURED_NOT_TESTED (no live check done)."""
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=False)
     assert truth.configured is True
     assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
-    assert truth.state is not cs.ConnectorState.LIVE_OK
     assert truth.live_data_ok is not True
+
+
+def test_configured_odoo_live_probe_returns_live_ok(odoo_configured, monkeypatch) -> None:
+    """When the Odoo webhook returns valid normalized evidence, state is LIVE_OK."""
+    monkeypatch.setattr(cs, "_probe_odoo", _fake_evidence_response)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+    assert truth.configured is True
+    assert truth.state is cs.ConnectorState.LIVE_OK
+    assert truth.live_data_ok is True
+    assert truth.data_source == "live"
+    assert truth.sample_count == 3
+    assert truth.blocks_go_live is False
+
+
+def test_configured_odoo_empty_evidence_is_connected_no_data(odoo_configured, monkeypatch) -> None:
+    """Webhook reachable but evidence list is empty ⇒ CONNECTED_NO_DATA, not LIVE_OK."""
+    monkeypatch.setattr(
+        cs, "_probe_odoo", lambda: cs.ProbeFacts(
+            network_ok=True, auth_ok=True, live_data_ok=False, data_source="live",
+            evidence="Odoo webhook reachable but returned empty evidence list",
+        )
+    )
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+    assert truth.configured is True
+    assert truth.state is cs.ConnectorState.CONNECTED_NO_DATA
+    assert truth.live_data_ok is False
+    assert truth.blocks_go_live is True
+
+
+def test_configured_odoo_network_failure_is_network_failed(odoo_configured, monkeypatch) -> None:
+    """Webhook unreachable ⇒ NETWORK_FAILED, not LIVE_OK."""
+    monkeypatch.setattr(
+        cs, "_probe_odoo", lambda: cs.ProbeFacts(
+            network_ok=False, live_data_ok=False, data_source="live",
+            evidence="Odoo webhook unreachable: Connection refused",
+            last_error_safe="Connection refused",
+        )
+    )
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.NETWORK_FAILED
+    assert truth.live_data_ok is False
+    assert truth.blocks_go_live is True
+
+
+def test_odoo_never_live_ok_from_n8n_healthz_alone(odoo_configured, monkeypatch) -> None:
+    """A green n8n /healthz must NOT make Odoo LIVE_OK. Odoo needs its own evidence.
+
+    This is the hard rule: _probe_n8n returning success must not bleed into the
+    Odoo connector truth — only _probe_odoo returning live evidence qualifies.
+    """
+    # Make n8n probe succeed
+    monkeypatch.setattr(
+        cs, "_probe_n8n", lambda: cs.ProbeFacts(
+            network_ok=True, live_data_ok=True, data_source="live", evidence="n8n healthz ok"
+        )
+    )
+    # Odoo probe returns network failure
+    monkeypatch.setattr(
+        cs, "_probe_odoo", lambda: cs.ProbeFacts(
+            network_ok=False, live_data_ok=False, data_source="live",
+            evidence="odoo webhook unreachable",
+        )
+    )
+    report = cs.build_report(run_probes=True)
+    truths = _all_truths(report)
+
+    assert truths["n8n"].state is cs.ConnectorState.LIVE_OK
+    assert truths["odoo"].state is cs.ConnectorState.NETWORK_FAILED
+    assert truths["odoo"].state is not cs.ConnectorState.LIVE_OK
+
+
+def test_missing_odoo_credentials_is_not_configured_with_probe(odoo_unconfigured) -> None:
+    """NOT_CONFIGURED when creds missing, even if run_probe=True (probe is skipped)."""
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.NOT_CONFIGURED
+    assert truth.configured is False
+    assert "ODOO_URL" in truth.missing_required_config
+    assert truth.live_data_ok is not True
+    assert truth.blocks_go_live is True
+
+
+def test_odoo_truth_response_never_leaks_secrets(odoo_configured, monkeypatch) -> None:
+    """No secret value may appear in the ConnectorTruth response (C-6)."""
+    monkeypatch.setattr(cs.settings, "odoo_api_key", "super-secret-odoo-key", raising=False)
+    monkeypatch.setattr(cs.settings, "n8n_webhook_token", "n8n-secret-token", raising=False)
+    monkeypatch.setattr(cs, "_probe_odoo", _fake_evidence_response)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+    blob = json.dumps(truth.model_dump(mode="json"), default=str)
+
+    assert "super-secret-odoo-key" not in blob
+    assert "n8n-secret-token" not in blob
 
 
 # ---------------------------------------------------------------------------

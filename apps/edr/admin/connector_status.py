@@ -252,6 +252,146 @@ def _probe_n8n() -> ProbeFacts:
     )
 
 
+def _probe_odoo() -> ProbeFacts:
+    """Live probe for the Odoo connector via the configured n8n webhook.
+
+    Posts a minimal read-only query (model ``project.project``, domain
+    ``[["active","=",true]]``, limit 5) to the n8n webhook and validates the
+    response body:
+
+    - ``evidence`` list must be non-empty.
+    - First item must carry ``source_type == "odoo"`` and the canonical
+      evidence fields ``evidence_id``, ``title``, ``source_uri``.
+
+    On success => ``LIVE_OK``.
+    On empty evidence (HTTP 200 but no records) => ``CONNECTED_NO_DATA``.
+    On HTTP / network failure => ``NETWORK_FAILED``.
+    """
+    import json as _json
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    ts = _now()
+    base = (settings.n8n_base_url or "").rstrip("/")
+    path_ = (settings.odoo_read_webhook or "/webhook/odoo-read").lstrip("/")
+    token = settings.n8n_webhook_token or ""
+    url = f"{base}/{path_}"
+
+    if not base:
+        return ProbeFacts(
+            network_ok=None,
+            data_source="none",
+            evidence="N8N_BASE_URL not set — cannot reach Odoo webhook",
+            probed_at=ts,
+        )
+
+    payload = _json.dumps({
+        "model": "project.project",
+        "domain": '[["active","=",true]]',
+        "fields": '["name","id"]',
+        "project_code": "_probe",
+        "limit": 5,
+    }).encode()
+
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        req = Request(url, data=payload, headers=headers, method="POST")
+        with urlopen(req, timeout=services_catalog.PROBE_TIMEOUT_SECONDS * 5) as resp:  # noqa: S310
+            status = resp.status
+            body_bytes = resp.read(65536)
+    except HTTPError as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        auth_failed = exc.code in (401, 403)
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=False if auth_failed else None,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Odoo webhook HTTP {exc.code}: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+    except Exception as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        return ProbeFacts(
+            network_ok=False,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Odoo webhook unreachable: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+
+    if status != 200:
+        return ProbeFacts(
+            network_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Odoo webhook returned HTTP {status}",
+            last_error_safe=f"unexpected HTTP {status}",
+            probed_at=ts,
+        )
+
+    try:
+        parsed = _json.loads(body_bytes.decode("utf-8", "replace"))
+    except Exception:
+        return ProbeFacts(
+            network_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence="Odoo webhook returned non-JSON body",
+            last_error_safe="non-JSON response from Odoo webhook",
+            probed_at=ts,
+        )
+
+    evidence_list = parsed.get("evidence") if isinstance(parsed, dict) else None
+    if not evidence_list:
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence="Odoo webhook reachable but returned empty evidence list",
+            probed_at=ts,
+        )
+
+    first = evidence_list[0] if isinstance(evidence_list, list) else {}
+    required_fields = ("evidence_id", "title", "source_uri")
+    missing_fields = [f for f in required_fields if not first.get(f)]
+    source_type_ok = first.get("source_type") == "odoo"
+
+    if missing_fields or not source_type_ok:
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence=(
+                f"Odoo evidence malformed: source_type={first.get('source_type')!r}"
+                + (f", missing fields: {missing_fields}" if missing_fields else "")
+            ),
+            probed_at=ts,
+        )
+
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="live",
+        sample_count=len(evidence_list),
+        evidence=(
+            f"Odoo webhook live: {len(evidence_list)} evidence item(s) returned "
+            f"(source_type=odoo)"
+        ),
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
 def _probe_public_edge() -> ProbeFacts:
     """Probe the public HTTPS edge end-to-end: Cloudflare Tunnel → Caddy → app.
 
@@ -453,7 +593,7 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
     ConnectorSpec("odoo", "Odoo", "external_connector",
                   ("ODOO_READ_WEBHOOK", "ODOO_URL", "ODOO_DATABASE", "ODOO_USERNAME",
                    "N8N_BASE_URL"),
-                  ("ODOO_API_KEY", "N8N_WEBHOOK_TOKEN"), True),
+                  ("ODOO_API_KEY", "N8N_WEBHOOK_TOKEN"), True, probe="_probe_odoo"),
     # --- AI providers (no billable probe here) ---
     ConnectorSpec("anthropic", "Anthropic (report generation)", "ai_provider",
                   (), ("ANTHROPIC_API_KEY",), True,
