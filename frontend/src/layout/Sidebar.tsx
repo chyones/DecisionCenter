@@ -33,13 +33,13 @@ const navItems: NavItemDef[] = [
     icon: FilePlus,
     label: 'New Query',
     path: '/workspace/new',
-    visible: (r) => r !== 'auditor' && r !== 'admin',
+    visible: (r) => r !== 'auditor',
   },
   {
     icon: FileText,
     label: 'Reports',
     path: '/workspace/reports',
-    visible: (r) => r !== 'admin',
+    visible: () => true,
   },
   // Admin
   {

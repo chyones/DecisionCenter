@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "0335cd76c24ae91f77d872da64e54a0eeeeb17cb",
+  "current_commit": "450ecc8681ee37a0ae99c10c584d11b6a1afa74f",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -100,12 +100,12 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "d2353a937ab16b5c578cf8f803ccbdccc6cd3a43",
-    "run_id": 26397522011,
+    "commit": "450ecc8681ee37a0ae99c10c584d11b6a1afa74f",
+    "run_id": 26876872322,
     "status": "completed",
-    "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26397522011",
-    "note": "Phase 2D Slice 6 governance truth reconciliation — smoke + frontend both green at HEAD d2353a9."
+    "conclusion": "failure",
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26876872322",
+    "note": "Latest main CI verified through GitHub REST API on 2026-06-03 before the reconciliation commit. Jobs frontend and smoke failed before this local reconciliation."
   },
   "latest_local_validation": {
     "date": "2026-06-02",
@@ -146,6 +146,25 @@
     "system_health_workflow_connectors": "Mirrored to authoritative connector truth (connector_status.classify) instead of the old hard-coded ('unknown', 0). Live-verified with the running app env: Odoo -> ok (LIVE_OK, 100 records, ~1.8s round-trip), SharePoint -> unknown (CONFIGURED_NOT_TESTED, no safe server-side probe), Microsoft Graph -> unknown (CONFIGURED_NOT_TESTED), ownCloud -> error (NOT_CONFIGURED, OWNCLOUD_USERNAME missing). No false greens; consistent with the Connectors & APIs page.",
     "system_health_change": "apps/edr/app.py: _probe_with_latency now maps workflow connectors via connector_status.classify + _CONNECTOR_STATE_TO_HEALTH; admin_health_live offloads the blocking probe via fastapi.concurrency.run_in_threadpool so the Odoo webhook probe (timeout up to 10s) never blocks the event loop. 28/28 test_phase2b_health_cost tests pass in the container env.",
     "system_health_note": "Each System Health poll now triggers a real Odoo webhook fetch (~1.8s) — honest live truth at the cost of per-poll load; probe runs in a thread."
+  },
+  "latest_reconciliation_validation": {
+    "date": "2026-06-03",
+    "context": "Owner-operator expectation reconciliation plus Odoo n8n headerAuth restoration. No app deploy was performed. Deployed n8n odoo_read workflow was intentionally updated and restarted to restore headerAuth, attach a Header Auth credential, and return explicit non-200 failures for bad Odoo calls.",
+    "head": "450ecc8681ee37a0ae99c10c584d11b6a1afa74f",
+    "production_status": "NOT_LIVE",
+    "odoo_deployed_workflow": "active=true; webhook authentication=headerAuth; webhook credential reference present; dynamic responseCode expression present; invalid request guard present",
+    "odoo_bad_call_results": "unauthenticated invalid POST -> HTTP 403; authenticated invalid POST -> HTTP 400 with explicit Invalid Odoo request error",
+    "connector_truth_probe": "readiness=PARTIAL_READY; report_generation=BLOCKED; Odoo=LIVE_OK (100 evidence items); SharePoint=CONFIGURED_NOT_TESTED; Microsoft Graph=CONFIGURED_NOT_TESTED; ownCloud=NOT_CONFIGURED",
+    "backend_pytest": "582 passed, 3 skipped, 15 warnings using app image with /root/DecisionCenter bind-mounted at /app",
+    "goldenset_eval": "64/64 passed",
+    "playwright_security_dom": "12/12 passed across Chromium, Firefox, WebKit",
+    "frontend_build": "passed with existing Vite large-chunk warning",
+    "frontend_bundle_budget": "passed under repo/CI blank-Entra env: JS 91.19 kB gzip / 120.00 kB; CSS 6.08 kB gzip / 15.00 kB",
+    "frontend_test_ui": "CI-mode Playwright exit 0: 53 passed, 1 flaky WebKit Processing View timing retry; default local parallel Playwright: 52 passed, 2 Processing View timing failures in Firefox/WebKit",
+    "frontend_lint": "clean",
+    "ruff": "clean",
+    "doc_drift": "clean",
+    "ai_context": "clean"
   },
   "must_not_deploy": true,
   "must_not_commit_env": true,

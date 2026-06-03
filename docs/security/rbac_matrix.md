@@ -1,7 +1,7 @@
-> **⚠ SUPERSEDED FOR THE OWNER-OPERATOR DEPLOYMENT (2026-05-31).**
-> The separation-of-duties controls described below — admin content-blindness,
-> two-person approval, and own-report-only visibility — were intentionally
-> relaxed per the owner-approved
+> **OWNER-OPERATOR DEPLOYMENT OVERRIDE (2026-05-31).**
+> The earlier separation-of-duties controls — admin content-blindness,
+> two-person approval, and own-report-only visibility — are intentionally
+> relaxed for this deployment per the owner-approved
 > [`SPEC_CHANGE_2026-05-31_owner_operator_model`](../execution/SPEC_CHANGE_2026-05-31_owner_operator_model.md).
 > Admin is now a full owner; owners share report visibility; self-approval is
 > allowed. The automated quality gate, audit logging, and the project-scoped
@@ -27,7 +27,7 @@ Implementation MUST use these role identifiers exactly until the locked spec is 
 | `procurement` | Procurement documents, PO-related financials, other financial data only when permitted |
 | `legal` | Contracts, notices, claims, related correspondence, financial figures only when permitted |
 | `auditor` | Reports, evidence references, and audit logs; source-content access depends on original permissions |
-| `admin` | Configure access and system controls only; admin role does not grant business-data visibility |
+| `admin` | Full owner plus system operator: can generate, read, approve, and configure controls |
 
 ## Permission Matrix
 
@@ -41,7 +41,7 @@ Implementation MUST use these role identifiers exactly until the locked spec is 
 | `procurement` | Procurement docs | Procurement docs | Own only | If mapped | PO-related only | If permitted | Review only | Procurement-related |
 | `legal` | Contracts, notices, claims | Contracts, notices, claims | Own only | If mapped | If permitted | If permitted | Legal review | Legal-related |
 | `auditor` | References only unless permitted | References only unless permitted | No | No by default | If permitted | If permitted | No | Yes |
-| `admin` | Configure only | Configure only | No by default | No by default | No by default | No by default | No by default | System logs |
+| `admin` | Allowed projects | Allowed projects | No | Project-mapped only | Yes | Yes | Yes | System + report audit |
 
 ## Phase 0 Control Rules
 

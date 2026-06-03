@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `e1992b125af08efc955de8560e0f41287a9f5eba` (Slice 6 readiness; CI green, run `26395931904`)
+- **Current anchor:** `450ecc8681ee37a0ae99c10c584d11b6a1afa74f` (verified starting HEAD before reconciliation commit)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,49 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-06-03 Reconciliation Update
+
+This reconciliation does not change production app deployment. The deployed n8n
+`odoo_read` workflow was intentionally updated and restarted because the
+operator request explicitly required restoring deployed Odoo webhook auth.
+
+Changes made:
+
+- Owner-operator expectations reconciled in active docs, goldenset, and
+  Playwright security-DOM tests: `admin` is a full owner plus system operator,
+  may use `/workspace/*`, may generate/read report content, and may self-approve.
+- Frontend owner-operator affordances reconciled: admin sees workspace Reports
+  and New Query nav; Report View budget visibility includes admin.
+- `n8n/odoo_read.json` restored to `authentication: headerAuth`, with explicit
+  request validation and dynamic non-200 response codes for workflow errors.
+- Deployed n8n `odoo_read` workflow verified active with `headerAuth`, a
+  `httpHeaderAuth` credential reference, dynamic response code, and invalid
+  request guard.
+- Unauthenticated invalid Odoo webhook POST returns HTTP 403; authenticated
+  invalid Odoo webhook POST returns HTTP 400 with an explicit
+  `Invalid Odoo request` error.
+- Connector-truth tests now call the sync `admin_connectors_truth` endpoint
+  without `await`.
+
+Validation evidence:
+
+| Check | Result |
+|---|---|
+| Full backend pytest (bind-mounted current source) | 582 passed, 3 skipped |
+| Golden-set eval | 64/64 passed |
+| Playwright security-DOM | 12/12 passed across Chromium, Firefox, WebKit |
+| Odoo live integration subset | 2 passed |
+| Connector truth tests | 22 passed |
+| n8n headerAuth workflow tests | 4 passed |
+| Connector truth live probe | Odoo `LIVE_OK` (100 evidence items); SharePoint/Graph `CONFIGURED_NOT_TESTED`; ownCloud `NOT_CONFIGURED`; report generation `BLOCKED` |
+| Frontend build | passed with existing Vite large-chunk warning |
+| Frontend bundle budget | passed under repo/CI blank-Entra env: JS 91.19 kB gzip / 120.00 kB; CSS 6.08 kB gzip / 15.00 kB |
+| Full Playwright UI, CI mode | exit 0; 53 passed, 1 flaky WebKit Processing View timing retry |
+| Full Playwright UI, default local parallel mode | 52 passed, 2 Processing View timing failures in Firefox/WebKit |
+| Frontend lint | clean |
+| Ruff | clean |
+| doc_drift / ai_context | clean |
 
 ## Live UAT Evidence Status (Slice 6)
 
@@ -102,12 +145,14 @@ current session.
 
 ## Current Guardrails
 
-- Do not deploy; production remains `NOT_LIVE`.
+- Do not deploy the app; production remains `NOT_LIVE`. Runtime n8n workflow
+  changes require explicit operator/user direction.
 - Do not start Slice 7 without explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
-- Do not expose business report content, query text, evidence excerpts, or
-  credential values in admin responses.
+- Do not expose credential values in admin responses. Do not expose report
+  content, query text, or evidence excerpts outside the owner-operator RBAC
+  rules.
 - Do not commit `.env`, `.env.*`, credentials, tokens, generated caches, local
   logs, or staging/final artifacts.
 
@@ -128,13 +173,16 @@ If anchor drift exceeds 3 commits, stop and fix governance before coding.
 
 | Check | Result |
 |---|---|
-| Playwright 54 tests (3 browsers) | 54/54 passed |
+| Full backend pytest (bind-mounted current source) | 582 passed, 3 skipped |
+| Golden-set eval | 64/64 passed |
+| Playwright security-DOM | 12/12 passed across Chromium, Firefox, WebKit |
 | Frontend lint | clean |
-| Frontend build | JS 92.77 kB gzip, CSS 6.06 kB gzip |
-| Bundle budget | JS ≤ 120 kB ✅, CSS ≤ 15 kB ✅ |
-| Live integration probes | 15/15 passed (infra + webhook failure-mode) |
-| CI smoke job | success — run 26395931904 (HEAD e1992b1) |
-| CI frontend job | success — run 26395931904 (HEAD e1992b1) |
+| Frontend build | passed; existing Vite large-chunk warning remains |
+| Odoo live integration subset | 2 passed |
+| Connector truth tests | 22 passed |
+| n8n headerAuth workflow tests | 4 passed |
+| Connector truth live probe | Odoo `LIVE_OK` (100 evidence items); report generation `BLOCKED` |
+| Latest GitHub CI known from prior audit | failed at run 26876872322 on HEAD `450ecc8`; no new CI run was started here |
 | doc_drift | clean |
 | ai_context | clean |
 | postflight | clean |
@@ -164,13 +212,13 @@ For any future Phase 2D implementation, run the full gate:
 - `python3 scripts/agent_postflight.py --allow-no-evidence`
 
 
-## Connector status truth (2026-06-01)
+## Connector status truth (2026-06-03)
 
 Dashboard/Connectors now show honest connector states — see
 `apps/edr/admin/connector_status.py` and `GET /admin/connectors/truth`. A
 connector is green only on a real `LIVE_OK` live probe; fixture/mock data is
-capped at `MOCK_ONLY`. Current reality: core platform + public edge are
-live-probed; Entra auth is `CONFIGURED_NOT_TESTED`; n8n / SharePoint / email /
-ownCloud / Odoo are `NOT_CONFIGURED` (missing webhook token / connector creds);
-AI providers are `NOT_CONFIGURED`, so report generation is `BLOCKED`. Readiness
-is `PARTIAL_READY` at best and production stays NOT_LIVE.
+capped at `MOCK_ONLY`. Current source-level live probe reality after the Odoo
+headerAuth restoration: Odoo is `LIVE_OK` with 100 evidence items; SharePoint
+and Microsoft Graph are `CONFIGURED_NOT_TESTED`; ownCloud is `NOT_CONFIGURED`;
+AI providers remain not configured, so report generation is `BLOCKED`.
+Readiness is `PARTIAL_READY` and production stays `NOT_LIVE`.

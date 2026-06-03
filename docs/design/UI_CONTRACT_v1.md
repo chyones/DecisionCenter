@@ -1,5 +1,14 @@
 # DecisionCenter — UI Contract v1.2
 
+> **OWNER-OPERATOR DEPLOYMENT OVERRIDE (2026-05-31).**
+> The earlier UI controls for admin content-blindness, admin workspace blocking,
+> two-person approval, and own-report-only visibility are intentionally relaxed
+> per
+> [`SPEC_CHANGE_2026-05-31_owner_operator_model`](../execution/SPEC_CHANGE_2026-05-31_owner_operator_model.md).
+> Admin is a full owner plus system operator; owners share report visibility;
+> self-approval is allowed. Credential-display controls, the automated quality
+> gate, audit logging, and the project-scoped email allowlist remain in force.
+
 > **Status:** LOCKED — Official UI specification. Supersedes the former UI/UX scope draft.
 > **Date locked:** 2026-05-06
 > **Derived from:** `docs/workflows/EDR-AGENTIC-RAG-v2.1.md` (locked spec, all section references below are to this file)
@@ -122,7 +131,7 @@ Minimum supported width: 768px (tablet). Mobile layout is out of scope.
 | `procurement` | User Chat Workspace — Query Composer | All `/admin/*` routes |
 | `legal` | User Chat Workspace — Query Composer | All `/admin/*` routes |
 | `auditor` | User Chat Workspace — My Reports (read-only) | All `/admin/*` routes; Query Composer; any submit action |
-| `admin` | Admin Visual Control Plane — Dashboard | All `/workspace/*` routes; Query Composer; Report View; any evidence or report content |
+| `admin` | Admin Visual Control Plane — Dashboard | None for `/workspace/*`; admin is a full owner plus system operator |
 
 Access violations return HTTP 403 from the server. Client-side routing guards are UX only.
 
@@ -134,7 +143,7 @@ Access violations return HTTP 403 from the server. Client-side routing guards ar
 
 **Route:** `/workspace/new`
 **Purpose:** The only entry point for submitting a management question.
-**Visible to:** All roles except `auditor` (read-only redirect) and `admin` (CP redirect).
+**Visible to:** All roles except `auditor` (read-only redirect). `admin` is visible under the owner-operator override.
 
 **Layout:**
 ```
@@ -1220,26 +1229,29 @@ Credentials are defined as: passwords, tokens, API keys, client secrets, connect
 |---|---|
 | `user_id` | HMAC-SHA256 hash everywhere in every UI. Never plain text. |
 | Evidence excerpts (email) | Read-only in Evidence Panel. No copy action. Never shown in admin screens. |
-| Report content | Never visible to `admin` role. Blocked from rendering. |
+| Report content | Visible to `admin` under the owner-operator override; still blocked when RBAC, state, or quality gate rules deny content. |
 | `evidence-pack.json` | RBAC-gated download (Section 4.2). Not available to `admin` via download API. |
 | `audit-log.json` (per-req) | RBAC-gated download (Section 4.2). Admin reads via Audit Log UI only. |
 | Financial data | Hidden section with explicit "not available for your role" statement for roles without `can_access_odoo_budget`. Not silently omitted. |
 | Token counts and API costs | Visible to `admin` in Audit Log detail view only. Never in user workspace. |
 | Source mapping field values | Site IDs, drive IDs, folder paths, domains, mailbox references, project people, and access rules visible in the Project Source Mapping editor. No credentials embedded in these fields. |
 
-### 8.5 Admin Scope Isolation
+### 8.5 Admin Owner-Operator Scope
 
-The `admin` role is a configuration role, not a business-data role. (Spec Section 8.2: "Admin role MUST NOT automatically grant business-data visibility.")
+Under the owner-operator override, the `admin` role is a full owner plus system
+operator. Admin may generate reports, read report content, view evidence, use
+the User Chat Workspace and Report View, and approve or reject reports including
+self-submitted reports.
 
-Admin is forbidden from:
-- Viewing report content, query text, or evidence excerpts in any screen.
-- Downloading `evidence-pack.json` via the download API.
-- Accessing the User Chat Workspace or Report View.
+Admin remains forbidden from:
+- Viewing or entering connector credentials, API keys, client secrets, or tokens.
+- Bypassing the quality gate, immutable-final rules, or audit logging.
+- Accessing mailboxes or external sources outside the project-scoped source mapping.
 
 Admin is permitted to:
+- Read report content, query text, evidence excerpts, quality gate flags, and operational metadata.
 - Read system event metadata in the Audit Log (timestamps, event types, request IDs, hashed user IDs, token counts, costs).
-- Read quality gate flags and operational metadata in the Approval Queue.
-- Perform admin override approvals (logged with distinct event type).
+- Approve, reject, or request revision as an owner-operator action.
 - Read and edit project source mapping and role mapping configuration.
 - View connector status and presence indicators.
 
@@ -1275,7 +1287,7 @@ All destructive or approval actions follow this protocol without exception:
 | U-01 | A user with `executive` role sees only their `allowed_projects` in the Project dropdown. No other projects appear. | Section 2.1, 4.1 |
 | U-02 | A user with an empty `allowed_projects` list sees "No authorized projects for your role" and cannot submit. | Section 2.1 |
 | U-03 | `auditor` role lands on My Reports. Query Composer is not rendered and the route is inaccessible. | Sections 1.5, 2.6 |
-| U-04 | `admin` role is redirected to Admin CP. User Chat Workspace routes return HTTP 403. | Sections 1.5, 8.5 |
+| U-04 | `admin` role defaults to Admin CP but may access User Chat Workspace, Query Composer, Report View, and report/evidence content. | Sections 1.5, 8.5 |
 | U-05 | Processing View shows all 18 user-facing labels in correct order. Internal node identifiers are never shown. | Section 2.2 |
 | U-06 | `quality_gate = "failed"`: Export Panel is absent from DOM. API returns HTTP 403 for all download paths. Error banner is non-dismissable. | Sections 2.2, 7.2, 6.3 |
 | U-07 | `quality_gate = "needs_review"`: Requester sees quality gate flags only — no report content. Reviewer sees full draft with watermark. Export Panel absent. | Sections 2.3, 7.2 (C-5) |
@@ -1302,8 +1314,8 @@ All destructive or approval actions follow this protocol without exception:
 | A-07 | Project Source Mapping save shows a diff of all field changes and requires explicit confirmation before writing. | Section 3.4 |
 | A-08 | Removing an allowed role, removing an enabled source, changing an Odoo project reference, changing a root folder path, or disabling a mapping requires the admin to type the project code in a confirmation modal. | Section 3.4 |
 | A-09 | Approval Queue shows only `staging` and `needs_review` reports. `final`, `failed`, and `rejected` reports are excluded. | Section 3.5 |
-| A-10 | Approve action is blocked when the acting admin's hash matches the requester's hash. | Section 3.5 |
-| A-11 | Admin Approval Queue panel shows quality gate flags and metadata only. Report content, evidence excerpts, query text, and evidence-pack data are not rendered. | Sections 3.5, 8.5 (C-1) |
+| A-10 | Approve action is allowed when the acting admin's hash matches the requester's hash; self-approval is logged. | Section 3.5 |
+| A-11 | Admin owner-operator may view report content, evidence excerpts, query text, and evidence-pack data where RBAC, state, and quality-gate rules permit. Credentials are never rendered. | Sections 3.5, 8.5 (C-1 override) |
 | A-12 | `user_id` never appears in plain text in any audit log view. HMAC-SHA256 hash always used. | Sections 3.6, 8.4 |
 | A-13 | Token counts and cost are visible in Audit Log event detail only when the viewer's role is `admin`. | Sections 3.6, 8.4 |
 | A-14 | Cost Monitor shows a yellow warning banner when daily spend ≥ 80% of `DAILY_COST_CAP_USD`. | Section 3.7 |

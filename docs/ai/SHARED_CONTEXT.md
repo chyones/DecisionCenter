@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `e1992b125af08efc955de8560e0f41287a9f5eba` (Slice 6 readiness; CI green, run `26395931904`)
+- Current verified commit (anchor): `450ecc8681ee37a0ae99c10c584d11b6a1afa74f` (verified starting HEAD before reconciliation commit)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,36 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-03 Reconciliation Context
+
+This session reconciled owner-operator expectations and Odoo webhook security
+without deploying the app and without changing production `NOT_LIVE`.
+
+- Owner-operator expectations now align across active docs, goldenset, and
+  Playwright security-DOM tests: `admin` is a full owner plus system operator
+  and can use workspace/report flows.
+- Frontend source affordances now expose workspace Reports/New Query to admin
+  where appropriate, and Report View treats admin as budget-capable.
+- `n8n/odoo_read.json` now declares `authentication: headerAuth`, validates
+  required Odoo request fields, and returns explicit non-200 response codes for
+  invalid/downstream-failure paths.
+- The deployed active n8n `odoo_read` workflow was intentionally updated and
+  restarted. Export verification shows `headerAuth`, a `httpHeaderAuth`
+  credential reference, dynamic response code, and invalid-request guard.
+- Runtime bad-call verification: unauthenticated invalid Odoo POST returns
+  HTTP 403; authenticated invalid Odoo POST returns HTTP 400 with an explicit
+  `Invalid Odoo request` error.
+- Source-level connector truth probe: Odoo `LIVE_OK` with 100 evidence items;
+  SharePoint and Microsoft Graph `CONFIGURED_NOT_TESTED`; ownCloud
+  `NOT_CONFIGURED`; report generation `BLOCKED`; readiness `PARTIAL_READY`.
+- Validation: full backend pytest 582 passed / 3 skipped; goldenset 64/64;
+  Playwright security-DOM 12/12 across Chromium, Firefox, WebKit; full
+  Playwright UI passed in CI mode with one WebKit Processing View timing retry
+  (`53 passed, 1 flaky`); default local parallel UI mode still has two
+  Processing View timing failures; frontend lint/build passed; bundle budget
+  passed under the repo/CI blank-Entra env; ruff, doc_drift, and ai_context
+  clean.
 
 Phases 0, 1A, 1B, 1B.5, 1C, 1D, the Phase 1D-fixup, 1E, 1F, 1G, 1H, and 1I
 are complete. Phase 1I established the frontend foundation: Vite + React +
@@ -37,9 +67,10 @@ immutable display, and cancellation path.
 Phase 2B is complete and not live. All ten slices are closed and CI-green:
 admin RBAC base, Connectors, Health, Audit Log, Permissions, Source Mapping,
 Approval Queue, Dashboard, Routing + Nav, and Closeout. The admin control
-plane has seven live backend-integrated screens and preserves the C-1/C-6
-boundaries: no business report content, query text, evidence excerpts, or
-credential values in admin responses. `docs/execution/PHASE_2B_REPORT.md`
+plane has seven live backend-integrated screens. The 2026-05-31 owner-operator
+override supersedes C-1 admin content-blindness for workspace/report content;
+C-6 remains in force, so credential values are never exposed in admin
+responses. `docs/execution/PHASE_2B_REPORT.md`
 records the A-01..A-23 QA matrix, cross-screen invariants, audit event
 catalog, and validation evidence.
 
@@ -71,8 +102,10 @@ Remaining go-live blockers are: real UAT flow not proven (Slice 6 readiness
 is implemented; the live UAT run is operator-pending) and go-live approval
 not completed (Slice 7). Production remains `NOT_LIVE`.
 
-Latest verified green CI: run 26395931904 (commit `e1992b1`) — smoke and
-frontend jobs both success. Slice 6 readiness is implemented and CI-green, but
+Latest verified GitHub CI for `origin/main`/HEAD `450ecc8`: run `26876872322`
+is completed with conclusion `failure`; jobs `frontend` and `smoke` failed.
+The reconciliation fix set still requires commit, push, and CI verification in
+the current operator task. Historical Slice 6 readiness was CI-green, but
 the **real live UAT evidence does not exist**: `docs/evidence/uat/` holds only
 `README.md` (no `UAT_RUN_<YYYY-MM-DD>.md`). Current verdict:
 `PHASE_2D_SLICE_6_LIVE_UAT_PENDING`. The next real action is an operator live
@@ -127,7 +160,8 @@ documentation drift check.
 - Do not start Slice 7. It requires explicit user approval in the current session.
 - Do not weaken `_require_admin`; non-admin roles must continue to receive
   HTTP 403 from every `/admin/*` endpoint.
-- Do not deploy.
+- Do not deploy the app; production remains `NOT_LIVE`. Runtime n8n workflow
+  changes require explicit operator/user direction.
 - Do not claim production is live.
 - Do not commit `.env`, `.env.*`, credentials, tokens, local session files, or
   generated caches.

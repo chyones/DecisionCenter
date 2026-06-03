@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * Security-DOM audit — Phase 2C Slice 1.
  *
  * Validates:
- * - Admin role cannot access workspace report content (UI_CONTRACT §8.5, U-04).
+ * - Admin owner-operator role can access workspace report content and Query Composer.
  * - quality_gate = "failed" removes Export Panel from DOM entirely (UI_CONTRACT §8.4, U-06).
  * - No credential values appear in admin connector screens (UI_CONTRACT §8.3, C-6).
  */
@@ -16,27 +16,59 @@ async function setRole(page: import('@playwright/test').Page, role: string) {
   await page.locator(`button:has-text("${role}")`).click();
 }
 
-test.describe('Admin scope isolation', () => {
-  test('admin navigating to workspace report sees forbidden screen', async ({ page }) => {
+test.describe('Admin owner-operator workspace access', () => {
+  test('admin navigating to workspace report sees report content', async ({ page }) => {
+    await page.route('**/reports/test-id-123/content', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          request_id: 'test-id-123',
+          project_code: 'PRJ-001',
+          state: 'approved',
+          quality_gate: 'passed',
+          quality_gate_flags: [],
+          content_available: true,
+          content_unavailable_reason: null,
+          markdown: '# Owner Report\n\n## 1. Executive Summary\n\nAdmin owner-operator content.',
+          evidence: [],
+          can_review: true,
+          immutable: false,
+        }),
+      });
+    });
+
     await setRole(page, 'admin');
     await page.goto('/#/workspace/report/test-id-123');
-    await page.waitForSelector('text=Access denied');
+    await page.waitForSelector('text=Owner Report');
 
-    const forbiddenHeading = page.locator('h2:has-text("Access denied")');
-    await expect(forbiddenHeading).toBeVisible();
-
-    // Ensure no report article content is rendered (breadcrumb may still say Report View).
-    await expect(page.locator('article')).toHaveCount(0);
+    await expect(page.locator('h2:has-text("Access denied")')).toHaveCount(0);
+    await expect(page.locator('article')).toHaveCount(1);
+    await expect(page.locator('text=Admin owner-operator content.')).toBeVisible();
     await expect(page.locator('div[role="alert"]:has-text("Quality gate failed")')).toHaveCount(0);
   });
 
-  test('admin is blocked from query composer', async ({ page }) => {
-    // setRole navigates to /#/workspace/new and sets role to admin.
-    // Re-navigating to the same hash URL is a no-op in some browsers, so we
-    // wait for the re-render that follows the role-button click directly.
+  test('admin can use query composer', async ({ page }) => {
+    await page.route('**/workspace/context', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user_id: 'admin-owner',
+          role: 'admin',
+          can_generate_report: true,
+          allowed_projects: [{ project_code: 'PRJ-001', name: 'Project 001' }],
+        }),
+      });
+    });
+
     await setRole(page, 'admin');
-    await page.waitForSelector('text=Access denied');
-    await expect(page.locator('h2:has-text("Access denied")')).toBeVisible();
+    await page.goto('/#/workspace/new');
+    await page.waitForSelector('text=Query Composer');
+
+    await expect(page.locator('h2:has-text("Access denied")')).toHaveCount(0);
+    await expect(page.locator('label:has-text("Management question")')).toBeVisible();
+    await expect(page.locator('button:has-text("Generate Report")')).toBeVisible();
   });
 });
 

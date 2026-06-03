@@ -27,6 +27,7 @@ const ROLES_WITH_BUDGET: Role[] = [
   'procurement',
   'legal',
   'auditor',
+  'admin',
 ];
 
 function canAccessBudget(role: Role): boolean {

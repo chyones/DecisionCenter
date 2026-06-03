@@ -323,29 +323,26 @@ _NON_ADMIN = [
 ]
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("role", _NON_ADMIN)
-async def test_truth_endpoint_denies_non_admin(role: str) -> None:
+def test_truth_endpoint_denies_non_admin(role: str) -> None:
     with pytest.raises(HTTPException) as exc:
-        await admin_connectors_truth(claims=_claims(role), probe=False)
+        admin_connectors_truth(claims=_claims(role), probe=False)
     assert exc.value.status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_truth_endpoint_rejects_missing_claims_401() -> None:
+def test_truth_endpoint_rejects_missing_claims_401() -> None:
     with pytest.raises(HTTPException) as exc:
-        await admin_connectors_truth(claims=None, probe=False)
+        admin_connectors_truth(claims=None, probe=False)
     assert exc.value.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_truth_endpoint_response_has_no_credential_values(monkeypatch) -> None:
+def test_truth_endpoint_response_has_no_credential_values(monkeypatch) -> None:
     # Configure secrets so any accidental value-leak would show up.
     monkeypatch.setattr(cs.settings, "odoo_api_key", "super-secret-odoo-key", raising=False)
     monkeypatch.setattr(cs.settings, "n8n_webhook_token", "n8n-secret-token", raising=False)
     monkeypatch.setattr(cs.settings, "anthropic_api_key", "sk-ant-secret", raising=False)
 
-    report = await admin_connectors_truth(claims=_claims(Role.ADMIN.value), probe=False)
+    report = admin_connectors_truth(claims=_claims(Role.ADMIN.value), probe=False)
     blob = _serialise(report)
     assert "super-secret-odoo-key" not in blob
     assert "n8n-secret-token" not in blob
@@ -353,9 +350,8 @@ async def test_truth_endpoint_response_has_no_credential_values(monkeypatch) -> 
     assert not _CRED_SUBSTRING_RE.search(blob), f"credential substring leaked: {blob!r}"
 
 
-@pytest.mark.asyncio
-async def test_truth_endpoint_separates_core_from_connectors() -> None:
-    report = await admin_connectors_truth(claims=_claims(Role.ADMIN.value), probe=False)
+def test_truth_endpoint_separates_core_from_connectors() -> None:
+    report = admin_connectors_truth(claims=_claims(Role.ADMIN.value), probe=False)
     assert {t.name for t in report.core_platform} == {"postgres", "redis", "qdrant", "minio"}
     assert any(t.name == "odoo" for t in report.external_connectors)
     assert any(t.name == "entra_auth" for t in report.auth)
