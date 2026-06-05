@@ -13,6 +13,12 @@ import { Button, ConfirmDialog, StatusPill, useToasts } from '../components';
 import { useApi } from '../api';
 import { ApiError } from '../api';
 import type {
+  MicrosoftMappingConfirmRequest,
+  MicrosoftMappingStatus,
+  MicrosoftRescanResponse,
+  OdooSharePointSyncResult,
+  OdooSitePairResult,
+  SiteCandidate,
   SourceMappingDetail,
   SourceMappingListResponse,
   SourceMappingSummary,
@@ -176,6 +182,280 @@ function DiffPreviewModal({
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// RescanPanel (local component)
+// ---------------------------------------------------------------------------
+
+function spStatusVariant(status: MicrosoftMappingStatus): 'connected' | 'degraded' | 'disconnected' {
+  if (status === 'AUTO_MAPPED') return 'connected';
+  if (status === 'MISSING_SHAREPOINT' || status === 'DISABLED') return 'disconnected';
+  return 'degraded';
+}
+
+function RescanPanel({
+  isOpen,
+  result,
+  onClose,
+  onAccept,
+  acceptingCode,
+}: {
+  isOpen: boolean;
+  result: MicrosoftRescanResponse | null;
+  onClose: () => void;
+  onAccept: (code: string, candidate: SiteCandidate) => Promise<void>;
+  acceptingCode: string | null;
+}) {
+  if (!isOpen || !result) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-sm border border-border bg-surface-raised p-6 shadow-lg">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-heading font-semibold text-text-primary">Microsoft Source Rescan</h2>
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-4 text-caption text-text-muted">
+          <span>Scanned: {new Date(result.scanned_at).toLocaleString()}</span>
+          <StatusPill
+            status={result.has_sites_read_all ? 'connected' : 'disconnected'}
+            label="Sites.Read.All"
+          />
+          <StatusPill
+            status={result.has_mail_read ? 'connected' : 'disconnected'}
+            label="Mail.Read"
+          />
+          <span>{result.total_sites_discovered} site(s) discovered</span>
+        </div>
+
+        {result.project_results.length === 0 && (
+          <p className="text-body text-text-muted">{result.summary}</p>
+        )}
+
+        <div className="space-y-4">
+          {result.project_results.map((prj) => (
+            <div
+              key={prj.project_code}
+              className="rounded-sm border border-border bg-surface-base p-4"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-mono font-medium text-text-primary">
+                    {prj.project_code}
+                  </span>
+                  {prj.project_name && (
+                    <span className="text-body text-text-secondary">{prj.project_name}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusPill
+                    status={spStatusVariant(prj.sharepoint_status)}
+                    label={`SP: ${prj.sharepoint_status}`}
+                  />
+                  <StatusPill
+                    status={spStatusVariant(prj.mailbox_status)}
+                    label={`Mail: ${prj.mailbox_status}`}
+                  />
+                </div>
+              </div>
+
+              <p className="mb-3 text-caption text-text-muted">{prj.reason}</p>
+
+              {prj.sharepoint_status === 'NEEDS_CONFIRMATION' && prj.site_candidates.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-caption font-medium text-text-secondary">
+                    Candidates — select one to accept:
+                  </p>
+                  {prj.site_candidates.map((c) => (
+                    <div
+                      key={c.site_id}
+                      className="flex items-center justify-between rounded-sm border border-border bg-surface-raised px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-body text-text-primary">{c.display_name}</p>
+                        <p className="text-caption text-text-muted">
+                          {c.match_strength} · {Math.round(c.confidence * 100)}% confidence
+                          {c.root_item_count != null && ` · ${c.root_item_count} items`}
+                        </p>
+                        <p className="truncate text-caption text-text-muted">{c.web_url}</p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="compact"
+                        onClick={() => void onAccept(prj.project_code, c)}
+                        isLoading={acceptingCode === prj.project_code}
+                      >
+                        Accept
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {prj.sharepoint_status === 'AUTO_MAPPED' && prj.recommended_site_id && (
+                <div className="text-caption text-success">
+                  Auto-mapped:{' '}
+                  {prj.site_candidates.find((c) => c.site_id === prj.recommended_site_id)
+                    ?.display_name ?? prj.recommended_site_id}
+                  {prj.recommended_drive_id && (
+                    <>
+                      {' · Drive: '}
+                      <span className="font-mono">{prj.recommended_drive_id.slice(0, 14)}…</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-4 text-caption text-text-muted">{result.summary}</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OdooSyncPanel (local component)
+// ---------------------------------------------------------------------------
+
+function syncMatchVariant(pair: OdooSitePairResult): 'connected' | 'degraded' | 'disconnected' {
+  if (pair.auto_saved) return 'connected';
+  if (pair.save_skipped_reason) return 'degraded';
+  return 'disconnected';
+}
+
+function OdooSyncPanel({
+  isOpen,
+  result,
+  onClose,
+}: {
+  isOpen: boolean;
+  result: OdooSharePointSyncResult | null;
+  onClose: () => void;
+}) {
+  if (!isOpen || !result) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-sm border border-border bg-surface-raised p-6 shadow-lg">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-heading font-semibold text-text-primary">Sync Odoo + SharePoint</h2>
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+
+        {/* Summary row */}
+        <div className="mb-4 flex flex-wrap items-center gap-4 text-caption text-text-muted">
+          <span>Scanned: {new Date(result.scanned_at).toLocaleString()}</span>
+          <StatusPill
+            status={result.odoo_configured ? 'connected' : 'disconnected'}
+            label={`Odoo: ${result.odoo_configured ? 'configured' : 'not configured'}`}
+          />
+          <StatusPill
+            status={result.sharepoint_configured ? 'connected' : 'disconnected'}
+            label={`SharePoint: ${result.sharepoint_configured ? 'configured' : 'not configured'}`}
+          />
+          <span>{result.odoo_projects_scanned} Odoo project(s)</span>
+          <span>{result.sharepoint_sites_scanned} SharePoint site(s)</span>
+        </div>
+
+        {/* Match counters */}
+        <div className="mb-4 grid grid-cols-4 gap-3 text-center">
+          {[
+            { label: 'Exact matches', value: result.exact_matches },
+            { label: 'Auto-saved', value: result.auto_saved_count },
+            { label: 'No match', value: result.no_match_count },
+            { label: 'Multi-match', value: result.multiple_match_count },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-sm border border-border bg-surface-base p-2">
+              <p className="text-display font-semibold text-text-primary">{value}</p>
+              <p className="text-caption text-text-muted">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Matched pairs */}
+        {result.matched_pairs.length > 0 && (
+          <div className="mb-4 space-y-3">
+            <p className="text-label font-medium text-text-secondary">Matched pairs</p>
+            {result.matched_pairs.map((pair) => (
+              <div
+                key={pair.internal_key}
+                className="rounded-sm border border-border bg-surface-base p-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-body font-medium text-text-primary">{pair.odoo_project_name}</p>
+                    <p className="text-caption text-text-muted font-mono">{pair.internal_key}</p>
+                  </div>
+                  <StatusPill
+                    status={syncMatchVariant(pair)}
+                    label={pair.auto_saved ? 'Auto-saved' : (pair.save_skipped_reason ? 'Skipped' : 'Not saved')}
+                  />
+                </div>
+                <div className="space-y-1 text-caption text-text-muted">
+                  <p>
+                    <span className="text-text-secondary">SharePoint site:</span>{' '}
+                    {pair.sharepoint_display_name || pair.sharepoint_site_name}
+                  </p>
+                  <p>
+                    <span className="text-text-secondary">Match:</span>{' '}
+                    {pair.mapping_method} · confidence={pair.match_confidence}%
+                  </p>
+                  <p>
+                    <span className="text-text-secondary">Members ({pair.project_member_emails.length}):</span>{' '}
+                    {pair.project_member_emails.length > 0
+                      ? pair.project_member_emails.join(', ')
+                      : `none (${pair.member_read_status})`}
+                  </p>
+                  {pair.save_skipped_reason && (
+                    <p className="text-warning">Skipped: {pair.save_skipped_reason}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Unmatched Odoo */}
+        {result.unmatched_odoo_names.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-1 text-label font-medium text-text-secondary">
+              Unmatched Odoo projects ({result.unmatched_odoo_names.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {result.unmatched_odoo_names.map((n) => (
+                <span key={n} className="rounded bg-surface-overlay px-2 py-0.5 text-caption text-text-muted">
+                  {n}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation badges */}
+        <div className="mt-4 flex flex-wrap gap-3 border-t border-border pt-3 text-caption text-text-muted">
+          <StatusPill
+            status={result.odoo_emails_used ? 'disconnected' : 'connected'}
+            label="Odoo emails: not used"
+          />
+          <StatusPill
+            status={result.odoo_followers_used ? 'disconnected' : 'connected'}
+            label="Odoo followers: not used"
+          />
+          <span className="text-text-muted">{result.summary}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
@@ -218,6 +498,13 @@ export function AdminSourceMappingScreen() {
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [disabling, setDisabling] = useState(false);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [showRescan, setShowRescan] = useState(false);
+  const [rescanResult, setRescanResult] = useState<MicrosoftRescanResponse | null>(null);
+  const [acceptingCode, setAcceptingCode] = useState<string | null>(null);
+  const [odooSyncLoading, setOdooSyncLoading] = useState(false);
+  const [showOdooSync, setShowOdooSync] = useState(false);
+  const [odooSyncResult, setOdooSyncResult] = useState<OdooSharePointSyncResult | null>(null);
 
   const fetchMappings = useCallback(async () => {
     setLoading(true);
@@ -387,6 +674,85 @@ export function AdminSourceMappingScreen() {
     }
   };
 
+  const handleRescan = async () => {
+    setRescanLoading(true);
+    try {
+      const result = await api.post<MicrosoftRescanResponse>('/admin/microsoft-mapping/rescan', {
+        project_codes: [],
+      });
+      setRescanResult(result);
+      setShowRescan(true);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Rescan failed';
+      addToast('error', message, 'Rescan');
+    } finally {
+      setRescanLoading(false);
+    }
+  };
+
+  const handleOdooSync = async () => {
+    setOdooSyncLoading(true);
+    try {
+      const result = await api.post<OdooSharePointSyncResult>(
+        '/admin/source-mappings/sync-odoo-sharepoint',
+        {},
+      );
+      setOdooSyncResult(result);
+      setShowOdooSync(true);
+      if (result.auto_saved_count > 0) {
+        await fetchMappings();
+        addToast(
+          'success',
+          `${result.auto_saved_count} mapping(s) auto-saved from exact Odoo↔SharePoint match.`,
+          'Odoo Sync',
+        );
+      } else if (result.exact_matches === 0) {
+        addToast('warning', 'No exact Odoo↔SharePoint name matches found.', 'Odoo Sync');
+      } else {
+        addToast('info', `${result.exact_matches} match(es) found; check panel for details.`, 'Odoo Sync');
+      }
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Sync failed';
+      addToast('error', message, 'Odoo Sync');
+    } finally {
+      setOdooSyncLoading(false);
+    }
+  };
+
+  const handleAcceptCandidate = async (code: string, candidate: SiteCandidate) => {
+    setAcceptingCode(code);
+    try {
+      const body: MicrosoftMappingConfirmRequest = {
+        site_id: candidate.site_id,
+        drive_id: candidate.drive_id ?? '',
+      };
+      await api.post<SourceMappingDetail>(
+        `/admin/microsoft-mapping/${encodeURIComponent(code)}/confirm`,
+        body,
+      );
+      addToast('success', `${code} mapping confirmed.`, 'Rescan');
+      const refreshed = await api.post<MicrosoftRescanResponse>(
+        '/admin/microsoft-mapping/rescan',
+        { project_codes: [code] },
+      );
+      setRescanResult((prev) => {
+        if (!prev) return refreshed;
+        return {
+          ...prev,
+          project_results: prev.project_results.map((p) =>
+            p.project_code === code ? (refreshed.project_results[0] ?? p) : p,
+          ),
+        };
+      });
+      await fetchMappings();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Confirm failed';
+      addToast('error', message, 'Confirm error');
+    } finally {
+      setAcceptingCode(null);
+    }
+  };
+
   const fieldError = (field: string) =>
     validationErrors.find((e) => e.field === field)?.message;
 
@@ -395,7 +761,17 @@ export function AdminSourceMappingScreen() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <h1 className="text-display font-semibold text-text-primary">Project Source Mapping</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-display font-semibold text-text-primary">Project Source Mapping</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => void handleOdooSync()} isLoading={odooSyncLoading}>
+            Sync Odoo + SharePoint
+          </Button>
+          <Button variant="secondary" onClick={() => void handleRescan()} isLoading={rescanLoading}>
+            Rescan Microsoft Sources
+          </Button>
+        </div>
+      </div>
 
       {/* Two-column card */}
       <div className="flex overflow-hidden rounded-md border border-border bg-surface-raised">
@@ -416,13 +792,22 @@ export function AdminSourceMappingScreen() {
                   type="button"
                   onClick={() => handleSelect(m.project_code)}
                   className={[
-                    'flex h-10 w-full items-center justify-between px-3 py-2 text-left transition-colors duration-150',
+                    'flex w-full items-center justify-between px-3 py-2 text-left transition-colors duration-150',
                     isActive
                       ? 'border-l-2 border-accent bg-accent/[0.08]'
                       : 'border-l-2 border-transparent hover:bg-surface-overlay',
                   ].join(' ')}
                 >
-                  <span className="font-mono text-mono text-text-primary">{m.project_code}</span>
+                  <div className="min-w-0 flex-1 pr-2">
+                    {m.project_name ? (
+                      <>
+                        <p className="truncate text-body font-medium text-text-primary">{m.project_name}</p>
+                        <p className="font-mono text-caption text-text-muted">{m.project_code}</p>
+                      </>
+                    ) : (
+                      <span className="font-mono text-mono text-text-primary">{m.project_code}</span>
+                    )}
+                  </div>
                   <StatusPill
                     status={statusPillVariant(m.mapping_status)}
                     label={m.mapping_status}
@@ -872,6 +1257,22 @@ export function AdminSourceMappingScreen() {
           This save removes a source, role, or changes a critical path. Type the project code to confirm.
         </p>
       </ConfirmDialog>
+
+      {/* Odoo + SharePoint Sync panel */}
+      <OdooSyncPanel
+        isOpen={showOdooSync}
+        result={odooSyncResult}
+        onClose={() => setShowOdooSync(false)}
+      />
+
+      {/* Rescan Microsoft Sources panel */}
+      <RescanPanel
+        isOpen={showRescan}
+        result={rescanResult}
+        onClose={() => setShowRescan(false)}
+        onAccept={handleAcceptCandidate}
+        acceptingCode={acceptingCode}
+      />
 
       {/* Disable confirm */}
       <ConfirmDialog

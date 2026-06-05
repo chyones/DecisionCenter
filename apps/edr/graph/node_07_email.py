@@ -34,7 +34,6 @@ async def run(state: DecisionState) -> DecisionState:
             "project_code": state.project_code,
             "user_mailbox": state.user_id,
             "allowed_mailboxes": state.allowed_mailboxes,
-            "access_token": "",
         }
         evidence = await search_email(payload)
         state.evidence.extend([e.model_dump() for e in evidence])

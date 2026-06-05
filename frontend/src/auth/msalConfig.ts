@@ -11,11 +11,14 @@ const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID;
 const apiScope = import.meta.env.VITE_ENTRA_API_SCOPE;
 
+const origin = typeof window !== 'undefined' ? window.location.origin : '/';
+
 const msalConfig: Configuration = {
   auth: {
     clientId: clientId ?? '',
     authority: `https://login.microsoftonline.com/${tenantId ?? 'common'}`,
-    redirectUri: typeof window !== 'undefined' ? window.location.origin : '/',
+    redirectUri: origin,
+    postLogoutRedirectUri: origin,
   },
   cache: { cacheLocation: 'sessionStorage' },
 };
@@ -50,11 +53,21 @@ export async function initAuth(): Promise<void> {
   }
 }
 
+/** Save current hash before a login/token redirect so it can be restored after. */
+function saveHashForRestore(): void {
+  if (typeof window === 'undefined') return;
+  const hash = window.location.hash;
+  if (hash && hash !== '#' && hash !== '#/') {
+    sessionStorage.setItem('dc-pre-login-hash', hash);
+  }
+}
+
 /** Acquire an access token for API calls; redirects to login when needed. */
 export async function acquireAccessToken(): Promise<string> {
   if (!pca) return '';
   const account = pca.getActiveAccount() ?? pca.getAllAccounts()[0];
   if (!account) {
+    saveHashForRestore();
     await pca.loginRedirect({ scopes: tokenScopes });
     return '';
   }
@@ -62,6 +75,7 @@ export async function acquireAccessToken(): Promise<string> {
     const res = await pca.acquireTokenSilent({ account, scopes: tokenScopes });
     return res.accessToken;
   } catch {
+    saveHashForRestore();
     await pca.acquireTokenRedirect({ account, scopes: tokenScopes });
     return '';
   }
@@ -70,5 +84,5 @@ export async function acquireAccessToken(): Promise<string> {
 /** Sign the user out (production only). */
 export async function signOut(): Promise<void> {
   if (!pca) return;
-  await pca.logoutRedirect();
+  await pca.logoutRedirect({ postLogoutRedirectUri: origin });
 }

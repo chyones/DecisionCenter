@@ -67,6 +67,7 @@ export type ReportState =
 export interface ReportSummary {
   request_id: string;
   project_code: string | null;
+  project_name?: string | null;
   query_excerpt: string | null;
   state: ReportState;
   quality_gate: string | null;
@@ -127,6 +128,7 @@ export interface UploadResponse {
 
 export interface WorkspaceProject {
   project_code: string;
+  project_name: string;
   contract_numbers: string[];
 }
 
@@ -155,6 +157,7 @@ export interface EvidencePanelEntry {
 export interface ReportContentResponse {
   request_id: string;
   project_code: string | null;
+  project_name?: string | null;
   query: string | null;
   state: ReportState;
   quality_gate: string | null;
@@ -570,4 +573,112 @@ export interface ConnectorTruthReport {
   ai_providers: ConnectorTruth[];
   edge: ConnectorTruth[];
   blocking: string[];
+}
+// ---------------------------------------------------------------------------
+// Microsoft Mapping Rescan
+// ---------------------------------------------------------------------------
+
+export type MicrosoftMappingStatus =
+  | 'AUTO_MAPPED'
+  | 'NEEDS_CONFIRMATION'
+  | 'MISSING_SHAREPOINT'
+  | 'MISSING_MAILBOX'
+  | 'CONFLICT'
+  | 'DISABLED';
+
+export interface SiteCandidate {
+  site_id: string;
+  display_name: string;
+  web_url: string;
+  drive_id: string | null;
+  drive_name: string | null;
+  root_item_count: number | null;
+  match_strength: 'strong' | 'medium' | 'weak' | 'existing';
+  confidence: number;
+}
+
+export interface MailboxCandidate {
+  address: string;
+  accessible: boolean;
+  http_status: number;
+}
+
+export interface ProjectRescanResult {
+  project_code: string;
+  project_name: string;
+  existing_site_id: string;
+  existing_drive_id: string;
+  sharepoint_status: MicrosoftMappingStatus;
+  mailbox_status: MicrosoftMappingStatus;
+  site_candidates: SiteCandidate[];
+  mailbox_candidates: MailboxCandidate[];
+  reason: string;
+  recommended_site_id: string | null;
+  recommended_drive_id: string | null;
+  recommended_mailboxes: string[];
+}
+
+export interface MicrosoftRescanResponse {
+  scanned_at: string;
+  token_roles: string[];
+  has_sites_read_all: boolean;
+  has_mail_read: boolean;
+  total_sites_discovered: number;
+  project_results: ProjectRescanResult[];
+  summary: string;
+}
+
+export interface MicrosoftRescanRequest {
+  project_codes: string[];
+}
+
+export interface MicrosoftMappingConfirmRequest {
+  site_id: string;
+  drive_id: string;
+  root_path?: string;
+  mailboxes?: string[];
+  document_control_mailbox?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Odoo + SharePoint Exact-Name Sync
+// Backend: apps/edr/admin/odoo_sharepoint_sync.py
+// POST /admin/source-mappings/sync-odoo-sharepoint
+// ---------------------------------------------------------------------------
+
+export interface OdooSitePairResult {
+  internal_key: string;
+  odoo_project_id: number;
+  odoo_project_name: string;
+  sharepoint_site_id: string;
+  sharepoint_drive_id: string | null;
+  sharepoint_site_name: string;
+  sharepoint_display_name: string;
+  sharepoint_web_url: string;
+  match_confidence: number;
+  mapping_status: string;
+  mapping_method: string;
+  project_member_emails: string[];
+  member_read_status: string;
+  auto_saved: boolean;
+  save_skipped_reason: string | null;
+}
+
+export interface OdooSharePointSyncResult {
+  scanned_at: string;
+  odoo_configured: boolean;
+  sharepoint_configured: boolean;
+  odoo_projects_scanned: number;
+  sharepoint_sites_scanned: number;
+  token_roles: string[];
+  exact_matches: number;
+  no_match_count: number;
+  multiple_match_count: number;
+  auto_saved_count: number;
+  matched_pairs: OdooSitePairResult[];
+  unmatched_odoo_names: string[];
+  unmatched_sharepoint_names: string[];
+  odoo_emails_used: boolean;
+  odoo_followers_used: boolean;
+  summary: string;
 }

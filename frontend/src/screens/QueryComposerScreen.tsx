@@ -196,7 +196,7 @@ export function QueryComposerScreen() {
               <option value="">Select a project…</option>
               {workspace?.allowed_projects.map((p) => (
                 <option key={p.project_code} value={p.project_code}>
-                  {p.project_code}
+                  {p.project_name || p.project_code}
                 </option>
               ))}
             </select>

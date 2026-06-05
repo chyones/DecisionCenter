@@ -69,6 +69,7 @@ class RequestRevisionRequest(BaseModel):
 class ReportSummary(BaseModel):
     request_id: str
     project_code: str | None
+    project_name: str | None = None
     query_excerpt: str | None
     state: str
     quality_gate: str | None
@@ -129,6 +130,7 @@ class UploadResponse(BaseModel):
 
 class WorkspaceProject(BaseModel):
     project_code: str
+    project_name: str = ""
     contract_numbers: list[str] = Field(default_factory=list)
 
 
@@ -162,6 +164,7 @@ class EvidencePanelEntry(BaseModel):
 class ReportContentResponse(BaseModel):
     request_id: str
     project_code: str | None
+    project_name: str | None = None
     query: str | None
     state: str
     quality_gate: str | None
@@ -670,6 +673,7 @@ async def get_workspace_context(
         projects = [
             WorkspaceProject(
                 project_code=str(entry.get("project_code", "")),
+                project_name=str(entry.get("display_name") or entry.get("project_code", "")),
                 contract_numbers=list(entry.get("contract_numbers", [])),
             )
             for entry in mapping.all_projects()
@@ -731,12 +735,27 @@ async def list_reports(
         offset=offset,
     )
 
+    try:
+        _pm = ProjectMapping.load()
+    except Exception:
+        _pm = None
+
+    def _lookup_name(code: str | None) -> str | None:
+        if not code or _pm is None:
+            return None
+        try:
+            return _pm.get(code).get("display_name") or code
+        except Exception:
+            return code
+
     summaries: list[ReportSummary] = []
     for row in rows:
+        _code = row.get("project_code")
         summaries.append(
             ReportSummary(
                 request_id=row["request_id"],
-                project_code=row.get("project_code"),
+                project_code=_code,
+                project_name=_lookup_name(_code),
                 query_excerpt=_query_excerpt(row.get("query")),
                 state=_derive_external_state(row),
                 quality_gate=row.get("quality_gate_status"),
@@ -888,9 +907,16 @@ async def get_report_content(
     if not content_available and not can_review:
         evidence = []
 
+    _report_code = audit.get("project_code")
+    try:
+        _rp_name: str | None = ProjectMapping.load().get(_report_code).get("display_name") if _report_code else None
+    except Exception:
+        _rp_name = _report_code
+
     return ReportContentResponse(
         request_id=audit["request_id"],
-        project_code=audit.get("project_code"),
+        project_code=_report_code,
+        project_name=_rp_name,
         query=audit.get("query"),
         state=state,
         quality_gate=audit.get("quality_gate_status"),
@@ -2231,6 +2257,119 @@ async def disable_source_mapping(
 
 
 # ---------------------------------------------------------------------------
+# Odoo + SharePoint Exact-Name Sync
+# POST /admin/source-mappings/sync-odoo-sharepoint
+# Admin-only. Read-only Odoo (XML-RPC). Read-only Microsoft Graph.
+# Exact match: normalized_odoo_name == normalized_sharepoint_displayName
+# No fuzzy matching, no token scoring, no guessing.
+# A-21 audit-before-save.  C-1/C-6 compliant.
+# ---------------------------------------------------------------------------
+
+from apps.edr.admin.odoo_sharepoint_sync import (  # noqa: E402
+    OdooSharePointSyncResult,
+    run_odoo_sharepoint_sync,
+)
+
+
+@app.post("/admin/source-mappings/sync-odoo-sharepoint")
+async def sync_odoo_sharepoint(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> OdooSharePointSyncResult:
+    """Admin-only: exact-name sync between Odoo projects and SharePoint sites.
+
+    Pulls active Odoo project.project records and SharePoint sites, then
+    compares normalized Odoo project name against normalized SharePoint
+    displayName (100% exact, no fuzzy matching).
+
+    For each exact 1:1 match where site_id and drive_id are available and
+    no MANUALLY_CONFIRMED mapping already holds the site_id, the mapping is
+    auto-saved with project_code = "odoo-{odoo_project_id}".
+
+    Safety: read-only Odoo and Graph. No writes to SharePoint or Mail.
+    Odoo follower and email data are never read. A-21: audit before writes.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    existing_rows = await pg.list_source_mappings_full()
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+
+    # A-21 audit event before any DB writes
+    await pg.insert_admin_event(
+        event_type="admin.odoo_sharepoint_sync_run",
+        actor_hash=actor_hash,
+        project_code=None,
+        detail="scope=all",
+    )
+
+    result = await run_odoo_sharepoint_sync(existing_rows)
+
+    # Persist auto-save decisions returned by the sync engine
+    saved_count = 0
+    for pair in result.matched_pairs:
+        if not pair.auto_saved:
+            continue
+        # A-21 audit before each save
+        await pg.insert_admin_event(
+            event_type="admin.source_mapping_changed",
+            actor_hash=actor_hash,
+            project_code=pair.internal_key,
+            detail=(
+                f"auto_sync method={pair.mapping_method} "
+                f"confidence={pair.match_confidence}"
+            ),
+        )
+        await pg.upsert_source_mapping(
+            project_code=pair.internal_key,
+            project_name=pair.odoo_project_name,
+            contract_numbers=[],
+            sharepoint={
+                "site_id": pair.sharepoint_site_id,
+                "drive_id": pair.sharepoint_drive_id or "",
+                "root_path": "/",
+                "web_url": pair.sharepoint_web_url,
+                "site_name": pair.sharepoint_site_name,
+                "display_name": pair.sharepoint_display_name,
+            },
+            owncloud={"base_path": ""},
+            email={
+                "shared_mailboxes": pair.project_member_emails,
+                "document_control_mailbox": "",
+                "client_domains": [],
+                "consultant_domains": [],
+                "contractor_domains": [],
+            },
+            odoo={
+                "project_external_id": str(pair.odoo_project_id),
+                "project_name": pair.odoo_project_name,
+                "project_model": "project.project",
+                "cost_model": "",
+                "mapping_method": pair.mapping_method,
+                "match_confidence": pair.match_confidence,
+                "internal_key": pair.internal_key,
+            },
+            related_people={
+                "project_manager": "",
+                "commercial_manager": "",
+                "finance_owner": "",
+                "document_controller": "",
+                "other": [],
+            },
+            enabled_sources=["sharepoint", "odoo"],
+            allowed_roles=[],
+            mapping_status="complete",
+            actor_hash=actor_hash,
+        )
+        saved_count += 1
+
+    if saved_count != result.auto_saved_count:
+        result = result.model_copy(update={"auto_saved_count": saved_count})
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Phase 2B Slice 5 — Permissions & Roles (Entra Group Mapping)
 # Implements GET /admin/entra-mappings, PUT /admin/entra-mappings/{group_id},
 # DELETE /admin/entra-mappings/{group_id} per docs/execution/PHASE_2B_PLAN.md §E row 5.
@@ -2705,3 +2844,167 @@ async def admin_dashboard_summary(
         recent_events=recent,
         checked_at=datetime.now().isoformat(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Microsoft Mapping Rescan — admin read-only Graph discovery + confirm.
+# POST /admin/microsoft-mapping/rescan
+# POST /admin/microsoft-mapping/{code}/confirm
+# Admin-only via _require_admin.  C-1/C-6 compliant.  A-21 audit-before-save.
+# Read-only Microsoft Graph: no writes to SharePoint, Mail, or other Graph API.
+# ---------------------------------------------------------------------------
+
+from apps.edr.admin.microsoft_rescan import (  # noqa: E402
+    MicrosoftRescanResponse,
+    _is_placeholder_site,
+    run_microsoft_rescan,
+)
+
+
+class MicrosoftRescanRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_codes: list[str] = []  # empty list = scan all projects
+
+
+class MicrosoftMappingConfirmRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    site_id: str = Field(min_length=1)
+    drive_id: str = Field(min_length=1)
+    root_path: str = ""
+    mailboxes: list[str] = []
+    document_control_mailbox: str = ""
+
+
+@app.post("/admin/microsoft-mapping/rescan")
+async def rescan_microsoft_mapping(
+    body: MicrosoftRescanRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> MicrosoftRescanResponse:
+    """Admin-only: read-only Microsoft Graph discovery for all or selected projects.
+
+    Discovers SharePoint sites, drives, and mailboxes and scores them against
+    existing source mappings.  Returns candidates; does NOT write to the database.
+    A-21: audit event emitted before the scan begins.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    import json as _json
+
+    def _j(val: Any) -> Any:
+        return _json.loads(val) if isinstance(val, str) else (val or {})
+
+    rows = await pg.list_source_mappings()
+    projects = []
+    for row in rows:
+        code = str(row["project_code"])
+        if body.project_codes and code not in body.project_codes:
+            continue
+        projects.append({
+            "project_code": code,
+            "project_name": str(row.get("project_name") or ""),
+            "sharepoint": _j(row.get("sharepoint")),
+            "email": _j(row.get("email")),
+            "mapping_status": str(row.get("mapping_status") or "incomplete"),
+        })
+
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    scope = ",".join(body.project_codes) if body.project_codes else "all"
+    await pg.insert_admin_event(
+        event_type="admin.microsoft_rescan_run",
+        actor_hash=actor_hash,
+        project_code=None,
+        detail=f"scope={scope} projects={len(projects)}",
+    )
+
+    return await run_microsoft_rescan(projects)
+
+
+@app.post("/admin/microsoft-mapping/{code}/confirm")
+async def confirm_microsoft_mapping(
+    code: str,
+    body: MicrosoftMappingConfirmRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> SourceMappingDetail:
+    """Admin-only: apply a confirmed site_id/drive_id to a source mapping.
+
+    Safety: refuses to overwrite a confirmed (non-placeholder) site_id with a
+    different value — use PUT /admin/source-mappings/{code} for full override.
+    A-21: audit event before the database write.
+    """
+    _require_admin(claims)
+    pg = get_postgres_store()
+    await pg.init_schema()
+
+    row = await pg.get_source_mapping(code)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+
+    existing = _row_to_source_mapping_detail(row)
+    existing_site_id = existing.sharepoint.site_id
+
+    if not _is_placeholder_site(existing_site_id) and existing_site_id != body.site_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Mapping already has a confirmed site_id different from the candidate. "
+                f"Use PUT /admin/source-mappings/{code} to perform a full override."
+            ),
+        )
+
+    new_root_path = body.root_path or existing.sharepoint.root_path or "/"
+    new_sp = SourceMappingSharePoint(
+        site_id=body.site_id,
+        drive_id=body.drive_id,
+        root_path=new_root_path,
+    )
+    new_em = SourceMappingEmail(
+        shared_mailboxes=body.mailboxes if body.mailboxes else existing.email.shared_mailboxes,
+        document_control_mailbox=(
+            body.document_control_mailbox or existing.email.document_control_mailbox
+        ),
+        client_domains=existing.email.client_domains,
+        consultant_domains=existing.email.consultant_domains,
+        contractor_domains=existing.email.contractor_domains,
+    )
+
+    upsert_body = SourceMappingUpsertRequest(
+        project_name=existing.project_name,
+        contract_numbers=existing.contract_numbers,
+        sharepoint=new_sp,
+        owncloud=existing.owncloud,
+        email=new_em,
+        odoo=existing.odoo,
+        related_people=existing.related_people,
+        enabled_sources=existing.enabled_sources,
+        allowed_roles=existing.allowed_roles,
+    )
+    status, _ = _compute_mapping_status(code, upsert_body)
+
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.microsoft_mapping_confirmed",
+        actor_hash=actor_hash,
+        project_code=code,
+        detail=f"status={status} site=[REDACTED] drive=[REDACTED]",
+    )
+    await pg.upsert_source_mapping(
+        project_code=code,
+        project_name=upsert_body.project_name,
+        contract_numbers=upsert_body.contract_numbers,
+        sharepoint=new_sp.model_dump(),
+        owncloud=upsert_body.owncloud.model_dump(),
+        email=new_em.model_dump(),
+        odoo=upsert_body.odoo.model_dump(),
+        related_people=upsert_body.related_people.model_dump(),
+        enabled_sources=upsert_body.enabled_sources,
+        allowed_roles=upsert_body.allowed_roles,
+        mapping_status=status,
+        actor_hash=actor_hash,
+    )
+
+    updated = await pg.get_source_mapping(code)
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Confirm failed.")
+    return _row_to_source_mapping_detail(updated)

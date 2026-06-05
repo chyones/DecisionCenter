@@ -199,7 +199,7 @@ function ReportGroup({
               <span className="truncate text-text-primary">
                 {report.query_excerpt || 'Untitled report'}
               </span>
-              <span>{report.project_code || '—'}</span>
+              <span>{report.project_name || report.project_code || '—'}</span>
               <StatusPill status={statusForState(report.state)} label={labelForState(report.state)} />
               <span>{report.created_at ? new Date(report.created_at).toLocaleDateString() : '—'}</span>
             </a>

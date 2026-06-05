@@ -73,4 +73,13 @@ export {
   type ReportGeneration,
   type ConnectorTruth,
   type ConnectorTruthReport,
+  type MicrosoftMappingStatus,
+  type SiteCandidate,
+  type MailboxCandidate,
+  type ProjectRescanResult,
+  type MicrosoftRescanResponse,
+  type MicrosoftRescanRequest,
+  type MicrosoftMappingConfirmRequest,
+  type OdooSitePairResult,
+  type OdooSharePointSyncResult,
 } from './types';

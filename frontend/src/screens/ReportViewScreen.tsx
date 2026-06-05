@@ -314,7 +314,7 @@ function PageHeader({ report }: { report: ReportContentResponse }) {
           <StatusPill status={status} label={labelForState(report.state)} />
           {report.immutable && <Stamp className="h-4 w-4 text-success" aria-hidden="true" />}
           <span className="text-body font-medium text-text-primary">
-            {report.project_code || 'No project'}
+            {report.project_name || report.project_code || 'No project'}
           </span>
         </div>
         <p className="mt-1 text-caption text-text-muted">

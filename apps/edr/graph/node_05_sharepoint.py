@@ -25,7 +25,6 @@ async def run(state: DecisionState) -> DecisionState:
             "project_code": state.project_code,
             "site_id": sp_config.get("site_id"),
             "drive_id": sp_config.get("drive_id"),
-            "access_token": "",
         }
         evidence = await search_sharepoint(payload)
         state.evidence.extend([e.model_dump() for e in evidence])

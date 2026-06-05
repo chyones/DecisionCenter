@@ -148,6 +148,7 @@ class PostgresStore:
                 """
             )
             await self._seed_source_mappings(conn)
+            await self._migrate_project_names(conn)
 
     async def insert_audit(
         self,
@@ -790,12 +791,13 @@ class PostgresStore:
             await conn.execute(
                 """
                 INSERT INTO source_mappings
-                    (project_code, contract_numbers, sharepoint, owncloud,
+                    (project_code, project_name, contract_numbers, sharepoint, owncloud,
                      email, odoo, enabled_sources, mapping_status)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                 ON CONFLICT (project_code) DO NOTHING
                 """,
                 code,
+                entry.get("display_name") or code,
                 _json.dumps(entry.get("contract_numbers", [])),
                 _json.dumps({
                     "site_id": sp.get("site_id", ""),
@@ -820,6 +822,31 @@ class PostgresStore:
                 "complete",
             )
 
+    async def _migrate_project_names(self, conn: Any) -> None:
+        """Back-fill project_name for rows that still have an empty name (idempotent)."""
+        import json as _json
+        from pathlib import Path
+
+        json_path = Path(__file__).parents[3] / "docs" / "config" / "project_source_mapping.json"
+        if not json_path.exists():
+            return
+        with open(json_path, encoding="utf-8") as f:
+            entries = _json.load(f)
+        for entry in entries:
+            code = entry["project_code"]
+            name = entry.get("display_name") or ""
+            if not name:
+                continue
+            await conn.execute(
+                """
+                UPDATE source_mappings
+                SET project_name = $2
+                WHERE project_code = $1 AND project_name = ''
+                """,
+                code,
+                name,
+            )
+
     async def list_source_mappings(self) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -828,6 +855,15 @@ class PostgresStore:
                 SELECT project_code, project_name, mapping_status, contract_numbers
                 FROM source_mappings ORDER BY project_code ASC
                 """
+            )
+            return [dict(r) for r in rows]
+
+    async def list_source_mappings_full(self) -> list[dict[str, Any]]:
+        """Return all columns for all source_mappings rows (used by sync engine)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM source_mappings ORDER BY project_code ASC"
             )
             return [dict(r) for r in rows]
 

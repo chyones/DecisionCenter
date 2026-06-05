@@ -10,7 +10,12 @@ if (!rootElement) {
 }
 
 async function bootstrap() {
-  await initAuth();
+  try {
+    await initAuth();
+  } catch {
+    // MSAL redirect error (e.g. AADSTS50011 from unregistered redirect URI) —
+    // still render so the user sees the login screen rather than a blank page.
+  }
   createRoot(rootElement!).render(
     <StrictMode>
       <App />

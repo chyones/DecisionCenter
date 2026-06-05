@@ -25,6 +25,17 @@ from apps.edr.connectors.odoo import read_odoo
 from apps.edr.connectors.owncloud import list_owncloud
 from apps.edr.connectors.sharepoint import search_sharepoint
 
+
+@pytest.fixture(autouse=True)
+def _stub_graph_token(monkeypatch):
+    """Prevent real Graph token requests in non-live unit cases."""
+    import apps.edr.connectors.sharepoint as _sp
+    import apps.edr.connectors.email as _em
+    monkeypatch.setattr(_sp, "get_graph_token", AsyncMock(return_value=""))
+    monkeypatch.setattr(_em, "get_graph_token", AsyncMock(return_value=""))
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

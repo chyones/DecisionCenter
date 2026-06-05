@@ -1,9 +1,17 @@
 [
   {
     "project_code": "PRJ-001",
+    "display_name": "Construction of Civil Defense Center in Al Mirfa, Al Dhafra Region – Type “D”. CD Al Mirfa – D",
+    "sharepoint_aliases": [
+      "CivilDefenseCenterinAlMirfaAlDhafraRegionTypeD",
+      "CD Al Mirfa – D",
+      "Construction of Civil Defense Center in Al Mirfa, Al Dhafra Region – Type “D”. CD Al Mirfa – D"
+    ],
+    "mapping_status_gate": "SHAREPOINT_VERIFIED",
+    "mapping_method": "VERIFIED_MICROSOFT_GRAPH_GATE_3",
     "sharepoint": {
-      "site_id": "example-site-id-001",
-      "drive_id": "example-drive-id-001",
+      "site_id": "elrace.sharepoint.com,a505675a-d15d-4981-a6c5-dfafce8e224c,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
+      "drive_id": "b!WmcFpV3RgUmmxd-vzo4iTBv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
       "root_path": "/Projects/PRJ-001"
     },
     "owncloud": {
@@ -22,9 +30,17 @@
   },
   {
     "project_code": "PRJ-002",
+    "display_name": "Construction of Civil Defense Center in Industrial Area of Madinat Zayed, Al Dhafra Region – Type “D”. CD Madinat Zayed – D",
+    "sharepoint_aliases": [
+      "CivilDefenseCenterinIndustrialAreaofMadinatZayed",
+      "CD Madinat Zayed – D",
+      "Construction of Civil Defense Center in Industrial Area of Madinat Zayed, Al Dhafra Region – Type “D”. CD Madinat Zayed – D"
+    ],
+    "mapping_status_gate": "SHAREPOINT_VERIFIED",
+    "mapping_method": "VERIFIED_MICROSOFT_GRAPH_GATE_3",
     "sharepoint": {
-      "site_id": "example-site-id-002",
-      "drive_id": "example-drive-id-002",
+      "site_id": "elrace.sharepoint.com,52b8cba7-6423-4af7-aded-5de04529abea,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
+      "drive_id": "b!p8u4UiNk90qt7V3gRSmr6hv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
       "root_path": "/Projects/PRJ-002"
     },
     "owncloud": {

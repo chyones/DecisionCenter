@@ -16,6 +16,17 @@ from apps.edr.connectors.sharepoint import search_sharepoint
 from apps.edr.schemas.evidence import EvidenceObject
 
 
+@pytest.fixture(autouse=True)
+def _stub_graph_token(monkeypatch):
+    """Prevent real Graph token requests in connector unit tests."""
+    import apps.edr.connectors.sharepoint as _sp
+    import apps.edr.connectors.email as _em
+    monkeypatch.setattr(_sp, "get_graph_token", AsyncMock(return_value=""))
+    monkeypatch.setattr(_em, "get_graph_token", AsyncMock(return_value=""))
+    yield
+
+
+
 def _mocked_response(data: dict) -> AsyncMock:
     """Build an async mock that mimics an httpx Response.
 

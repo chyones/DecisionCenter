@@ -13,6 +13,10 @@
  * token's non-secret diagnostic claims (iss/aud/ver/roles) — never the token
  * itself — so issuer/audience/version mismatches can be diagnosed without
  * browser devtools.
+ *
+ * Direct-access / deep-link: the hash fragment before `loginRedirect` is saved
+ * to sessionStorage and restored after role resolution so the user lands on the
+ * page they originally requested rather than the default landing.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
@@ -85,6 +89,13 @@ async function resolveRole(api: ApiClient): Promise<string> {
   throw new Error('Neither /me nor /workspace/context returned a valid role.');
 }
 
+/** Pop the hash saved before a login redirect, if any. */
+function popSavedHash(): string | null {
+  const saved = sessionStorage.getItem('dc-pre-login-hash');
+  if (saved) sessionStorage.removeItem('dc-pre-login-hash');
+  return saved || null;
+}
+
 export function LoginGate({ children }: { children: ReactNode }) {
   const isAuthenticated = useIsAuthenticated();
   const { instance } = useMsal();
@@ -99,7 +110,11 @@ export function LoginGate({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const role = await resolveRole(api);
-        if (!cancelled) setRole(role as Role);
+        if (!cancelled) {
+          setRole(role as Role);
+          const savedHash = popSavedHash();
+          if (savedHash) window.location.hash = savedHash.replace(/^#/, '');
+        }
       } catch (err) {
         if (cancelled) return;
         const reason =
@@ -137,7 +152,13 @@ export function LoginGate({ children }: { children: ReactNode }) {
         </p>
         <button
           type="button"
-          onClick={() => void instance.loginRedirect({ scopes: tokenScopes })}
+          onClick={() => {
+            const hash = window.location.hash;
+            if (hash && hash !== '#' && hash !== '#/') {
+              sessionStorage.setItem('dc-pre-login-hash', hash);
+            }
+            void instance.loginRedirect({ scopes: tokenScopes });
+          }}
           className="rounded-md bg-accent px-4 py-2 text-label font-medium text-text-primary"
         >
           Sign in with Microsoft
@@ -161,7 +182,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
         <p className="max-w-2xl break-words text-body text-text-secondary">{roleError}</p>
         <button
           type="button"
-          onClick={() => void instance.logoutRedirect()}
+          onClick={() => void instance.logoutRedirect({ postLogoutRedirectUri: window.location.origin })}
           className="rounded-md bg-accent px-4 py-2 text-label font-medium text-text-primary"
         >
           Sign out and try again
