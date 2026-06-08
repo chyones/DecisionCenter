@@ -82,4 +82,8 @@ export {
   type MicrosoftMappingConfirmRequest,
   type OdooSitePairResult,
   type OdooSharePointSyncResult,
+  type EmailGroup,
+  type EmailGroupMember,
+  type EmailGroupProjectResult,
+  type EmailGroupEnrichmentResponse,
 } from './types';

@@ -2,8 +2,9 @@
  * Connector Status Truth panel.
  *
  * Renders the honest connector states from `GET /admin/connectors/truth`. It
- * NEVER shows green unless the backend reported `LIVE_OK` (a real live probe).
- * `CONFIGURED_NOT_TESTED` and `NOT_CONFIGURED` are neutral/grey — not success.
+ * NEVER shows green unless the backend reported `LIVE_OK`, `VALIDATED`, or
+ * accepted current evidence. `CONFIGURED_NOT_TESTED` and `NOT_CONFIGURED` are
+ * neutral/grey — not success.
  * Surfaces, per the truth model: explicit state, evidence, "Last verified"
  * timestamp, missing non-secret config, data source, and go-live blocking.
  *
@@ -33,6 +34,8 @@ function formatTs(iso: string | null): string {
 
 const STATE_LABEL: Record<ConnectorState, string> = {
   LIVE_OK: 'Live',
+  VALIDATED: 'Validated',
+  VERIFIED_FROM_EVIDENCE: 'Verified from evidence',
   CONNECTED_NO_DATA: 'Connected — no data',
   CONFIGURED_NOT_TESTED: 'Configured — not tested',
   NOT_CONFIGURED: 'Not configured',
@@ -44,9 +47,12 @@ const STATE_LABEL: Record<ConnectorState, string> = {
   UNKNOWN: 'Unknown',
 };
 
-// Only LIVE_OK is green. Failures are red. Everything unproven is neutral grey.
+// Only live probes or accepted current evidence are green. Failures are red.
+// Everything unproven is neutral grey.
 const STATE_CLASS: Record<ConnectorState, string> = {
   LIVE_OK: 'bg-success/15 text-success border-success/40',
+  VALIDATED: 'bg-success/15 text-success border-success/40',
+  VERIFIED_FROM_EVIDENCE: 'bg-success/15 text-success border-success/40',
   CONNECTED_NO_DATA: 'bg-warning/15 text-warning border-warning/40',
   MOCK_ONLY: 'bg-warning/15 text-warning border-warning/40',
   AUTH_FAILED: 'bg-error/15 text-error border-error/40',

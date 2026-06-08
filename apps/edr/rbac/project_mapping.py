@@ -45,10 +45,15 @@ class ProjectMapping:
 
     def allowed_mailboxes(self, project_code: str) -> list[str]:
         entry = self.get(project_code)
+        enabled_sources = set(entry.get("enabled_sources", []))
         email = entry.get("email", {})
         mailboxes: list[str] = list(email.get("shared_mailboxes", []))
         if dc_mb := email.get("document_control_mailbox"):
             mailboxes.append(dc_mb)
+        microsoft_group = entry.get("microsoft", {}).get("group", {})
+        group_mail = microsoft_group.get("mail")
+        if "email" in enabled_sources and microsoft_group.get("mail_enabled") and group_mail:
+            mailboxes.append(group_mail)
         return mailboxes
 
     def allowed_odoo_ids(self, project_code: str) -> list[str]:

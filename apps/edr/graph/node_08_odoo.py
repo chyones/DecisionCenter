@@ -22,9 +22,10 @@ async def run(state: DecisionState) -> DecisionState:
     try:
         mapping = ProjectMapping.load().get(state.project_code)
         odoo_config = mapping.get("odoo", {})
-        # Build the Odoo search domain via json.dumps so project_code values
-        # cannot break out of the JSON literal (e.g. quotes, brackets).
-        domain = json.dumps([["project_external_id", "=", state.project_code]])
+        # Build the Odoo search domain via json.dumps so mapped Odoo ids or
+        # fallback project_code values cannot break out of the JSON literal.
+        odoo_project_id = odoo_config.get("project_external_id") or state.project_code
+        domain = json.dumps([["project_external_id", "=", odoo_project_id]])
         fields = json.dumps(["name", "budget", "actual_cost"])
         # Service-account credentials (database/username/api_key) live in n8n's
         # environment ($env.ODOO_*); they are not transmitted via the webhook

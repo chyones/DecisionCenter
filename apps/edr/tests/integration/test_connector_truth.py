@@ -6,18 +6,24 @@ claims an unavailable or unconfigured dependency is working.**
 Covered:
 - Missing Odoo credentials ⇒ ``NOT_CONFIGURED`` (non-secret var names listed,
   secret presence false, blocks go-live).
-- Missing ownCloud credentials ⇒ ``NOT_CONFIGURED``.
+- ownCloud is intentionally disabled ⇒ ``DISABLED``, blocks_go_live=False,
+  regardless of credential presence.
 - Fixture/mock data can never be ``LIVE_OK`` (it is ``MOCK_ONLY``).
+- Persisted source-mapping evidence can verify SharePoint/Graph/Email without
+  pretending it is a fresh ``LIVE_OK`` probe.
 - A passing core/``/healthz`` probe does NOT imply external connector health.
 - Configured-but-unprobed connectors are ``CONFIGURED_NOT_TESTED``, not green.
 - Missing AI provider keys ⇒ report generation ``BLOCKED`` and never
   ``READY_FOR_UAT``.
 - Endpoint is admin-only; responses carry no credential values (C-6).
+- A real HTTP error response (e.g. 404) from a probe is ``CONNECTED_NO_DATA``,
+  never ``CONFIGURED_NOT_TESTED`` (which implies the probe was never attempted).
 """
 from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -94,12 +100,36 @@ def test_missing_odoo_credentials_is_not_configured(odoo_unconfigured) -> None:
     assert truth.blocks_go_live is True
 
 
-def test_missing_owncloud_credentials_is_not_configured(owncloud_unconfigured) -> None:
+# ---------------------------------------------------------------------------
+# Required: ownCloud is intentionally disabled ⇒ DISABLED, not NOT_CONFIGURED
+# ---------------------------------------------------------------------------
+
+
+def test_owncloud_is_disabled_regardless_of_credentials(owncloud_unconfigured) -> None:
+    # ownCloud disabled=True takes precedence over missing credentials.
     truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["owncloud"], run_probe=False)
-    assert truth.state is cs.ConnectorState.NOT_CONFIGURED
-    assert truth.configured is False
-    assert "OWNCLOUD_USERNAME" in truth.missing_required_config
-    assert truth.blocks_go_live is True
+    assert truth.state is cs.ConnectorState.DISABLED
+    assert truth.blocks_go_live is False
+    assert truth.required_for_go_live is False
+
+
+def test_owncloud_disabled_even_with_credentials_present(monkeypatch) -> None:
+    # Even if someone sets credentials, disabled=True always wins.
+    monkeypatch.setattr(cs.settings, "owncloud_username", "user", raising=False)
+    monkeypatch.setattr(cs.settings, "owncloud_password", "pass", raising=False)
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["owncloud"], run_probe=True)
+    assert truth.state is cs.ConnectorState.DISABLED
+    assert truth.blocks_go_live is False
+
+
+def test_disabled_connector_never_in_blocking_list() -> None:
+    report = cs.build_report(run_probes=False)
+    assert "owncloud" not in report.blocking
+
+
+def test_disabled_connector_missing_config_is_empty() -> None:
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["owncloud"], run_probe=False)
+    assert truth.missing_required_config == []
 
 
 @pytest.fixture
@@ -124,6 +154,160 @@ def _fake_evidence_response(count: int = 3) -> cs.ProbeFacts:
         data_source="live",
         sample_count=count,
         evidence=f"Odoo webhook live: {count} evidence item(s) returned (source_type=odoo)",
+    )
+
+
+@pytest.fixture
+def entra_configured(monkeypatch):
+    monkeypatch.setattr(
+        cs.settings,
+        "entra_client_id",
+        "a2160d26-acc0-4d8c-b815-3a377f1fb5bd",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cs.settings,
+        "entra_tenant_id",
+        "14a72467-3f25-4572-a535-3d5eddb00cc5",
+        raising=False,
+    )
+
+
+def _write_entra_marker(path, *, expires_delta: timedelta, result: str = "PASS") -> None:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "result": result,
+        "validated_at": now.isoformat().replace("+00:00", "Z"),
+        "token_expires_at": (now + expires_delta).isoformat().replace("+00:00", "Z"),
+        "role": "admin",
+        "me_role": "admin",
+        "checks": {
+            "oidc_discovery_ok": True,
+            "jwks_ok": True,
+            "issuer_ok": True,
+            "audience_ok": True,
+            "tenant_ok": True,
+            "expiry_valid": True,
+            "role_present": True,
+            "me_role_ok": True,
+        },
+    }
+    path.write_text(
+        "<!-- connector_truth_entra_validation: "
+        + json.dumps(payload, sort_keys=True)
+        + " -->\n",
+        encoding="utf-8",
+    )
+
+
+def test_fresh_entra_validation_marker_marks_auth_validated(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    marker = tmp_path / "ENTRA_CONNECTOR_TRUTH_REVALIDATION_2026-06-08.md"
+    _write_entra_marker(marker, expires_delta=timedelta(minutes=30))
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+    monkeypatch.setattr(
+        cs,
+        "_probe_entra_oidc_jwks",
+        lambda tenant, ts: cs.ProbeFacts(
+            network_ok=True,
+            live_data_ok=None,
+            data_source="none",
+            evidence="OIDC discovery and JWKS reachable",
+            probed_at=ts,
+            success_at=ts,
+        ),
+    )
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.VALIDATED
+    assert truth.data_source == "evidence"
+    assert truth.auth_ok is True
+    assert truth.permission_ok is True
+    assert truth.live_data_ok is True
+    assert truth.blocks_go_live is False
+    assert "role=admin" in truth.evidence
+
+
+def test_expired_entra_validation_marker_is_not_validated(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    marker = tmp_path / "ENTRA_CONNECTOR_TRUTH_REVALIDATION_2026-06-08.md"
+    _write_entra_marker(marker, expires_delta=timedelta(minutes=-5))
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+    monkeypatch.setattr(
+        cs,
+        "_probe_entra_oidc_jwks",
+        lambda tenant, ts: cs.ProbeFacts(
+            network_ok=True,
+            live_data_ok=None,
+            data_source="none",
+            evidence="OIDC discovery and JWKS reachable",
+            probed_at=ts,
+            success_at=ts,
+        ),
+    )
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.blocks_go_live is True
+    assert truth.state is not cs.ConnectorState.VALIDATED
+
+
+def _verified_source_mapping_rows() -> list[dict[str, Any]]:
+    return [
+        {
+            "project_code": "PRJ-001",
+            "mapping_status": "complete",
+            "enabled_sources": ["email", "odoo", "sharepoint"],
+            "sharepoint": {
+                "site_id": "elrace.sharepoint.com,a505675a-d15d-4981-a6c5-dfafce8e224c,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
+                "drive_id": "b!WmcFpV3RgUmmxd-vzo4iTBv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
+            },
+            "microsoft": {
+                "group": {
+                    "mail": "ConstructionofCivilDefenseCenterinAlMirfaAlDhafraRegion@elrace.com",
+                    "mail_enabled": True,
+                },
+                "group_membership_status": "GROUP_MEMBERS_READ",
+                "member_count": 17,
+                "missing_permissions": [],
+                "blockers": [],
+            },
+        },
+        {
+            "project_code": "PRJ-002",
+            "mapping_status": "complete",
+            "enabled_sources": ["email", "odoo", "sharepoint"],
+            "sharepoint": {
+                "site_id": "elrace.sharepoint.com,52b8cba7-6423-4af7-aded-5de04529abea,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
+                "drive_id": "b!p8u4UiNk90qt7V3gRSmr6hv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
+            },
+            "microsoft": {
+                "group": {
+                    "mail": "ConstructionofCivilDefenseCenterinIndustrialAreaofMadin@elrace.com",
+                    "mail_enabled": True,
+                },
+                "group_membership_status": "GROUP_MEMBERS_READ",
+                "member_count": 18,
+                "missing_permissions": [],
+                "blockers": [],
+            },
+        },
+    ]
+
+
+@pytest.fixture
+def microsoft_connectors_configured(monkeypatch):
+    monkeypatch.setattr(cs.settings, "n8n_base_url", "http://n8n:5678", raising=False)
+    monkeypatch.setattr(cs.settings, "n8n_webhook_token", "tok", raising=False)
+    monkeypatch.setattr(
+        cs.settings, "sharepoint_search_webhook", "/webhook/sharepoint-search", raising=False
+    )
+    monkeypatch.setattr(
+        cs.settings, "email_search_webhook", "/webhook/email-search", raising=False
     )
 
 
@@ -163,6 +347,32 @@ def test_configured_odoo_empty_evidence_is_connected_no_data(odoo_configured, mo
     assert truth.state is cs.ConnectorState.CONNECTED_NO_DATA
     assert truth.live_data_ok is False
     assert truth.blocks_go_live is True
+
+
+def test_odoo_http_error_is_connected_no_data_not_untested(odoo_configured, monkeypatch) -> None:
+    """HTTP error (e.g. 404 webhook-not-found) from n8n must show CONNECTED_NO_DATA.
+
+    Root cause fixed: probe ran and got a real response (network_ok=True) but
+    auth_ok=None (not 401/403). The old _state_from_facts required auth_ok=True
+    for CONNECTED_NO_DATA, so this fell through to CONFIGURED_NOT_TESTED — falsely
+    implying the probe was never attempted. State must reflect what actually happened.
+    """
+    monkeypatch.setattr(
+        cs, "_probe_odoo", lambda: cs.ProbeFacts(
+            network_ok=True,
+            auth_ok=None,
+            live_data_ok=False,
+            data_source="live",
+            evidence="Odoo webhook HTTP 404: HTTPError",
+            last_error_safe="HTTPError",
+        )
+    )
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["odoo"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.CONNECTED_NO_DATA
+    assert truth.state is not cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.blocks_go_live is True
+    assert "404" in truth.evidence
 
 
 def test_configured_odoo_network_failure_is_network_failed(odoo_configured, monkeypatch) -> None:
@@ -248,12 +458,78 @@ def test_fixture_or_mock_data_cannot_be_live_ok(source: str) -> None:
 
 
 def test_live_data_is_required_for_live_ok() -> None:
-    # Reachable but no proven live data → not green.
+    # Reachable but no proven live data (live_data_ok=None) → not green.
     facts = cs.ProbeFacts(network_ok=True, data_source="live", live_data_ok=None)
     assert cs._state_from_facts(facts) is cs.ConnectorState.CONFIGURED_NOT_TESTED
     # Proven live data → green.
     facts_live = cs.ProbeFacts(network_ok=True, live_data_ok=True, data_source="live")
     assert cs._state_from_facts(facts_live) is cs.ConnectorState.LIVE_OK
+
+
+def test_network_ok_with_live_data_ok_none_is_configured_not_tested() -> None:
+    """network_ok=True but live_data_ok=None (probe ran but result is unknown) →
+    CONFIGURED_NOT_TESTED. This covers entra-style probes that can't claim live_data_ok."""
+    facts = cs.ProbeFacts(network_ok=True, live_data_ok=None, data_source="none")
+    assert cs._state_from_facts(facts) is cs.ConnectorState.CONFIGURED_NOT_TESTED
+
+
+def test_evidence_source_is_verified_but_not_live_ok() -> None:
+    """Persisted evidence is accepted only as its own state, never fake LIVE_OK."""
+    facts = cs.ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        evidence="current source mapping evidence",
+    )
+
+    assert cs._state_from_facts(facts) is cs.ConnectorState.VERIFIED_FROM_EVIDENCE
+    assert cs._state_from_facts(facts) is not cs.ConnectorState.LIVE_OK
+
+
+def test_verified_source_mapping_marks_sharepoint_verified(
+    microsoft_connectors_configured, monkeypatch
+) -> None:
+    monkeypatch.setattr(cs, "_source_mapping_rows", _verified_source_mapping_rows)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["sharepoint"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.VERIFIED_FROM_EVIDENCE
+    assert truth.data_source == "evidence"
+    assert truth.sample_count == 2
+    assert truth.blocks_go_live is False
+    assert "PRJ-001" in truth.evidence
+    assert "PRJ-002" in truth.evidence
+
+
+def test_verified_group_membership_marks_graph_email_verified(
+    microsoft_connectors_configured, monkeypatch
+) -> None:
+    monkeypatch.setattr(cs, "_source_mapping_rows", _verified_source_mapping_rows)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["microsoft_graph"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.VERIFIED_FROM_EVIDENCE
+    assert truth.data_source == "evidence"
+    assert truth.sample_count == 35
+    assert truth.blocks_go_live is False
+    assert "17 members" in truth.evidence
+    assert "18 members" in truth.evidence
+
+
+def test_incomplete_group_membership_stays_configured_not_tested(
+    microsoft_connectors_configured, monkeypatch
+) -> None:
+    rows = _verified_source_mapping_rows()
+    rows[0]["microsoft"]["member_count"] = 0
+    monkeypatch.setattr(cs, "_source_mapping_rows", lambda: rows)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["microsoft_graph"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.blocks_go_live is True
+    assert truth.state is not cs.ConnectorState.LIVE_OK
 
 
 # ---------------------------------------------------------------------------

@@ -452,6 +452,9 @@ Example mapping fragment:
 Rules:
 
 - Shared mailbox access MUST be explicit per project.
+- Microsoft 365 group mailboxes MAY authorize Email only when `mailEnabled=true`
+  and a real group `mail` address is verified.
+- Microsoft 365 group members MUST NOT be stored as shared mailboxes.
 - Personal mailbox access MUST be limited to the requesting user, except where formal delegation is recorded.
 - Private and confidential emails MUST be excluded unless project policy explicitly allows them.
 - Search results MUST store excerpts only.
@@ -486,10 +489,31 @@ Example:
     "invoice_model": "account.move",
     "purchase_order_model": "purchase.order"
   },
-  "mailboxes": [
-    "project.prj001@company.com",
-    "documentcontrol@company.com"
-  ],
+  "email": {
+    "shared_mailboxes": [],
+    "document_control_mailbox": ""
+  },
+  "microsoft": {
+    "group": {
+      "id": "group-id",
+      "display_name": "Example Project",
+      "mail": "example-project@company.com",
+      "mail_enabled": true
+    },
+    "group_members": [
+      {
+        "id": "user-id",
+        "display_name": "Verified Member",
+        "mail": "member@company.com",
+        "user_principal_name": "member@company.com",
+        "job_title": "Commercial Manager",
+        "department": "Commercial",
+        "email": "member@company.com"
+      }
+    ],
+    "group_membership_status": "GROUP_MEMBERS_READ",
+    "member_count": 1
+  },
   "contract_numbers": [
     "CON-001"
   ]
@@ -501,6 +525,32 @@ Rules:
 - No project source mapping MUST mean no retrieval.
 - No fallback to global search is allowed.
 - The system MUST NOT guess project folders.
+- `project_code` values such as `PRJ-001` are internal routing codes only.
+- `project_name` MUST come from verified Odoo `project.project.name`, not from
+  SharePoint URL slugs, SharePoint display names, or internal PRJ codes.
+- A mapping MUST NOT be treated as complete when it contains placeholder
+  coordinates such as `example-*`, `example.com`, `/Projects/PRJ-*`, or an
+  internal PRJ code as an Odoo external id.
+- SharePoint can be enabled only with real `site_id` and `drive_id`; Odoo can be
+  enabled only with a real numeric Odoo project id and matching Odoo project
+  name.
+- Email and ownCloud sources MUST remain disabled until a real mailbox/group
+  mailbox or ownCloud coordinates are configured and validated.
+- Email source enablement requires a verified real shared/document-control
+  mailbox or a verified Microsoft 365 group mailbox. Client/consultant/
+  contractor domains are evidence fields and do not by themselves enable Email.
+- Microsoft 365 group discovery MUST check Graph application roles before group
+  or member reads. Missing `GroupMember.Read.All`, `Group.Read.All`,
+  `Directory.Read.All`, or `User.Read.All` MUST produce
+  `SOURCE_MAPPING_EMAIL_GROUP_BLOCKED_NEEDS_GRAPH_PERMISSION_NOT_LIVE`.
+- Microsoft group members MUST be stored under `microsoft.group_members` or
+  related people only. `email.shared_mailboxes` stays empty unless a real shared
+  mailbox is separately verified.
+- Commercial Manager, Finance Owner, and Document Controller MAY be filled from
+  group members only when `jobTitle` or `department` proves the role; otherwise
+  verified members remain in Other.
+- Source mapping enrichment and validation MUST NOT write to Odoo, SharePoint,
+  Microsoft Graph, or user mailboxes.
 - Missing mapping MUST be reported under Missing Data.
 
 ---

@@ -83,8 +83,9 @@ Exit code `0` = PASS, `1` = FAIL (the failing step prints the exact mismatch).
 
 Microsoft Entra stays `CONFIGURED_NOT_TESTED` in
 `GET /admin/connectors/truth` until an operator records a passing run of the
-script above against the live tenant — token validation tooling now exists, but
-the dashboard is only flipped to a live state on real evidence (no false green).
+script above against the live tenant. A current redacted PASS marker in the UAT
+evidence file moves Entra to `VALIDATED` only while the recorded token expiry is
+still in the future. The dashboard never reads or stores the token value.
 
 ## Browser smoke
 

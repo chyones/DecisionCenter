@@ -12,6 +12,7 @@ Covers:
 """
 from __future__ import annotations
 
+import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,7 +21,9 @@ from fastapi import HTTPException
 from apps.edr.admin.odoo_sharepoint_sync import (
     OdooProjectInfo,
     SharePointSiteInfo,
+    _graph_get,
     _match_projects_to_sites,
+    _odoo_read_projects_sync,
     normalize_name,
     run_odoo_sharepoint_sync,
 )
@@ -301,8 +304,10 @@ async def test_sync_endpoint_admin_auto_saves() -> None:
     assert call_kwargs["mapping_status"] == "complete"
     assert call_kwargs["sharepoint"]["site_id"] == "s-abc"
     assert call_kwargs["sharepoint"]["drive_id"] == "d-abc"
-    assert call_kwargs["email"]["shared_mailboxes"] == ["user1@example.com"]
+    assert call_kwargs["email"]["shared_mailboxes"] == []
+    assert call_kwargs["microsoft"]["group_members"] == []
     assert call_kwargs["odoo"]["project_external_id"] == "42"
+    assert call_kwargs["odoo"]["cost_model"] == "account.analytic.line"
     assert call_kwargs["odoo"]["mapping_method"] == "ODOO_MAIN_NAME_EQUALS_SHAREPOINT_SITE_NAME"
 
 
@@ -396,3 +401,75 @@ async def test_sync_result_never_uses_odoo_emails() -> None:
 
     assert result.odoo_emails_used is False
     assert result.odoo_followers_used is False
+
+
+# ---------------------------------------------------------------------------
+# External source read-only invariants
+# ---------------------------------------------------------------------------
+
+
+def test_odoo_xmlrpc_uses_search_read_only() -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakeCommon:
+        def authenticate(
+            self,
+            database: str,
+            username: str,
+            api_key: str,
+            context: dict,
+        ) -> int:
+            assert database == "db"
+            assert username == "user"
+            assert api_key == "key"
+            assert context == {}
+            return 7
+
+    class FakeObject:
+        def execute_kw(
+            self,
+            database: str,
+            uid: int,
+            api_key: str,
+            model: str,
+            method: str,
+            args: list,
+            kwargs: dict,
+        ) -> list[dict[str, object]]:
+            calls.append((model, method))
+            assert database == "db"
+            assert uid == 7
+            assert api_key == "key"
+            assert args == [[["active", "=", True]]]
+            assert kwargs["fields"] == ["id", "name"]
+            assert model == "project.project"
+            assert method == "search_read"
+            return [{"id": 14602, "name": "Construction of Civil Defense building in Al Marfa"}]
+
+    def fake_server_proxy(url: str, allow_none: bool = True) -> FakeCommon | FakeObject:
+        assert allow_none is True
+        if url.endswith("/xmlrpc/2/common"):
+            return FakeCommon()
+        if url.endswith("/xmlrpc/2/object"):
+            return FakeObject()
+        raise AssertionError(url)
+
+    with patch(
+        "apps.edr.admin.odoo_sharepoint_sync.xmlrpc.client.ServerProxy",
+        fake_server_proxy,
+    ):
+        records = _odoo_read_projects_sync("https://odoo.example", "db", "user", "key")
+
+    assert records == [
+        {"id": 14602, "name": "Construction of Civil Defense building in Al Marfa"}
+    ]
+    assert calls == [("project.project", "search_read")]
+
+
+def test_graph_helper_uses_get_only() -> None:
+    source = inspect.getsource(_graph_get)
+    assert ".get(" in source
+    assert ".post(" not in source
+    assert ".put(" not in source
+    assert ".patch(" not in source
+    assert ".delete(" not in source

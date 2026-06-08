@@ -355,11 +355,38 @@ export interface SourceMappingEmail {
   contractor_domains: string[];
 }
 
+export interface SourceMappingMicrosoftGroup {
+  id: string;
+  display_name: string;
+  mail: string;
+  mail_enabled: boolean;
+}
+
+export interface SourceMappingMicrosoftGroupMember {
+  id: string;
+  display_name: string;
+  mail: string;
+  user_principal_name: string;
+  job_title: string;
+  department: string;
+  email: string;
+}
+
+export interface SourceMappingMicrosoft {
+  group: SourceMappingMicrosoftGroup;
+  group_members: SourceMappingMicrosoftGroupMember[];
+  group_membership_status: string;
+  member_count: number;
+  missing_permissions: string[];
+  blockers: string[];
+}
+
 export interface SourceMappingOdoo {
   project_model: string;
   cost_model: string;
   project_external_id: string;
   project_name: string;
+  analytic_account_id: string;
 }
 
 export interface RelatedPeople {
@@ -384,6 +411,7 @@ export interface SourceMappingDetail {
   sharepoint: SourceMappingSharePoint;
   owncloud: SourceMappingOwnCloud;
   email: SourceMappingEmail;
+  microsoft: SourceMappingMicrosoft;
   odoo: SourceMappingOdoo;
   related_people: RelatedPeople;
   enabled_sources: string[];
@@ -407,6 +435,7 @@ export interface SourceMappingUpsertRequest {
   sharepoint: SourceMappingSharePoint;
   owncloud: SourceMappingOwnCloud;
   email: SourceMappingEmail;
+  microsoft: SourceMappingMicrosoft;
   odoo: SourceMappingOdoo;
   related_people: RelatedPeople;
   enabled_sources: string[];
@@ -522,6 +551,8 @@ export type ConnectorState =
   | 'PERMISSION_FAILED'
   | 'NETWORK_FAILED'
   | 'CONNECTED_NO_DATA'
+  | 'VALIDATED'
+  | 'VERIFIED_FROM_EVIDENCE'
   | 'LIVE_OK'
   | 'MOCK_ONLY'
   | 'DISABLED'
@@ -534,7 +565,7 @@ export type ConnectorGroup =
   | 'ai_provider'
   | 'edge';
 
-export type ConnectorDataSource = 'live' | 'mock' | 'fixture' | 'none';
+export type ConnectorDataSource = 'live' | 'evidence' | 'mock' | 'fixture' | 'none';
 export type Readiness = 'READY_FOR_UAT' | 'PARTIAL_READY' | 'NOT_READY';
 export type ReportGeneration = 'READY' | 'DEGRADED' | 'BLOCKED';
 
@@ -680,5 +711,45 @@ export interface OdooSharePointSyncResult {
   unmatched_sharepoint_names: string[];
   odoo_emails_used: boolean;
   odoo_followers_used: boolean;
+  summary: string;
+}
+
+export interface EmailGroup {
+  id: string;
+  display_name: string;
+  mail: string;
+  mail_enabled: boolean;
+}
+
+export interface EmailGroupMember {
+  id: string;
+  display_name: string;
+  mail: string;
+  user_principal_name: string;
+  job_title: string;
+  department: string;
+  email: string;
+}
+
+export interface EmailGroupProjectResult {
+  project_code: string;
+  project_name: string;
+  sharepoint_site_id: string;
+  group_membership_status: string;
+  group: EmailGroup;
+  group_members: EmailGroupMember[];
+  member_count: number;
+  related_people: Record<string, unknown>;
+  email_enabled: boolean;
+  missing_permissions: string[];
+  blockers: string[];
+}
+
+export interface EmailGroupEnrichmentResponse {
+  scanned_at: string;
+  verdict: string;
+  token_roles: string[];
+  missing_permissions: string[];
+  project_results: EmailGroupProjectResult[];
   summary: string;
 }

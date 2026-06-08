@@ -133,6 +133,7 @@ class PostgresStore:
                     sharepoint       JSONB NOT NULL DEFAULT '{}',
                     owncloud         JSONB NOT NULL DEFAULT '{}',
                     email            JSONB NOT NULL DEFAULT '{}',
+                    microsoft        JSONB NOT NULL DEFAULT '{}',
                     odoo             JSONB NOT NULL DEFAULT '{}',
                     related_people   JSONB NOT NULL DEFAULT '{}',
                     enabled_sources  JSONB NOT NULL DEFAULT '[]',
@@ -147,8 +148,15 @@ class PostgresStore:
                 )
                 """
             )
+            await conn.execute(
+                """
+                ALTER TABLE source_mappings
+                ADD COLUMN IF NOT EXISTS microsoft JSONB NOT NULL DEFAULT '{}'
+                """
+            )
             await self._seed_source_mappings(conn)
             await self._migrate_project_names(conn)
+            await self._migrate_verified_prj_source_mappings(conn)
 
     async def insert_audit(
         self,
@@ -787,17 +795,22 @@ class PostgresStore:
             sp = entry.get("sharepoint", {})
             oc = entry.get("owncloud", {})
             em = entry.get("email", {})
+            ms = entry.get("microsoft", {})
             od = entry.get("odoo", {})
+            rp = entry.get("related_people", {})
+            enabled_sources = entry.get(
+                "enabled_sources", ["sharepoint", "owncloud", "email", "odoo"]
+            )
             await conn.execute(
                 """
                 INSERT INTO source_mappings
                     (project_code, project_name, contract_numbers, sharepoint, owncloud,
-                     email, odoo, enabled_sources, mapping_status)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                     email, microsoft, odoo, related_people, enabled_sources, mapping_status)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                 ON CONFLICT (project_code) DO NOTHING
                 """,
                 code,
-                entry.get("display_name") or code,
+                entry.get("project_name") or entry.get("display_name") or code,
                 _json.dumps(entry.get("contract_numbers", [])),
                 _json.dumps({
                     "site_id": sp.get("site_id", ""),
@@ -813,13 +826,29 @@ class PostgresStore:
                     "contractor_domains": [],
                 }),
                 _json.dumps({
+                    "group": ms.get("group", {}),
+                    "group_members": ms.get("group_members", []),
+                    "group_membership_status": ms.get("group_membership_status", ""),
+                    "member_count": ms.get("member_count", len(ms.get("group_members", []))),
+                    "missing_permissions": ms.get("missing_permissions", []),
+                    "blockers": ms.get("blockers", []),
+                }),
+                _json.dumps({
                     "project_model": od.get("project_model", ""),
                     "cost_model": od.get("cost_model", ""),
                     "project_external_id": od.get("project_external_id", ""),
-                    "project_name": "",
+                    "project_name": od.get("project_name", ""),
+                    "analytic_account_id": str(od.get("analytic_account_id", "")),
                 }),
-                _json.dumps(["sharepoint", "owncloud", "email", "odoo"]),
-                "complete",
+                _json.dumps({
+                    "project_manager": rp.get("project_manager", ""),
+                    "commercial_manager": rp.get("commercial_manager", ""),
+                    "finance_owner": rp.get("finance_owner", ""),
+                    "document_controller": rp.get("document_controller", ""),
+                    "other": rp.get("other", []),
+                }),
+                _json.dumps(enabled_sources),
+                entry.get("mapping_status") or "complete",
             )
 
     async def _migrate_project_names(self, conn: Any) -> None:
@@ -847,12 +876,135 @@ class PostgresStore:
                 name,
             )
 
+    async def _migrate_verified_prj_source_mappings(self, conn: Any) -> None:
+        """Idempotently repair the two verified PRJ source mappings.
+
+        These internal PRJ rows were seeded before the real Odoo names, Odoo
+        ids, and SharePoint ids were verified. Keep the rows, but replace the
+        placeholder source coordinates with the verified Odoo + SharePoint
+        truth from docs/config/project_source_mapping.json.
+
+        Columns that hold enriched Microsoft Graph data (microsoft,
+        related_people, enabled_sources, mapping_status,
+        last_validation_result) are preserved when the row already has a real
+        group_membership_status from a completed enrichment run so that a
+        Docker restart does not wipe live data.
+        """
+        import json as _json
+        from pathlib import Path
+
+        json_path = Path(__file__).parents[3] / "docs" / "config" / "project_source_mapping.json"
+        if not json_path.exists():
+            return
+        with open(json_path, encoding="utf-8") as f:
+            entries = _json.load(f)
+
+        for entry in entries:
+            code = entry.get("project_code")
+            if code not in {"PRJ-001", "PRJ-002"}:
+                continue
+
+            sp = entry.get("sharepoint", {})
+            oc = entry.get("owncloud", {})
+            em = entry.get("email", {})
+            ms = entry.get("microsoft", {})
+            od = entry.get("odoo", {})
+            rp = entry.get("related_people", {})
+            enabled_sources = entry.get("enabled_sources", ["sharepoint", "odoo"])
+            project_name = entry.get("project_name") or entry.get("display_name") or ""
+
+            await conn.execute(
+                """
+                UPDATE source_mappings
+                SET project_name = $2,
+                    contract_numbers = $3,
+                    sharepoint = $4,
+                    owncloud = $5,
+                    email = $6,
+                    microsoft = CASE
+                        WHEN COALESCE(microsoft->>'group_membership_status','') = ANY(
+                            ARRAY['GROUP_MEMBERS_READ','GROUP_FOUND_NO_MEMBERS','GROUP_FOUND_NO_MAILBOX']
+                        ) THEN microsoft
+                        ELSE $7::jsonb
+                    END,
+                    odoo = $8,
+                    related_people = CASE
+                        WHEN COALESCE(microsoft->>'group_membership_status','') = ANY(
+                            ARRAY['GROUP_MEMBERS_READ','GROUP_FOUND_NO_MEMBERS','GROUP_FOUND_NO_MAILBOX']
+                        ) THEN related_people
+                        ELSE $9::jsonb
+                    END,
+                    enabled_sources = CASE
+                        WHEN COALESCE(microsoft->>'group_membership_status','') = ANY(
+                            ARRAY['GROUP_MEMBERS_READ','GROUP_FOUND_NO_MEMBERS','GROUP_FOUND_NO_MAILBOX']
+                        ) THEN enabled_sources
+                        ELSE $10::jsonb
+                    END,
+                    mapping_status = CASE
+                        WHEN COALESCE(microsoft->>'group_membership_status','') = ANY(
+                            ARRAY['GROUP_MEMBERS_READ','GROUP_FOUND_NO_MEMBERS','GROUP_FOUND_NO_MAILBOX']
+                        ) THEN mapping_status
+                        ELSE $11
+                    END,
+                    last_validation_result = CASE
+                        WHEN COALESCE(microsoft->>'group_membership_status','') = ANY(
+                            ARRAY['GROUP_MEMBERS_READ','GROUP_FOUND_NO_MEMBERS','GROUP_FOUND_NO_MAILBOX']
+                        ) THEN last_validation_result
+                        ELSE $12::jsonb
+                    END,
+                    last_validated_at = NOW(),
+                    updated_at = NOW()
+                WHERE project_code = $1
+                """,
+                code,
+                project_name,
+                _json.dumps(entry.get("contract_numbers", [])),
+                _json.dumps({
+                    "site_id": sp.get("site_id", ""),
+                    "drive_id": sp.get("drive_id", ""),
+                    "root_path": sp.get("root_path", ""),
+                }),
+                _json.dumps({"base_path": oc.get("base_path", "")}),
+                _json.dumps({
+                    "shared_mailboxes": em.get("shared_mailboxes", []),
+                    "document_control_mailbox": em.get("document_control_mailbox", ""),
+                    "client_domains": em.get("client_domains", []),
+                    "consultant_domains": em.get("consultant_domains", []),
+                    "contractor_domains": em.get("contractor_domains", []),
+                }),
+                _json.dumps({
+                    "group": ms.get("group", {}),
+                    "group_members": ms.get("group_members", []),
+                    "group_membership_status": ms.get("group_membership_status", ""),
+                    "member_count": ms.get("member_count", len(ms.get("group_members", []))),
+                    "missing_permissions": ms.get("missing_permissions", []),
+                    "blockers": ms.get("blockers", []),
+                }),
+                _json.dumps({
+                    "project_model": od.get("project_model", ""),
+                    "cost_model": od.get("cost_model", ""),
+                    "project_external_id": od.get("project_external_id", ""),
+                    "project_name": od.get("project_name", ""),
+                    "analytic_account_id": str(od.get("analytic_account_id", "")),
+                }),
+                _json.dumps({
+                    "project_manager": rp.get("project_manager", ""),
+                    "commercial_manager": rp.get("commercial_manager", ""),
+                    "finance_owner": rp.get("finance_owner", ""),
+                    "document_controller": rp.get("document_controller", ""),
+                    "other": rp.get("other", []),
+                }),
+                _json.dumps(enabled_sources),
+                entry.get("mapping_status") or "complete",
+                _json.dumps({"status": entry.get("mapping_status") or "complete", "errors": []}),
+            )
+
     async def list_source_mappings(self) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT project_code, project_name, mapping_status, contract_numbers
+                SELECT *
                 FROM source_mappings ORDER BY project_code ASC
                 """
             )
@@ -884,6 +1036,7 @@ class PostgresStore:
         sharepoint: dict,
         owncloud: dict,
         email: dict,
+        microsoft: dict,
         odoo: dict,
         related_people: dict,
         enabled_sources: list,
@@ -899,16 +1052,17 @@ class PostgresStore:
                 """
                 INSERT INTO source_mappings
                     (project_code, project_name, contract_numbers, sharepoint,
-                     owncloud, email, odoo, related_people, enabled_sources,
+                     owncloud, email, microsoft, odoo, related_people, enabled_sources,
                      allowed_roles, mapping_status, updated_at, updated_by_hash,
                      created_by_hash)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13,$13)
                 ON CONFLICT (project_code) DO UPDATE SET
                     project_name     = EXCLUDED.project_name,
                     contract_numbers = EXCLUDED.contract_numbers,
                     sharepoint       = EXCLUDED.sharepoint,
                     owncloud         = EXCLUDED.owncloud,
                     email            = EXCLUDED.email,
+                    microsoft        = EXCLUDED.microsoft,
                     odoo             = EXCLUDED.odoo,
                     related_people   = EXCLUDED.related_people,
                     enabled_sources  = EXCLUDED.enabled_sources,
@@ -923,6 +1077,7 @@ class PostgresStore:
                 _json.dumps(sharepoint),
                 _json.dumps(owncloud),
                 _json.dumps(email),
+                _json.dumps(microsoft or {}),
                 _json.dumps(odoo),
                 _json.dumps(related_people),
                 _json.dumps(enabled_sources),

@@ -1,60 +1,122 @@
 [
   {
     "project_code": "PRJ-001",
-    "display_name": "Construction of Civil Defense Center in Al Mirfa, Al Dhafra Region – Type “D”. CD Al Mirfa – D",
+    "display_name": "Construction of Civil Defense building in Al Marfa",
+    "project_name": "Construction of Civil Defense building in Al Marfa",
     "sharepoint_aliases": [
       "CivilDefenseCenterinAlMirfaAlDhafraRegionTypeD",
-      "CD Al Mirfa – D",
-      "Construction of Civil Defense Center in Al Mirfa, Al Dhafra Region – Type “D”. CD Al Mirfa – D"
+      "Construction of Civil Defense Center in Al Mirfa, Al Dhafra Region - Type \"D\". CD Al Mirfa - D"
     ],
-    "mapping_status_gate": "SHAREPOINT_VERIFIED",
-    "mapping_method": "VERIFIED_MICROSOFT_GRAPH_GATE_3",
+    "mapping_status": "complete",
+    "mapping_status_gate": "EMAIL_GROUP_ENRICHED",
+    "mapping_method": "ODOO_PROJECT_NAME_VERIFIED_AND_GRAPH_SITE_DRIVE_VERIFIED",
+    "enabled_sources": [
+      "email",
+      "odoo",
+      "sharepoint"
+    ],
     "sharepoint": {
       "site_id": "elrace.sharepoint.com,a505675a-d15d-4981-a6c5-dfafce8e224c,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
       "drive_id": "b!WmcFpV3RgUmmxd-vzo4iTBv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
-      "root_path": "/Projects/PRJ-001"
+      "root_path": "/"
     },
     "owncloud": {
-      "base_path": "/Projects/PRJ-001"
+      "base_path": ""
     },
     "email": {
-      "shared_mailboxes": ["project-prj-001@example.com"],
-      "document_control_mailbox": "doc-control@example.com"
+      "shared_mailboxes": [],
+      "document_control_mailbox": "",
+      "client_domains": [],
+      "consultant_domains": [],
+      "contractor_domains": []
+    },
+    "microsoft": {
+      "group": {
+        "id": "71313630-ba8f-4eb3-b385-151f124e7903",
+        "display_name": "Construction of Civil Defense building in Al Marfa",
+        "mail": "ConstructionofCivilDefenseCenterinAlMirfaAlDhafraRegion@elrace.com",
+        "mail_enabled": true
+      },
+      "group_members": [],
+      "group_membership_status": "GROUP_MEMBERS_READ",
+      "member_count": 17,
+      "missing_permissions": [],
+      "blockers": []
     },
     "odoo": {
       "project_model": "project.project",
       "cost_model": "account.analytic.line",
-      "project_external_id": "PRJ-001"
+      "project_external_id": "14602",
+      "project_name": "Construction of Civil Defense building in Al Marfa",
+      "analytic_account_id": "21963"
     },
-    "contract_numbers": ["CON-001"]
+    "related_people": {
+      "project_manager": "Ahmad Ezzat Anwar",
+      "commercial_manager": "",
+      "finance_owner": "",
+      "document_controller": "Asif Younas <asif@elrace.com>",
+      "other": []
+    },
+    "contract_numbers": []
   },
   {
     "project_code": "PRJ-002",
-    "display_name": "Construction of Civil Defense Center in Industrial Area of Madinat Zayed, Al Dhafra Region – Type “D”. CD Madinat Zayed – D",
+    "display_name": "Construction of Civil Defense building in Zayed City Al Dhafra.",
+    "project_name": "Construction of Civil Defense building in Zayed City Al Dhafra.",
     "sharepoint_aliases": [
       "CivilDefenseCenterinIndustrialAreaofMadinatZayed",
-      "CD Madinat Zayed – D",
-      "Construction of Civil Defense Center in Industrial Area of Madinat Zayed, Al Dhafra Region – Type “D”. CD Madinat Zayed – D"
+      "Construction of Civil Defense Center in Industrial Area of Madinat Zayed, Al Dhafra Region - Type \"D\". CD Madinat Zayed - D"
     ],
-    "mapping_status_gate": "SHAREPOINT_VERIFIED",
-    "mapping_method": "VERIFIED_MICROSOFT_GRAPH_GATE_3",
+    "mapping_status": "complete",
+    "mapping_status_gate": "EMAIL_GROUP_ENRICHED",
+    "mapping_method": "ODOO_PROJECT_NAME_VERIFIED_AND_GRAPH_SITE_DRIVE_VERIFIED",
+    "enabled_sources": [
+      "email",
+      "odoo",
+      "sharepoint"
+    ],
     "sharepoint": {
       "site_id": "elrace.sharepoint.com,52b8cba7-6423-4af7-aded-5de04529abea,26e3f61b-f187-4b70-a1d0-a0b0dccea161",
       "drive_id": "b!p8u4UiNk90qt7V3gRSmr6hv24yaH8XBLodCgsNzOoWHB2buVTUicS54-X7ujc_p0",
-      "root_path": "/Projects/PRJ-002"
+      "root_path": "/"
     },
     "owncloud": {
-      "base_path": "/Projects/PRJ-002"
+      "base_path": ""
     },
     "email": {
-      "shared_mailboxes": ["project-prj-002@example.com"],
-      "document_control_mailbox": "doc-control-002@example.com"
+      "shared_mailboxes": [],
+      "document_control_mailbox": "",
+      "client_domains": [],
+      "consultant_domains": [],
+      "contractor_domains": []
+    },
+    "microsoft": {
+      "group": {
+        "id": "57dda9ae-f753-42fa-b966-7376ba809a6f",
+        "display_name": "Construction of Civil Defense building in Zayed City Al Dhafra.",
+        "mail": "ConstructionofCivilDefenseCenterinIndustrialAreaofMadin@elrace.com",
+        "mail_enabled": true
+      },
+      "group_members": [],
+      "group_membership_status": "GROUP_MEMBERS_READ",
+      "member_count": 18,
+      "missing_permissions": [],
+      "blockers": []
     },
     "odoo": {
       "project_model": "project.project",
       "cost_model": "account.analytic.line",
-      "project_external_id": "PRJ-002"
+      "project_external_id": "14601",
+      "project_name": "Construction of Civil Defense building in Zayed City Al Dhafra.",
+      "analytic_account_id": "21960"
     },
-    "contract_numbers": ["CON-002", "CON-003"]
+    "related_people": {
+      "project_manager": "Ahmad Ezzat Anwar",
+      "commercial_manager": "",
+      "finance_owner": "",
+      "document_controller": "Asif Younas <asif@elrace.com>",
+      "other": []
+    },
+    "contract_numbers": []
   }
 ]

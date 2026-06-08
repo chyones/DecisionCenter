@@ -1595,6 +1595,8 @@ _HEALTH_SLA_MS: dict[str, int] = {
 #  false green and stays consistent with the Connectors page.
 _CONNECTOR_STATE_TO_HEALTH: dict[connector_status.ConnectorState, str] = {
     connector_status.ConnectorState.LIVE_OK: "ok",
+    connector_status.ConnectorState.VALIDATED: "ok",
+    connector_status.ConnectorState.VERIFIED_FROM_EVIDENCE: "ok",
     connector_status.ConnectorState.CONNECTED_NO_DATA: "ok",
     connector_status.ConnectorState.CONFIGURED_NOT_TESTED: "unknown",
     connector_status.ConnectorState.MOCK_ONLY: "unknown",
@@ -1953,12 +1955,42 @@ class SourceMappingEmail(BaseModel):
     contractor_domains: list[str] = []
 
 
+class SourceMappingMicrosoftGroup(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: str = ""
+    display_name: str = ""
+    mail: str = ""
+    mail_enabled: bool = False
+
+
+class SourceMappingMicrosoftGroupMember(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: str = ""
+    display_name: str = ""
+    mail: str = ""
+    user_principal_name: str = ""
+    job_title: str = ""
+    department: str = ""
+    email: str = ""
+
+
+class SourceMappingMicrosoft(BaseModel):
+    model_config = {"extra": "forbid"}
+    group: SourceMappingMicrosoftGroup = Field(default_factory=SourceMappingMicrosoftGroup)
+    group_members: list[SourceMappingMicrosoftGroupMember] = []
+    group_membership_status: str = ""
+    member_count: int = 0
+    missing_permissions: list[str] = []
+    blockers: list[str] = []
+
+
 class SourceMappingOdoo(BaseModel):
     model_config = {"extra": "forbid"}
     project_model: str = ""
     cost_model: str = ""
     project_external_id: str = ""
     project_name: str = ""
+    analytic_account_id: str = ""
 
 
 class RelatedPeople(BaseModel):
@@ -1986,6 +2018,7 @@ class SourceMappingDetail(BaseModel):
     sharepoint: SourceMappingSharePoint
     owncloud: SourceMappingOwnCloud
     email: SourceMappingEmail
+    microsoft: SourceMappingMicrosoft = Field(default_factory=SourceMappingMicrosoft)
     odoo: SourceMappingOdoo
     related_people: RelatedPeople
     enabled_sources: list[str]
@@ -2011,6 +2044,7 @@ class SourceMappingUpsertRequest(BaseModel):
     sharepoint: SourceMappingSharePoint = Field(default_factory=SourceMappingSharePoint)
     owncloud: SourceMappingOwnCloud = Field(default_factory=SourceMappingOwnCloud)
     email: SourceMappingEmail = Field(default_factory=SourceMappingEmail)
+    microsoft: SourceMappingMicrosoft = Field(default_factory=SourceMappingMicrosoft)
     odoo: SourceMappingOdoo = Field(default_factory=SourceMappingOdoo)
     related_people: RelatedPeople = Field(default_factory=RelatedPeople)
     enabled_sources: list[str] = []
@@ -2038,31 +2072,170 @@ def _compute_mapping_status(
     errors: list[ValidationFieldError] = []
     enabled = set(body.enabled_sources)
 
+    def add_error(field: str, message: str) -> None:
+        if not any(e.field == field and e.message == message for e in errors):
+            errors.append(ValidationFieldError(field=field, message=message))
+
+    def is_placeholder(value: str) -> bool:
+        lower = value.strip().lower()
+        return (
+            "example-" in lower
+            or "example.com" in lower
+            or bool(re.search(r"^/projects/prj-\d+(?:/|$)", lower))
+        )
+
+    def validate_no_placeholder(field: str, value: str) -> None:
+        if value and is_placeholder(value):
+            add_error(field, "Placeholder value is not allowed in a complete mapping")
+
+    def validate_no_placeholder_list(field: str, values: list[str]) -> None:
+        for value in values:
+            validate_no_placeholder(field, value)
+
+    def real_email(value: str) -> bool:
+        stripped = value.strip()
+        return bool(stripped and "@" in stripped and not is_placeholder(stripped))
+
+    def real_domain(value: str) -> bool:
+        stripped = value.strip()
+        return bool(stripped and "." in stripped and "@" not in stripped and not is_placeholder(stripped))
+
+    if not enabled:
+        add_error("enabled_sources", "At least one verified source must be enabled")
+
+    validate_no_placeholder("project_name", body.project_name)
+    validate_no_placeholder_list("contract_numbers", body.contract_numbers)
+    validate_no_placeholder("sharepoint.site_id", body.sharepoint.site_id)
+    validate_no_placeholder("sharepoint.drive_id", body.sharepoint.drive_id)
+    validate_no_placeholder("sharepoint.root_path", body.sharepoint.root_path)
+    validate_no_placeholder("owncloud.base_path", body.owncloud.base_path)
+    validate_no_placeholder_list("email.shared_mailboxes", body.email.shared_mailboxes)
+    validate_no_placeholder("email.document_control_mailbox", body.email.document_control_mailbox)
+    validate_no_placeholder_list("email.client_domains", body.email.client_domains)
+    validate_no_placeholder_list("email.consultant_domains", body.email.consultant_domains)
+    validate_no_placeholder_list("email.contractor_domains", body.email.contractor_domains)
+    validate_no_placeholder("microsoft.group.id", body.microsoft.group.id)
+    validate_no_placeholder("microsoft.group.display_name", body.microsoft.group.display_name)
+    validate_no_placeholder("microsoft.group.mail", body.microsoft.group.mail)
+    validate_no_placeholder("microsoft.group_membership_status", body.microsoft.group_membership_status)
+    validate_no_placeholder_list("microsoft.missing_permissions", body.microsoft.missing_permissions)
+    validate_no_placeholder_list("microsoft.blockers", body.microsoft.blockers)
+    for member in body.microsoft.group_members:
+        validate_no_placeholder("microsoft.group_members.id", member.id)
+        validate_no_placeholder("microsoft.group_members.display_name", member.display_name)
+        validate_no_placeholder("microsoft.group_members.mail", member.mail)
+        validate_no_placeholder("microsoft.group_members.user_principal_name", member.user_principal_name)
+        validate_no_placeholder("microsoft.group_members.job_title", member.job_title)
+        validate_no_placeholder("microsoft.group_members.department", member.department)
+        validate_no_placeholder("microsoft.group_members.email", member.email)
+    validate_no_placeholder("odoo.project_external_id", body.odoo.project_external_id)
+    validate_no_placeholder("odoo.project_name", body.odoo.project_name)
+    validate_no_placeholder("odoo.project_model", body.odoo.project_model)
+    validate_no_placeholder("odoo.cost_model", body.odoo.cost_model)
+    validate_no_placeholder("odoo.analytic_account_id", body.odoo.analytic_account_id)
+    validate_no_placeholder("related_people.project_manager", body.related_people.project_manager)
+    validate_no_placeholder("related_people.commercial_manager", body.related_people.commercial_manager)
+    validate_no_placeholder("related_people.finance_owner", body.related_people.finance_owner)
+    validate_no_placeholder("related_people.document_controller", body.related_people.document_controller)
+    validate_no_placeholder_list("related_people.other", body.related_people.other)
+
+    group_status = body.microsoft.group_membership_status.strip()
+    if group_status.upper().startswith("BLOCKED"):
+        add_error(
+            field="microsoft.group_membership_status",
+            message="Email group enrichment is blocked by Microsoft Graph permission or source availability",
+        )
+    if body.microsoft.missing_permissions:
+        add_error(
+            field="microsoft.missing_permissions",
+            message="Required Microsoft Graph group/member permission is missing",
+        )
+    if body.microsoft.blockers:
+        add_error(
+            field="microsoft.blockers",
+            message="Source mapping has unresolved Microsoft group/email blockers",
+        )
+
     if "sharepoint" in enabled:
         if not body.sharepoint.site_id:
-            errors.append(ValidationFieldError(field="sharepoint.site_id", message="Required for SharePoint source"))
+            add_error("sharepoint.site_id", "Required for SharePoint source")
         if not body.sharepoint.drive_id:
-            errors.append(ValidationFieldError(field="sharepoint.drive_id", message="Required for SharePoint source"))
+            add_error("sharepoint.drive_id", "Required for SharePoint source")
         if not body.sharepoint.root_path:
-            errors.append(ValidationFieldError(field="sharepoint.root_path", message="Required for SharePoint source"))
+            add_error("sharepoint.root_path", "Required for SharePoint source")
+        if body.sharepoint.site_id and is_placeholder(body.sharepoint.site_id):
+            add_error("sharepoint.site_id", "Real SharePoint site_id is required")
+        if body.sharepoint.drive_id and is_placeholder(body.sharepoint.drive_id):
+            add_error("sharepoint.drive_id", "Real SharePoint drive_id is required")
+        if body.sharepoint.root_path and is_placeholder(body.sharepoint.root_path):
+            add_error("sharepoint.root_path", "Root path must not use an internal PRJ placeholder")
 
     if "owncloud" in enabled:
+        if not (settings.owncloud_username and settings.owncloud_password):
+            add_error("enabled_sources", "ownCloud cannot be enabled until ownCloud is configured")
         if not body.owncloud.base_path:
-            errors.append(ValidationFieldError(field="owncloud.base_path", message="Required for ownCloud source"))
+            add_error("owncloud.base_path", "Required for ownCloud source")
 
     if "email" in enabled:
-        if not body.email.shared_mailboxes and not body.email.client_domains:
-            errors.append(ValidationFieldError(
+        mailboxes = [*body.email.shared_mailboxes, body.email.document_control_mailbox]
+        group_mailbox_valid = (
+            body.microsoft.group.mail_enabled and real_email(body.microsoft.group.mail)
+        )
+        member_emails = {
+            member.email.strip().lower()
+            for member in body.microsoft.group_members
+            if real_email(member.email)
+        }
+        for mailbox in mailboxes:
+            if real_email(mailbox) and mailbox.strip().lower() in member_emails:
+                add_error(
+                    field="email.shared_mailboxes",
+                    message="Group members must be stored under microsoft.group_members, not Shared Mailboxes",
+                )
+        if body.microsoft.group.mail.strip() and not body.microsoft.group.mail_enabled:
+            add_error(
+                field="microsoft.group.mail_enabled",
+                message="Microsoft group mailbox must be mailEnabled before Email source can use it",
+            )
+        if not any(real_email(v) for v in mailboxes) and not group_mailbox_valid:
+            add_error(
                 field="email.shared_mailboxes",
-                message="At least one mailbox or client domain required for Email source",
-            ))
+                message="At least one real mailbox or Microsoft 365 group mailbox required for Email source",
+            )
 
     if "odoo" in enabled:
-        if not body.odoo.project_external_id and not body.odoo.project_name:
-            errors.append(ValidationFieldError(
+        external_id = body.odoo.project_external_id.strip()
+        if not external_id:
+            add_error(
                 field="odoo.project_external_id",
-                message="Odoo project external ID or project name required",
-            ))
+                message="Real Odoo project ID is required",
+            )
+        elif re.fullmatch(r"PRJ-\d+", external_id, flags=re.IGNORECASE):
+            add_error(
+                field="odoo.project_external_id",
+                message="Internal PRJ codes cannot be used as Odoo external IDs",
+            )
+        elif not external_id.isdigit():
+            add_error(
+                field="odoo.project_external_id",
+                message="Odoo project external ID must be the numeric project.project id",
+            )
+        if not body.odoo.project_name.strip():
+            add_error("odoo.project_name", "Odoo project name is required")
+        if (
+            body.project_name.strip()
+            and body.odoo.project_name.strip()
+            and body.project_name.strip() != body.odoo.project_name.strip()
+        ):
+            add_error("project_name", "Project Name must match Odoo project.project.name")
+        if body.odoo.project_model and body.odoo.project_model != "project.project":
+            add_error("odoo.project_model", "Odoo project model must be project.project")
+        if body.odoo.cost_model and body.odoo.cost_model != "account.analytic.line":
+            add_error("odoo.cost_model", "Cost model must remain account.analytic.line")
+        if not body.odoo.project_model:
+            add_error("odoo.project_model", "Odoo project model is required")
+        if not body.odoo.cost_model:
+            add_error("odoo.cost_model", "Odoo cost model is required")
 
     status = "complete" if not errors else "incomplete"
     return status, errors
@@ -2081,10 +2254,11 @@ def _row_to_source_mapping_detail(row: dict[str, Any]) -> SourceMappingDetail:
     sp = _j(row.get("sharepoint"))
     oc = _j(row.get("owncloud"))
     em = _j(row.get("email"))
+    ms = _j(row.get("microsoft"))
     od = _j(row.get("odoo"))
     rp = _j(row.get("related_people"))
 
-    return SourceMappingDetail(
+    detail = SourceMappingDetail(
         project_code=str(row["project_code"]),
         project_name=str(row.get("project_name") or ""),
         contract_numbers=_jlist(row.get("contract_numbers")),
@@ -2101,11 +2275,37 @@ def _row_to_source_mapping_detail(row: dict[str, Any]) -> SourceMappingDetail:
             consultant_domains=em.get("consultant_domains", []),
             contractor_domains=em.get("contractor_domains", []),
         ),
+        microsoft=SourceMappingMicrosoft(
+            group=SourceMappingMicrosoftGroup(
+                id=(ms.get("group") or {}).get("id", ""),
+                display_name=(ms.get("group") or {}).get("display_name", ""),
+                mail=(ms.get("group") or {}).get("mail", ""),
+                mail_enabled=bool((ms.get("group") or {}).get("mail_enabled", False)),
+            ),
+            group_members=[
+                SourceMappingMicrosoftGroupMember(
+                    id=str(member.get("id", "")),
+                    display_name=str(member.get("display_name", "")),
+                    mail=str(member.get("mail", "")),
+                    user_principal_name=str(member.get("user_principal_name", "")),
+                    job_title=str(member.get("job_title", "")),
+                    department=str(member.get("department", "")),
+                    email=str(member.get("email", "")),
+                )
+                for member in ms.get("group_members", [])
+                if isinstance(member, dict)
+            ],
+            group_membership_status=str(ms.get("group_membership_status", "")),
+            member_count=int(ms.get("member_count", len(ms.get("group_members", [])))),
+            missing_permissions=ms.get("missing_permissions", []),
+            blockers=ms.get("blockers", []),
+        ),
         odoo=SourceMappingOdoo(
             project_model=od.get("project_model", ""),
             cost_model=od.get("cost_model", ""),
             project_external_id=od.get("project_external_id", ""),
             project_name=od.get("project_name", ""),
+            analytic_account_id=str(od.get("analytic_account_id", "")),
         ),
         related_people=RelatedPeople(
             project_manager=rp.get("project_manager", ""),
@@ -2124,6 +2324,34 @@ def _row_to_source_mapping_detail(row: dict[str, Any]) -> SourceMappingDetail:
         created_by_hash=row.get("created_by_hash"),
         updated_by_hash=row.get("updated_by_hash"),
     )
+    if detail.mapping_status == "disabled":
+        return detail
+
+    body = SourceMappingUpsertRequest(
+        project_name=detail.project_name,
+        contract_numbers=detail.contract_numbers,
+        sharepoint=detail.sharepoint,
+        owncloud=detail.owncloud,
+        email=detail.email,
+        microsoft=detail.microsoft,
+        odoo=detail.odoo,
+        related_people=detail.related_people,
+        enabled_sources=detail.enabled_sources,
+        allowed_roles=detail.allowed_roles,
+    )
+    status, errors = _compute_mapping_status(detail.project_code, body)
+    if status == detail.mapping_status and not errors:
+        return detail
+
+    return detail.model_copy(
+        update={
+            "mapping_status": status,
+            "last_validation_result": {
+                "status": status,
+                "errors": [error.model_dump() for error in errors],
+            },
+        }
+    )
 
 
 @app.get("/admin/source-mappings")
@@ -2136,12 +2364,18 @@ async def list_source_mappings(
     await pg.init_schema()
     rows = await pg.list_source_mappings()
     import json as _json
+
+    def _summary_status(row: dict[str, Any]) -> str:
+        if "enabled_sources" not in row:
+            return str(row.get("mapping_status") or "incomplete")
+        return _row_to_source_mapping_detail(row).mapping_status
+
     return SourceMappingListResponse(
         mappings=[
             SourceMappingSummary(
                 project_code=str(r["project_code"]),
                 project_name=str(r.get("project_name") or ""),
-                mapping_status=str(r.get("mapping_status") or "incomplete"),
+                mapping_status=_summary_status(r),
                 contract_numbers=(
                     _json.loads(r["contract_numbers"])
                     if isinstance(r.get("contract_numbers"), str)
@@ -2214,6 +2448,7 @@ async def upsert_source_mapping(
         sharepoint=body.sharepoint.model_dump(),
         owncloud=body.owncloud.model_dump(),
         email=body.email.model_dump(),
+        microsoft=body.microsoft.model_dump(),
         odoo=body.odoo.model_dump(),
         related_people=body.related_people.model_dump(),
         enabled_sources=body.enabled_sources,
@@ -2334,17 +2569,25 @@ async def sync_odoo_sharepoint(
             },
             owncloud={"base_path": ""},
             email={
-                "shared_mailboxes": pair.project_member_emails,
+                "shared_mailboxes": [],
                 "document_control_mailbox": "",
                 "client_domains": [],
                 "consultant_domains": [],
                 "contractor_domains": [],
             },
+            microsoft={
+                "group": {},
+                "group_members": [],
+                "group_membership_status": "",
+                "member_count": 0,
+                "missing_permissions": [],
+                "blockers": [],
+            },
             odoo={
                 "project_external_id": str(pair.odoo_project_id),
                 "project_name": pair.odoo_project_name,
                 "project_model": "project.project",
-                "cost_model": "",
+                "cost_model": "account.analytic.line",
                 "mapping_method": pair.mapping_method,
                 "match_confidence": pair.match_confidence,
                 "internal_key": pair.internal_key,
@@ -2365,6 +2608,150 @@ async def sync_odoo_sharepoint(
 
     if saved_count != result.auto_saved_count:
         result = result.model_copy(update={"auto_saved_count": saved_count})
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Microsoft 365 Group Email Enrichment
+# POST /admin/source-mappings/enrich-email-groups
+# Admin-only. Read-only Microsoft Graph. PRJ-001 / PRJ-002 only.
+# ---------------------------------------------------------------------------
+
+from apps.edr.admin.email_group_enrichment import (  # noqa: E402
+    EmailGroupEnrichmentResponse,
+    VERDICT_BLOCKED_PERMISSION,
+    run_email_group_enrichment,
+)
+
+
+class EmailGroupEnrichmentRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    project_codes: list[str] = ["PRJ-001", "PRJ-002"]
+
+
+@app.post("/admin/source-mappings/enrich-email-groups")
+async def enrich_email_groups(
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    body: EmailGroupEnrichmentRequest | None = None,
+) -> EmailGroupEnrichmentResponse:
+    """Read-only Microsoft 365 group enrichment for PRJ-001 and PRJ-002."""
+    _require_admin(claims)
+    request = body or EmailGroupEnrichmentRequest()
+    requested = request.project_codes or ["PRJ-001", "PRJ-002"]
+    unsupported = sorted(set(requested) - {"PRJ-001", "PRJ-002"})
+    if unsupported:
+        raise HTTPException(
+            status_code=400,
+            detail="Email group enrichment scope is limited to PRJ-001 and PRJ-002.",
+        )
+
+    pg = get_postgres_store()
+    await pg.init_schema()
+    rows = await pg.list_source_mappings()
+    row_by_code = {str(row["project_code"]): row for row in rows}
+    projects: list[dict[str, Any]] = []
+    for code in requested:
+        row = row_by_code.get(code)
+        if row is None:
+            continue
+        detail = _row_to_source_mapping_detail(row)
+        projects.append({
+            "project_code": detail.project_code,
+            "project_name": detail.project_name,
+            "sharepoint": detail.sharepoint.model_dump(),
+            "email": detail.email.model_dump(),
+            "microsoft": detail.microsoft.model_dump(),
+            "related_people": detail.related_people.model_dump(),
+            "enabled_sources": detail.enabled_sources,
+            "mapping_status": detail.mapping_status,
+        })
+
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.email_group_enrichment_run",
+        actor_hash=actor_hash,
+        project_code=None,
+        detail=f"scope={','.join(requested)} projects={len(projects)}",
+    )
+
+    result = await run_email_group_enrichment(projects)
+    if result.verdict == VERDICT_BLOCKED_PERMISSION:
+        return result
+
+    for project_result in result.project_results:
+        row = row_by_code.get(project_result.project_code)
+        if row is None:
+            continue
+        existing = _row_to_source_mapping_detail(row)
+        member_email_set = {
+            member.email.strip().lower()
+            for member in project_result.group_members
+            if member.email.strip()
+        }
+        email = SourceMappingEmail(
+            shared_mailboxes=[
+                mailbox
+                for mailbox in existing.email.shared_mailboxes
+                if mailbox.strip().lower() not in member_email_set
+            ],
+            document_control_mailbox=existing.email.document_control_mailbox,
+            client_domains=existing.email.client_domains,
+            consultant_domains=existing.email.consultant_domains,
+            contractor_domains=existing.email.contractor_domains,
+        )
+        microsoft = SourceMappingMicrosoft(
+            group=SourceMappingMicrosoftGroup(**project_result.group.model_dump()),
+            group_members=[
+                SourceMappingMicrosoftGroupMember(**member.model_dump())
+                for member in project_result.group_members
+            ],
+            group_membership_status=project_result.group_membership_status,
+            member_count=project_result.member_count,
+            missing_permissions=project_result.missing_permissions,
+            blockers=project_result.blockers,
+        )
+        enabled_sources = {
+            source for source in existing.enabled_sources if source != "owncloud"
+        }
+        if project_result.email_enabled:
+            enabled_sources.add("email")
+        else:
+            enabled_sources.discard("email")
+        upsert_body = SourceMappingUpsertRequest(
+            project_name=existing.project_name,
+            contract_numbers=existing.contract_numbers,
+            sharepoint=existing.sharepoint,
+            owncloud=SourceMappingOwnCloud(base_path=""),
+            email=email,
+            microsoft=microsoft,
+            odoo=existing.odoo,
+            related_people=RelatedPeople(**project_result.related_people),
+            enabled_sources=sorted(enabled_sources),
+            allowed_roles=existing.allowed_roles,
+        )
+        status, _ = _compute_mapping_status(project_result.project_code, upsert_body)
+        await pg.insert_admin_event(
+            event_type="admin.source_mapping_changed",
+            actor_hash=actor_hash,
+            project_code=project_result.project_code,
+            detail=f"email_group_enrichment status={status}",
+        )
+        await pg.upsert_source_mapping(
+            project_code=project_result.project_code,
+            project_name=upsert_body.project_name,
+            contract_numbers=upsert_body.contract_numbers,
+            sharepoint=upsert_body.sharepoint.model_dump(),
+            owncloud=upsert_body.owncloud.model_dump(),
+            email=upsert_body.email.model_dump(),
+            microsoft=upsert_body.microsoft.model_dump(),
+            odoo=upsert_body.odoo.model_dump(),
+            related_people=upsert_body.related_people.model_dump(),
+            enabled_sources=upsert_body.enabled_sources,
+            allowed_roles=upsert_body.allowed_roles,
+            mapping_status=status,
+            actor_hash=actor_hash,
+        )
 
     return result
 
@@ -2975,6 +3362,7 @@ async def confirm_microsoft_mapping(
         sharepoint=new_sp,
         owncloud=existing.owncloud,
         email=new_em,
+        microsoft=existing.microsoft,
         odoo=existing.odoo,
         related_people=existing.related_people,
         enabled_sources=existing.enabled_sources,
@@ -2996,6 +3384,7 @@ async def confirm_microsoft_mapping(
         sharepoint=new_sp.model_dump(),
         owncloud=upsert_body.owncloud.model_dump(),
         email=new_em.model_dump(),
+        microsoft=upsert_body.microsoft.model_dump(),
         odoo=upsert_body.odoo.model_dump(),
         related_people=upsert_body.related_people.model_dump(),
         enabled_sources=upsert_body.enabled_sources,

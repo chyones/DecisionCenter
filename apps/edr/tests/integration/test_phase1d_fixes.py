@@ -81,6 +81,47 @@ def test_odoo_node_builds_domain_via_json_dumps(monkeypatch: pytest.MonkeyPatch)
     assert "name" in fields and "budget" in fields
 
 
+def test_odoo_node_uses_verified_mapped_odoo_project_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Internal PRJ codes must not replace a verified Odoo project id."""
+    captured: dict = {}
+
+    async def fake_read_odoo(payload: dict) -> list:
+        captured.update(payload)
+        return []
+
+    class _FakeMapping:
+        @staticmethod
+        def load() -> "_FakeMapping":
+            return _FakeMapping()
+
+        def get(self, project_code: str) -> dict:
+            assert project_code == "PRJ-001"
+            return {
+                "odoo": {
+                    "project_model": "project.project",
+                    "project_external_id": "14602",
+                }
+            }
+
+    monkeypatch.setattr(node_08_odoo, "read_odoo", fake_read_odoo)
+    monkeypatch.setattr(node_08_odoo, "ProjectMapping", _FakeMapping)
+
+    state = DecisionState(
+        request_id="r-1",
+        user_id="u-1",
+        role=None,
+        project_code="PRJ-001",
+        query="status",
+    )
+
+    asyncio.run(node_08_odoo.run(state))
+
+    parsed = json.loads(captured["domain"])
+    assert parsed == [["project_external_id", "=", "14602"]]
+
+
 # ---------------------------------------------------------------------------
 # C-8 — Quality gate semantics in Node 14
 # ---------------------------------------------------------------------------

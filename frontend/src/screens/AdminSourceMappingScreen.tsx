@@ -16,6 +16,8 @@ import type {
   MicrosoftMappingConfirmRequest,
   MicrosoftMappingStatus,
   MicrosoftRescanResponse,
+  EmailGroupEnrichmentResponse,
+  EmailGroupProjectResult,
   OdooSharePointSyncResult,
   OdooSitePairResult,
   SiteCandidate,
@@ -44,7 +46,21 @@ function emptyForm(): SourceMappingUpsertRequest {
       consultant_domains: [],
       contractor_domains: [],
     },
-    odoo: { project_model: '', cost_model: '', project_external_id: '', project_name: '' },
+    microsoft: {
+      group: { id: '', display_name: '', mail: '', mail_enabled: false },
+      group_members: [],
+      group_membership_status: '',
+      member_count: 0,
+      missing_permissions: [],
+      blockers: [],
+    },
+    odoo: {
+      project_model: '',
+      cost_model: '',
+      project_external_id: '',
+      project_name: '',
+      analytic_account_id: '',
+    },
     related_people: {
       project_manager: '',
       commercial_manager: '',
@@ -88,6 +104,139 @@ function statusPillVariant(status: string): 'connected' | 'degraded' | 'disconne
   return 'degraded';
 }
 
+function groupStatusVariant(status: string, hasMailbox: boolean): 'connected' | 'degraded' | 'disconnected' {
+  if (hasMailbox && (status === 'GROUP_MEMBERS_READ' || status === 'GROUP_FOUND_NO_MEMBERS')) return 'connected';
+  if (status.startsWith('BLOCKED') || status === 'NO_GROUP_SOURCE' || status === 'NO_SHAREPOINT_SITE') {
+    return 'disconnected';
+  }
+  return 'degraded';
+}
+
+function isPlaceholderValue(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  return (
+    lower.includes('example-') ||
+    lower.includes('example.com') ||
+    /^\/projects\/prj-\d+(?:\/|$)/.test(lower)
+  );
+}
+
+function realEmail(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.includes('@') && !isPlaceholderValue(trimmed);
+}
+
+function collectLocalBlockers(form: SourceMappingUpsertRequest): ValidationFieldError[] {
+  const errors: ValidationFieldError[] = [];
+  const add = (field: string, message: string) => {
+    if (!errors.some((e) => e.field === field && e.message === message)) {
+      errors.push({ field, message });
+    }
+  };
+  const placeholder = (field: string, value: string) => {
+    if (value && isPlaceholderValue(value)) {
+      add(field, 'Placeholder value is not allowed');
+    }
+  };
+  const placeholderList = (field: string, values: string[]) => {
+    values.forEach((v) => placeholder(field, v));
+  };
+
+  if (form.enabled_sources.length === 0) {
+    add('enabled_sources', 'At least one verified source must be enabled');
+  }
+
+  placeholder('project_name', form.project_name);
+  placeholderList('contract_numbers', form.contract_numbers);
+  placeholder('sharepoint.site_id', form.sharepoint.site_id);
+  placeholder('sharepoint.drive_id', form.sharepoint.drive_id);
+  placeholder('sharepoint.root_path', form.sharepoint.root_path);
+  placeholder('owncloud.base_path', form.owncloud.base_path);
+  placeholderList('email.shared_mailboxes', form.email.shared_mailboxes);
+  placeholder('email.document_control_mailbox', form.email.document_control_mailbox);
+  placeholderList('email.client_domains', form.email.client_domains);
+  placeholderList('email.consultant_domains', form.email.consultant_domains);
+  placeholderList('email.contractor_domains', form.email.contractor_domains);
+  placeholder('microsoft.group.id', form.microsoft.group.id);
+  placeholder('microsoft.group.display_name', form.microsoft.group.display_name);
+  placeholder('microsoft.group.mail', form.microsoft.group.mail);
+  placeholder('microsoft.group_membership_status', form.microsoft.group_membership_status);
+  placeholderList('microsoft.missing_permissions', form.microsoft.missing_permissions);
+  placeholderList('microsoft.blockers', form.microsoft.blockers);
+  form.microsoft.group_members.forEach((member) => {
+    placeholder('microsoft.group_members.id', member.id);
+    placeholder('microsoft.group_members.display_name', member.display_name);
+    placeholder('microsoft.group_members.mail', member.mail);
+    placeholder('microsoft.group_members.user_principal_name', member.user_principal_name);
+    placeholder('microsoft.group_members.job_title', member.job_title);
+    placeholder('microsoft.group_members.department', member.department);
+    placeholder('microsoft.group_members.email', member.email);
+  });
+  placeholder('odoo.project_external_id', form.odoo.project_external_id);
+  placeholder('odoo.project_name', form.odoo.project_name);
+  placeholder('odoo.project_model', form.odoo.project_model);
+  placeholder('odoo.cost_model', form.odoo.cost_model);
+  placeholder('odoo.analytic_account_id', form.odoo.analytic_account_id);
+
+  if (form.microsoft.group_membership_status.trim().toUpperCase().startsWith('BLOCKED')) {
+    add('microsoft.group_membership_status', 'Email group enrichment is blocked');
+  }
+  if (form.microsoft.missing_permissions.length > 0) {
+    add('microsoft.missing_permissions', 'Required Graph group/member permission is missing');
+  }
+  if (form.microsoft.blockers.length > 0) {
+    add('microsoft.blockers', 'Source mapping has unresolved Microsoft group/email blockers');
+  }
+
+  if (form.enabled_sources.includes('sharepoint')) {
+    if (!form.sharepoint.site_id) add('sharepoint.site_id', 'Required for SharePoint source');
+    if (!form.sharepoint.drive_id) add('sharepoint.drive_id', 'Required for SharePoint source');
+    if (!form.sharepoint.root_path) add('sharepoint.root_path', 'Required for SharePoint source');
+  }
+
+  if (form.enabled_sources.includes('owncloud')) {
+    add('enabled_sources', 'ownCloud cannot be enabled until ownCloud is configured');
+    if (!form.owncloud.base_path) add('owncloud.base_path', 'Required for ownCloud source');
+  }
+
+  if (form.enabled_sources.includes('email')) {
+    const mailboxes = [...form.email.shared_mailboxes, form.email.document_control_mailbox];
+    const groupMailboxValid = form.microsoft.group.mail_enabled && realEmail(form.microsoft.group.mail);
+    const memberEmails = new Set(
+      form.microsoft.group_members.map((member) => member.email.trim().toLowerCase()).filter(Boolean),
+    );
+    mailboxes.forEach((mailbox) => {
+      if (realEmail(mailbox) && memberEmails.has(mailbox.trim().toLowerCase())) {
+        add('email.shared_mailboxes', 'Group members must be stored under microsoft.group_members');
+      }
+    });
+    if (form.microsoft.group.mail.trim() && !form.microsoft.group.mail_enabled) {
+      add('microsoft.group.mail_enabled', 'Group mailbox must be mailEnabled');
+    }
+    if (!mailboxes.some(realEmail) && !groupMailboxValid) {
+      add('email.shared_mailboxes', 'At least one real mailbox or Microsoft 365 group mailbox required');
+    }
+  }
+
+  if (form.enabled_sources.includes('odoo')) {
+    const externalId = form.odoo.project_external_id.trim();
+    if (!externalId) add('odoo.project_external_id', 'Real Odoo project ID is required');
+    else if (/^PRJ-\d+$/i.test(externalId)) {
+      add('odoo.project_external_id', 'Internal PRJ codes cannot be used as Odoo external IDs');
+    } else if (!/^\d+$/.test(externalId)) {
+      add('odoo.project_external_id', 'Odoo project external ID must be numeric');
+    }
+    if (!form.odoo.project_name.trim()) add('odoo.project_name', 'Odoo project name is required');
+    if (form.project_name.trim() && form.odoo.project_name.trim() && form.project_name.trim() !== form.odoo.project_name.trim()) {
+      add('project_name', 'Project Name must match Odoo project.project.name');
+    }
+    if (!form.odoo.project_model) add('odoo.project_model', 'Odoo project model is required');
+    if (!form.odoo.cost_model) add('odoo.cost_model', 'Odoo cost model is required');
+  }
+
+  return errors;
+}
+
 // ---------------------------------------------------------------------------
 // DiffPreviewModal (local component)
 // ---------------------------------------------------------------------------
@@ -127,10 +276,16 @@ function DiffPreviewModal({
   push('ownCloud Base Path', oldData?.owncloud.base_path, newData.owncloud.base_path);
   push('Email Shared Mailboxes', oldData?.email.shared_mailboxes.join(', '), newData.email.shared_mailboxes.join(', '));
   push('Email Doc Control', oldData?.email.document_control_mailbox, newData.email.document_control_mailbox);
+  push('Microsoft Group ID', oldData?.microsoft.group.id, newData.microsoft.group.id);
+  push('Microsoft Group Display Name', oldData?.microsoft.group.display_name, newData.microsoft.group.display_name);
+  push('Microsoft Group Mailbox', oldData?.microsoft.group.mail, newData.microsoft.group.mail);
+  push('Microsoft Group Status', oldData?.microsoft.group_membership_status, newData.microsoft.group_membership_status);
+  push('Microsoft Member Count', String(oldData?.microsoft.member_count ?? 0), String(newData.microsoft.member_count));
   push('Odoo Project External ID', oldData?.odoo.project_external_id, newData.odoo.project_external_id);
   push('Odoo Project Name', oldData?.odoo.project_name, newData.odoo.project_name);
   push('Odoo Project Model', oldData?.odoo.project_model, newData.odoo.project_model);
   push('Odoo Cost Model', oldData?.odoo.cost_model, newData.odoo.cost_model);
+  push('Odoo Analytic Account ID', oldData?.odoo.analytic_account_id, newData.odoo.analytic_account_id);
   push('Related PM', oldData?.related_people.project_manager, newData.related_people.project_manager);
   push('Related Commercial', oldData?.related_people.commercial_manager, newData.related_people.commercial_manager);
   push('Related Finance', oldData?.related_people.finance_owner, newData.related_people.finance_owner);
@@ -313,6 +468,152 @@ function RescanPanel({
         </div>
 
         <p className="mt-4 text-caption text-text-muted">{result.summary}</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EmailGroupEnrichPanel (local component)
+// ---------------------------------------------------------------------------
+
+function enrichGroupVariant(r: EmailGroupProjectResult): 'connected' | 'degraded' | 'disconnected' {
+  if (r.email_enabled && r.blockers.length === 0) return 'connected';
+  if (r.group.id) return 'degraded';
+  return 'disconnected';
+}
+
+function EmailGroupEnrichPanel({
+  isOpen,
+  result,
+  onClose,
+}: {
+  isOpen: boolean;
+  result: EmailGroupEnrichmentResponse | null;
+  onClose: () => void;
+}) {
+  if (!isOpen || !result) return null;
+
+  const missingPerms = result.missing_permissions;
+  const blocked = result.verdict.startsWith('SOURCE_MAPPING_EMAIL_GROUP_BLOCKED');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-sm border border-border bg-surface-raised p-6 shadow-lg">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-heading font-semibold text-text-primary">Email Group Enrichment</h2>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+
+        {/* Compliance badges */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          <span className="rounded bg-success/10 px-2 py-0.5 text-caption text-success">
+            Odoo emails: not used
+          </span>
+          <span className="rounded bg-success/10 px-2 py-0.5 text-caption text-success">
+            ownCloud: disabled
+          </span>
+          <span className="rounded bg-surface-overlay px-2 py-0.5 font-mono text-caption text-text-muted">
+            {result.verdict}
+          </span>
+        </div>
+
+        <p className="mb-4 break-all font-mono text-caption text-text-muted">{result.summary}</p>
+
+        {result.token_roles.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-1">
+            {result.token_roles.map((r) => (
+              <span
+                key={r}
+                className="rounded bg-surface-overlay px-1.5 py-0.5 font-mono text-caption text-text-muted"
+              >
+                {r}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {blocked && missingPerms.length > 0 && (
+          <div className="mb-4 rounded-sm border border-error/40 bg-error/10 p-3">
+            <p className="mb-1 text-label font-medium text-error">Missing Graph permissions</p>
+            {missingPerms.map((p) => (
+              <p key={p} className="font-mono text-caption text-text-secondary">{p}</p>
+            ))}
+          </div>
+        )}
+
+        {result.project_results.length > 0 && (
+          <div className="mb-4 space-y-3">
+            <p className="text-label font-medium text-text-secondary">Project results</p>
+            {result.project_results.map((pr) => (
+              <div
+                key={pr.project_code}
+                className="rounded-sm border border-border bg-surface-base p-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-body font-medium text-text-primary">
+                      {pr.project_name || pr.project_code}
+                    </p>
+                    <p className="font-mono text-caption text-text-muted">{pr.project_code}</p>
+                  </div>
+                  <StatusPill
+                    status={enrichGroupVariant(pr)}
+                    label={
+                      pr.email_enabled
+                        ? 'Email enabled'
+                        : pr.group.id
+                          ? 'Group found'
+                          : 'No group'
+                    }
+                  />
+                </div>
+                <div className="space-y-1 text-caption text-text-muted">
+                  <p>
+                    <span className="text-text-secondary">Status: </span>
+                    {pr.group_membership_status || 'PENDING'}
+                  </p>
+                  {pr.group.id && (
+                    <>
+                      <p>
+                        <span className="text-text-secondary">Group: </span>
+                        {pr.group.display_name}
+                        {pr.group.mail ? ` · ${pr.group.mail}` : ''}
+                        {pr.group.mail_enabled ? ' (mail-enabled)' : ' (not mail-enabled)'}
+                      </p>
+                      <p>
+                        <span className="text-text-secondary">Members: </span>
+                        {pr.member_count === 0 ? 'none read' : `${pr.member_count} read`}
+                      </p>
+                    </>
+                  )}
+                  {pr.blockers.length > 0 && (
+                    <p className="text-warning">Blockers: {pr.blockers.join(', ')}</p>
+                  )}
+                  {pr.missing_permissions.length > 0 && (
+                    <p className="text-warning">
+                      Missing permissions: {pr.missing_permissions.join(', ')}
+                    </p>
+                  )}
+                </div>
+                {pr.group_members.length > 0 && (
+                  <div className="mt-2 max-h-40 overflow-auto rounded-sm border border-border bg-surface-raised p-2">
+                    <p className="mb-1 text-caption font-medium text-text-secondary">
+                      Members ({pr.group_members.length})
+                    </p>
+                    {pr.group_members.map((m) => (
+                      <div key={m.id || m.email} className="text-caption text-text-muted">
+                        {m.display_name || m.email}
+                        {m.job_title ? ` · ${m.job_title}` : ''}
+                        {m.department ? ` · ${m.department}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -502,6 +803,9 @@ export function AdminSourceMappingScreen() {
   const [showRescan, setShowRescan] = useState(false);
   const [rescanResult, setRescanResult] = useState<MicrosoftRescanResponse | null>(null);
   const [acceptingCode, setAcceptingCode] = useState<string | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [showEnrich, setShowEnrich] = useState(false);
+  const [enrichResult, setEnrichResult] = useState<EmailGroupEnrichmentResponse | null>(null);
   const [odooSyncLoading, setOdooSyncLoading] = useState(false);
   const [showOdooSync, setShowOdooSync] = useState(false);
   const [odooSyncResult, setOdooSyncResult] = useState<OdooSharePointSyncResult | null>(null);
@@ -535,6 +839,16 @@ export function AdminSourceMappingScreen() {
           sharepoint: { ...data.sharepoint },
           owncloud: { ...data.owncloud },
           email: { ...data.email },
+          microsoft: data.microsoft
+            ? {
+                group: { ...data.microsoft.group },
+                group_members: data.microsoft.group_members.map((member) => ({ ...member })),
+                group_membership_status: data.microsoft.group_membership_status,
+                member_count: data.microsoft.member_count,
+                missing_permissions: [...data.microsoft.missing_permissions],
+                blockers: [...data.microsoft.blockers],
+              }
+            : emptyForm().microsoft,
           odoo: { ...data.odoo },
           related_people: { ...data.related_people },
           enabled_sources: [...data.enabled_sources],
@@ -690,6 +1004,24 @@ export function AdminSourceMappingScreen() {
     }
   };
 
+  const handleEnrichEmailGroups = async () => {
+    setEnrichLoading(true);
+    try {
+      const result = await api.post<EmailGroupEnrichmentResponse>(
+        '/admin/source-mappings/enrich-email-groups',
+        { project_codes: ['PRJ-001', 'PRJ-002'] },
+      );
+      setEnrichResult(result);
+      setShowEnrich(true);
+      void fetchMappings();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Email group enrichment failed';
+      addToast('error', message, 'Enrichment error');
+    } finally {
+      setEnrichLoading(false);
+    }
+  };
+
   const handleOdooSync = async () => {
     setOdooSyncLoading(true);
     try {
@@ -753,9 +1085,22 @@ export function AdminSourceMappingScreen() {
     }
   };
 
+  const localValidationErrors = collectLocalBlockers(form);
+  const activeValidationErrors = [...validationErrors];
+  localValidationErrors.forEach((err) => {
+    if (!activeValidationErrors.some((e) => e.field === err.field && e.message === err.message)) {
+      activeValidationErrors.push(err);
+    }
+  });
   const fieldError = (field: string) =>
-    validationErrors.find((e) => e.field === field)?.message;
-
+    activeValidationErrors.find((e) => e.field === field)?.message;
+  const detailStatus =
+    detail && detail.mapping_status === 'complete' && activeValidationErrors.length > 0
+      ? 'incomplete'
+      : detail?.mapping_status;
+  const groupMailboxVerified = form.microsoft.group.mail_enabled && realEmail(form.microsoft.group.mail);
+  const groupStatus = form.microsoft.group_membership_status || 'Missing';
+  const emailSourceEnabled = form.enabled_sources.includes('email');
   const editorVisible = selectedCode !== null || isAdding;
 
   return (
@@ -764,6 +1109,9 @@ export function AdminSourceMappingScreen() {
       <div className="flex items-center justify-between">
         <h1 className="text-display font-semibold text-text-primary">Project Source Mapping</h1>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => void handleEnrichEmailGroups()} isLoading={enrichLoading}>
+            Enrich Email Groups
+          </Button>
           <Button variant="secondary" onClick={() => void handleOdooSync()} isLoading={odooSyncLoading}>
             Sync Odoo + SharePoint
           </Button>
@@ -855,8 +1203,8 @@ export function AdminSourceMappingScreen() {
                   )}
                   {detail && (
                     <StatusPill
-                      status={statusPillVariant(detail.mapping_status)}
-                      label={detail.mapping_status}
+                      status={statusPillVariant(detailStatus ?? detail.mapping_status)}
+                      label={detailStatus ?? detail.mapping_status}
                     />
                   )}
                 </div>
@@ -889,6 +1237,21 @@ export function AdminSourceMappingScreen() {
                 </div>
               )}
 
+              {activeValidationErrors.length > 0 && (
+                <div className="rounded-sm border border-warning/40 bg-warning/10 p-3">
+                  <p className="text-label font-medium text-text-primary">Validation blockers</p>
+                  <div className="mt-2 space-y-1">
+                    {activeValidationErrors.map((err) => (
+                      <p key={`${err.field}:${err.message}`} className="text-caption text-text-secondary">
+                        <span className="font-mono text-warning">{err.field}</span>
+                        {' — '}
+                        {err.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Form sections */}
               <fieldset className="space-y-2">
                 <legend className="text-label font-medium text-text-secondary">Project</legend>
@@ -897,9 +1260,13 @@ export function AdminSourceMappingScreen() {
                   <input
                     type="text"
                     value={form.project_name}
+                    placeholder="Missing"
                     onChange={(e) => updateForm({ project_name: e.target.value })}
                     className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
                   />
+                  {fieldError('project_name') && (
+                    <span className="text-caption text-error">{fieldError('project_name')}</span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-caption text-text-secondary">
@@ -929,6 +1296,7 @@ export function AdminSourceMappingScreen() {
                     <input
                       type="text"
                       value={form.odoo.project_external_id}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ odoo: { ...form.odoo, project_external_id: e.target.value } })
                       }
@@ -943,33 +1311,60 @@ export function AdminSourceMappingScreen() {
                     <input
                       type="text"
                       value={form.odoo.project_name}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ odoo: { ...form.odoo, project_name: e.target.value } })
                       }
                       className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
                     />
+                    {fieldError('odoo.project_name') && (
+                      <span className="text-caption text-error">{fieldError('odoo.project_name')}</span>
+                    )}
                   </div>
                   <div>
                     <label className="block text-caption text-text-secondary">Project Model</label>
                     <input
                       type="text"
                       value={form.odoo.project_model}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ odoo: { ...form.odoo, project_model: e.target.value } })
                       }
                       className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
                     />
+                    {fieldError('odoo.project_model') && (
+                      <span className="text-caption text-error">{fieldError('odoo.project_model')}</span>
+                    )}
                   </div>
                   <div>
                     <label className="block text-caption text-text-secondary">Cost Model</label>
                     <input
                       type="text"
                       value={form.odoo.cost_model}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ odoo: { ...form.odoo, cost_model: e.target.value } })
                       }
                       className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
                     />
+                    {fieldError('odoo.cost_model') && (
+                      <span className="text-caption text-error">{fieldError('odoo.cost_model')}</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Analytic Account ID</label>
+                    <input
+                      type="text"
+                      value={form.odoo.analytic_account_id}
+                      placeholder="Missing"
+                      onChange={(e) =>
+                        updateForm({ odoo: { ...form.odoo, analytic_account_id: e.target.value } })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+                    {fieldError('odoo.analytic_account_id') && (
+                      <span className="text-caption text-error">{fieldError('odoo.analytic_account_id')}</span>
+                    )}
                   </div>
                 </div>
               </fieldset>
@@ -982,6 +1377,7 @@ export function AdminSourceMappingScreen() {
                     <input
                       type="text"
                       value={form.sharepoint.site_id}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ sharepoint: { ...form.sharepoint, site_id: e.target.value } })
                       }
@@ -996,6 +1392,7 @@ export function AdminSourceMappingScreen() {
                     <input
                       type="text"
                       value={form.sharepoint.drive_id}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ sharepoint: { ...form.sharepoint, drive_id: e.target.value } })
                       }
@@ -1010,6 +1407,7 @@ export function AdminSourceMappingScreen() {
                     <input
                       type="text"
                       value={form.sharepoint.root_path}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({ sharepoint: { ...form.sharepoint, root_path: e.target.value } })
                       }
@@ -1029,6 +1427,7 @@ export function AdminSourceMappingScreen() {
                   <input
                     type="text"
                     value={form.owncloud.base_path}
+                    placeholder="Missing"
                     onChange={(e) =>
                       updateForm({ owncloud: { ...form.owncloud, base_path: e.target.value } })
                     }
@@ -1042,6 +1441,23 @@ export function AdminSourceMappingScreen() {
 
               <fieldset className="space-y-2">
                 <legend className="text-label font-medium text-text-secondary">Email</legend>
+                <div className="flex flex-wrap items-center gap-3">
+                  <StatusPill
+                    status={emailSourceEnabled ? (activeValidationErrors.length > 0 ? 'degraded' : 'connected') : 'disconnected'}
+                    label={`Email: ${emailSourceEnabled ? 'enabled' : 'off'}`}
+                  />
+                  <StatusPill
+                    status={groupStatusVariant(groupStatus, groupMailboxVerified)}
+                    label={`Group: ${groupStatus}`}
+                  />
+                  <StatusPill
+                    status={groupMailboxVerified ? 'connected' : 'disconnected'}
+                    label={`Group mailbox: ${groupMailboxVerified ? 'verified' : 'Missing'}`}
+                  />
+                  <span className="text-caption text-text-muted">
+                    Members: {form.microsoft.member_count || form.microsoft.group_members.length || 0}
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-caption text-text-secondary">
@@ -1049,6 +1465,7 @@ export function AdminSourceMappingScreen() {
                     </label>
                     <textarea
                       value={form.email.shared_mailboxes.join('\n')}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           email: {
@@ -1073,6 +1490,7 @@ export function AdminSourceMappingScreen() {
                     </label>
                     <textarea
                       value={form.email.client_domains.join('\n')}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           email: {
@@ -1088,16 +1506,121 @@ export function AdminSourceMappingScreen() {
                       className="mt-1 w-full rounded-sm border border-border bg-surface-base px-2 py-1 text-body text-text-primary"
                     />
                   </div>
-                  <div>
-                    <label className="block text-caption text-text-secondary">
-                      Document Control Mailbox
-                    </label>
+	                  <div>
+	                    <label className="block text-caption text-text-secondary">
+	                      Document Control Mailbox
+	                    </label>
                     <input
                       type="text"
                       value={form.email.document_control_mailbox}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           email: { ...form.email, document_control_mailbox: e.target.value },
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+	                  </div>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Microsoft Group ID</label>
+                    <input
+                      type="text"
+                      value={form.microsoft.group.id}
+                      placeholder="Missing"
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: {
+                            ...form.microsoft,
+                            group: { ...form.microsoft.group, id: e.target.value },
+                          },
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Microsoft Group Display Name</label>
+                    <input
+                      type="text"
+                      value={form.microsoft.group.display_name}
+                      placeholder="Missing"
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: {
+                            ...form.microsoft,
+                            group: { ...form.microsoft.group, display_name: e.target.value },
+                          },
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Microsoft Group Mailbox</label>
+                    <input
+                      type="text"
+                      value={form.microsoft.group.mail}
+                      placeholder="Missing"
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: {
+                            ...form.microsoft,
+                            group: { ...form.microsoft.group, mail: e.target.value },
+                          },
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+                    {fieldError('microsoft.group.mail_enabled') && (
+                      <span className="text-caption text-error">{fieldError('microsoft.group.mail_enabled')}</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Group Membership Status</label>
+                    <input
+                      type="text"
+                      value={form.microsoft.group_membership_status}
+                      placeholder="Missing"
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: { ...form.microsoft, group_membership_status: e.target.value },
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
+                    />
+                    {fieldError('microsoft.group_membership_status') && (
+                      <span className="text-caption text-error">{fieldError('microsoft.group_membership_status')}</span>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-body text-text-primary">
+                    <input
+                      type="checkbox"
+                      checked={form.microsoft.group.mail_enabled}
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: {
+                            ...form.microsoft,
+                            group: { ...form.microsoft.group, mail_enabled: e.target.checked },
+                          },
+                        })
+                      }
+                      className="h-4 w-4"
+                    />
+                    Group mail enabled
+                  </label>
+                  <div>
+                    <label className="block text-caption text-text-secondary">Member Count</label>
+                    <input
+                      type="number"
+                      value={form.microsoft.member_count}
+                      min={0}
+                      onChange={(e) =>
+                        updateForm({
+                          microsoft: {
+                            ...form.microsoft,
+                            member_count: Number(e.target.value) || 0,
+                          },
                         })
                       }
                       className="mt-1 h-9 w-full rounded-sm border border-border bg-surface-base px-2 text-body text-text-primary"
@@ -1109,6 +1632,7 @@ export function AdminSourceMappingScreen() {
                     </label>
                     <textarea
                       value={form.email.consultant_domains.join('\n')}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           email: {
@@ -1130,6 +1654,7 @@ export function AdminSourceMappingScreen() {
                     </label>
                     <textarea
                       value={form.email.contractor_domains.join('\n')}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           email: {
@@ -1142,9 +1667,55 @@ export function AdminSourceMappingScreen() {
                         })
                       }
                       rows={2}
-                      className="mt-1 w-full rounded-sm border border-border bg-surface-base px-2 py-1 text-body text-text-primary"
-                    />
+	                      className="mt-1 w-full rounded-sm border border-border bg-surface-base px-2 py-1 text-body text-text-primary"
+	                    />
+	                  </div>
+	                </div>
+                {(form.microsoft.missing_permissions.length > 0 || form.microsoft.blockers.length > 0) && (
+                  <div className="rounded-sm border border-warning/40 bg-warning/10 p-3">
+                    <p className="text-label font-medium text-text-primary">Email blockers</p>
+                    <div className="mt-2 space-y-1">
+                      {form.microsoft.missing_permissions.map((permission) => (
+                        <p key={`perm:${permission}`} className="text-caption text-text-secondary">
+                          <span className="font-mono text-warning">permission</span>
+                          {' — '}
+                          {permission}
+                        </p>
+                      ))}
+                      {form.microsoft.blockers.map((blocker) => (
+                        <p key={`blocker:${blocker}`} className="text-caption text-text-secondary">
+                          <span className="font-mono text-warning">blocker</span>
+                          {' — '}
+                          {blocker}
+                        </p>
+                      ))}
+                    </div>
                   </div>
+                )}
+                <div className="rounded-sm border border-border bg-surface-base p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-label font-medium text-text-secondary">Microsoft Group Members</p>
+                    <span className="text-caption text-text-muted">
+                      {form.microsoft.group_members.length > 0 ? `${form.microsoft.group_members.length} shown` : 'Missing'}
+                    </span>
+                  </div>
+                  {form.microsoft.group_members.length > 0 ? (
+                    <div className="space-y-2">
+                      {form.microsoft.group_members.map((member) => (
+                        <div
+                          key={member.id || member.email}
+                          className="grid grid-cols-[1.2fr_1.2fr_1fr_1fr] gap-2 rounded-sm border border-border bg-surface-raised px-2 py-1 text-caption"
+                        >
+                          <span className="truncate text-text-primary">{member.display_name || 'Missing'}</span>
+                          <span className="truncate font-mono text-text-secondary">{member.email || 'Missing'}</span>
+                          <span className="truncate text-text-muted">{member.job_title || 'Missing'}</span>
+                          <span className="truncate text-text-muted">{member.department || 'Missing'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-caption text-text-muted">Missing</p>
+                  )}
                 </div>
               </fieldset>
 
@@ -1164,6 +1735,7 @@ export function AdminSourceMappingScreen() {
                       <input
                         type="text"
                         value={form.related_people[key as keyof typeof form.related_people] as string}
+                        placeholder="Missing"
                         onChange={(e) =>
                           updateForm({
                             related_people: { ...form.related_people, [key]: e.target.value },
@@ -1177,6 +1749,7 @@ export function AdminSourceMappingScreen() {
                     <label className="block text-caption text-text-secondary">Other (one per line)</label>
                     <textarea
                       value={form.related_people.other.join('\n')}
+                      placeholder="Missing"
                       onChange={(e) =>
                         updateForm({
                           related_people: {
@@ -1200,16 +1773,22 @@ export function AdminSourceMappingScreen() {
                 <div className="flex flex-wrap gap-3">
                   {SOURCE_OPTIONS.map((s) => (
                     <label key={s.key} className="flex items-center gap-2 text-body text-text-primary">
-                      <input
-                        type="checkbox"
-                        checked={form.enabled_sources.includes(s.key)}
-                        onChange={() => toggleSource(s.key)}
-                        className="h-4 w-4"
-                      />
+	                      <input
+	                        type="checkbox"
+	                        checked={form.enabled_sources.includes(s.key)}
+	                        disabled={s.key === 'owncloud'}
+	                        onChange={() => {
+	                          if (s.key !== 'owncloud') toggleSource(s.key);
+	                        }}
+	                        className="h-4 w-4"
+	                      />
                       {s.label}
                     </label>
                   ))}
                 </div>
+                {fieldError('enabled_sources') && (
+                  <span className="text-caption text-error">{fieldError('enabled_sources')}</span>
+                )}
               </fieldset>
 
               <fieldset className="space-y-2">
@@ -1257,6 +1836,13 @@ export function AdminSourceMappingScreen() {
           This save removes a source, role, or changes a critical path. Type the project code to confirm.
         </p>
       </ConfirmDialog>
+
+      {/* Email Group Enrichment panel */}
+      <EmailGroupEnrichPanel
+        isOpen={showEnrich}
+        result={enrichResult}
+        onClose={() => setShowEnrich(false)}
+      />
 
       {/* Odoo + SharePoint Sync panel */}
       <OdooSyncPanel

@@ -110,12 +110,14 @@ def test_9_roles_total() -> None:
 
 # --- Populated state fields ---
 
-def test_allowed_mailboxes_populated() -> None:
+def test_allowed_mailboxes_includes_group_mail_when_email_source_enabled() -> None:
+    # PRJ-001 email source verified: GROUP_MEMBERS_READ, mail_enabled=True.
+    # The Microsoft Group mailbox is included in allowed_mailboxes when
+    # "email" is in enabled_sources and the group mailbox is mail-enabled.
     result = asyncio.run(node_01_auth.run(_state("executive")))
-    assert "project-prj-001@example.com" in result.allowed_mailboxes
-    assert "doc-control@example.com" in result.allowed_mailboxes
+    assert "ConstructionofCivilDefenseCenterinAlMirfaAlDhafraRegion@elrace.com" in result.allowed_mailboxes
 
 
-def test_allowed_odoo_ids_populated() -> None:
+def test_allowed_odoo_ids_use_verified_odoo_project_id() -> None:
     result = asyncio.run(node_01_auth.run(_state("executive")))
-    assert "PRJ-001" in result.allowed_odoo_ids
+    assert result.allowed_odoo_ids == ["14602"]

@@ -76,7 +76,8 @@ async def _try_retrieval(state: DecisionState, plan: dict) -> int:
             odoo_config = mapping.get("odoo", {})
             import json as _json
 
-            domain = _json.dumps([["project_external_id", "=", state.project_code]])
+            odoo_project_id = odoo_config.get("project_external_id") or state.project_code
+            domain = _json.dumps([["project_external_id", "=", odoo_project_id]])
             fields = _json.dumps(["name", "budget", "actual_cost"])
             payload = {
                 "project_code": state.project_code,

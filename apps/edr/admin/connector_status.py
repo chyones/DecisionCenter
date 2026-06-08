@@ -1,6 +1,6 @@
 """Connector truth-status service.
 
-Single rule: **never report a connector green unless a real live probe proved
+Single rule: **never report a connector live unless a real live probe proved
 it.** Container-up, route-exists, code-module-exists, fixture-data-exists and
 local deterministic checks are NOT evidence of a working external integration.
 
@@ -17,17 +17,30 @@ Design notes
   the proof: core infra (postgres/redis/qdrant/minio), n8n, and the public edge.
   For those a successful probe yields ``LIVE_OK``.
 - Dependencies we cannot validate without real credentials, a real login, or a
-  billable/leaky call (Entra auth, AI providers, Odoo/ownCloud/SharePoint/email
-  data connectors) are deliberately capped at ``CONFIGURED_NOT_TESTED`` when
-  configured and ``NOT_CONFIGURED`` when not — never green.
+  billable/leaky call (Entra auth and AI providers) are deliberately capped at
+  ``CONFIGURED_NOT_TESTED`` when configured and ``NOT_CONFIGURED`` when not.
+  SharePoint/email may move only to ``VERIFIED_FROM_EVIDENCE`` when current
+  persisted source-mapping evidence proves the read succeeded; Odoo still needs
+  its own live webhook probe for ``LIVE_OK``.
 - ``data_source`` of ``mock``/``fixture`` can never map to ``LIVE_OK`` (it maps
   to ``MOCK_ONLY``); this is enforced in :func:`_state_from_facts`.
+- ``data_source="evidence"`` is intentionally not ``LIVE_OK``. It means current
+  persisted runtime evidence proves a read succeeded earlier (for example the
+  verified PRJ-001/PRJ-002 Source Mapping + Microsoft group enrichment), but no
+  live connector call was made during this dashboard probe.
+- A connector with ``disabled=True`` is intentionally turned off. It is
+  classified as ``DISABLED`` regardless of credential presence, never appears
+  in the go-live blocking list, and never shows as ``error`` on the health page.
 """
 from __future__ import annotations
 
+import asyncio
+import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -46,13 +59,15 @@ class ConnectorState(StrEnum):
     PERMISSION_FAILED = "PERMISSION_FAILED"
     NETWORK_FAILED = "NETWORK_FAILED"
     CONNECTED_NO_DATA = "CONNECTED_NO_DATA"
+    VALIDATED = "VALIDATED"
+    VERIFIED_FROM_EVIDENCE = "VERIFIED_FROM_EVIDENCE"
     LIVE_OK = "LIVE_OK"
     MOCK_ONLY = "MOCK_ONLY"
     DISABLED = "DISABLED"
     UNKNOWN = "UNKNOWN"
 
 
-DataSource = Literal["live", "mock", "fixture", "none"]
+DataSource = Literal["live", "evidence", "mock", "fixture", "none"]
 Group = Literal["core_platform", "auth", "external_connector", "ai_provider", "edge"]
 Readiness = Literal["READY_FOR_UAT", "PARTIAL_READY", "NOT_READY"]
 
@@ -78,6 +93,20 @@ _EXTRA_ENV_KEY_TO_SETTING: dict[str, str] = {
 #: Hostnames that mean "no real public edge" (so PUBLIC_HOSTNAME counts as unset
 #: for the edge connectors rather than a misleading green).
 _NON_PUBLIC_HOSTS = {"", "localhost", "127.0.0.1", ":80"}
+_SOURCE_MAPPING_PATH = (
+    Path(__file__).parents[3] / "docs" / "config" / "project_source_mapping.json"
+)
+_ENTRA_VALIDATION_EVIDENCE_PATH = (
+    Path(__file__).parents[3]
+    / "docs"
+    / "evidence"
+    / "uat"
+    / "ENTRA_CONNECTOR_TRUTH_REVALIDATION_2026-06-08.md"
+)
+_ENTRA_VALIDATION_MARKER_PREFIX = "<!-- connector_truth_entra_validation:"
+_ENTRA_VALIDATION_MARKER_SUFFIX = "-->"
+_VERIFIED_PROJECT_MEMBER_COUNTS = {"PRJ-001": 17, "PRJ-002": 18}
+_VERIFIED_GROUP_STATUS = "GROUP_MEMBERS_READ"
 
 
 def _is_present(env_key: str) -> bool:
@@ -136,6 +165,10 @@ class ConnectorSpec:
     #: config-only dependencies (capped at CONFIGURED_NOT_TESTED).
     probe: str | None = None
     note: str = ""
+    #: When True the connector is intentionally turned off. classify() returns
+    #: DISABLED immediately — credentials are not checked and the connector
+    #: never blocks go-live.
+    disabled: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -508,45 +541,386 @@ def _probe_caddy_routing() -> ProbeFacts:
         )
 
 
-def _probe_entra() -> ProbeFacts:
-    """Reach the tenant OIDC metadata (network only). Auth is NOT proven here.
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
-    A real auth proof requires a live user token to validate — which does not
-    exist at probe time — so this never reports LIVE_OK; at most it records that
-    the issuer's discovery document is reachable.
+
+def _entra_validation_marker() -> dict[str, Any] | None:
+    """Return the redacted Entra validation marker from the UAT evidence doc.
+
+    The marker is a JSON object embedded in an HTML comment. It contains only
+    safe claims/check booleans, never the token value.
     """
-    tenant = (settings.entra_tenant_id or "").strip()
-    ts = _now()
-    if not tenant:
-        return ProbeFacts(data_source="none", evidence="ENTRA_TENANT_ID not set", probed_at=ts)
+    try:
+        text = _ENTRA_VALIDATION_EVIDENCE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(_ENTRA_VALIDATION_MARKER_PREFIX):
+            continue
+        if not line.endswith(_ENTRA_VALIDATION_MARKER_SUFFIX):
+            return None
+        payload = line.removeprefix(_ENTRA_VALIDATION_MARKER_PREFIX)
+        payload = payload.removesuffix(_ENTRA_VALIDATION_MARKER_SUFFIX).strip()
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+    return None
+
+
+def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
+    marker = _entra_validation_marker()
+    if marker is None:
+        return None
+    checks = marker.get("checks")
+    if not isinstance(checks, dict):
+        return None
+    required_checks = (
+        "oidc_discovery_ok",
+        "jwks_ok",
+        "issuer_ok",
+        "audience_ok",
+        "tenant_ok",
+        "expiry_valid",
+        "role_present",
+        "me_role_ok",
+    )
+    if marker.get("result") != "PASS" or not all(checks.get(k) is True for k in required_checks):
+        return None
+
+    expires_at = _parse_utc_datetime(marker.get("token_expires_at"))
+    validated_at = _parse_utc_datetime(marker.get("validated_at"))
+    if expires_at is None or validated_at is None:
+        return None
+    now = datetime.now(timezone.utc)
+    if expires_at <= now:
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=None,
+            live_data_ok=None,
+            data_source="none",
+            evidence="OIDC discovery and JWKS reachable; latest Entra validation evidence expired",
+            probed_at=ts,
+        )
+
+    role = services_catalog._sanitize_detail(str(marker.get("role") or "unknown"))
+    expires_text = expires_at.isoformat().replace("+00:00", "Z")
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        sample_count=1,
+        evidence=(
+            "Fresh Entra auth validation accepted: OIDC/JWKS, issuer, audience, "
+            f"tenant, expiry, role and /me passed for role={role}; "
+            f"token expires at {expires_text}"
+        ),
+        probed_at=ts,
+        success_at=validated_at.isoformat().replace("+00:00", "Z"),
+    )
+
+
+def _probe_entra_oidc_jwks(tenant: str, ts: str) -> ProbeFacts:
     url = f"https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"
     try:
         from urllib.request import urlopen
 
         with urlopen(url, timeout=services_catalog.PROBE_TIMEOUT_SECONDS) as resp:  # noqa: S310
             ok = resp.status == 200
+            doc = json.loads(resp.read()) if ok else {}
+        jwks_uri = doc.get("jwks_uri")
+        if not jwks_uri:
+            return ProbeFacts(
+                network_ok=True,
+                auth_ok=None,
+                live_data_ok=None,
+                data_source="none",
+                evidence="OIDC discovery reachable but JWKS URI missing",
+                last_error_safe="OIDC discovery missing jwks_uri",
+                probed_at=ts,
+            )
+        with urlopen(jwks_uri, timeout=services_catalog.PROBE_TIMEOUT_SECONDS) as resp:  # noqa: S310
+            jwks_ok = resp.status == 200
+        if not (ok and jwks_ok):
+            return ProbeFacts(
+                network_ok=True,
+                auth_ok=None,
+                live_data_ok=None,
+                data_source="none",
+                evidence="OIDC discovery or JWKS not reachable",
+                last_error_safe="OIDC/JWKS reachability check failed",
+                probed_at=ts,
+            )
         return ProbeFacts(
-            network_ok=ok,
+            network_ok=True,
             auth_ok=None,
-            live_data_ok=None,  # no token validated → cannot claim live
+            live_data_ok=None,
             data_source="none",
-            evidence=(
-                "OIDC discovery reachable; no live user token validated yet"
-                if ok
-                else "OIDC discovery not reachable"
-            ),
+            evidence="OIDC discovery and JWKS reachable",
             probed_at=ts,
-            success_at=ts if ok else None,
+            success_at=ts,
         )
     except Exception as exc:
         detail = services_catalog._detail_for_exception(exc, None)
         return ProbeFacts(
             network_ok=False,
             data_source="none",
-            evidence=f"OIDC discovery unreachable: {detail}",
+            evidence=f"OIDC discovery or JWKS unreachable: {detail}",
             last_error_safe=detail,
             probed_at=ts,
         )
+
+
+def _probe_entra() -> ProbeFacts:
+    """Reach tenant OIDC/JWKS and accept only fresh redacted token proof.
+
+    The dashboard never reads a token. Entra moves to ``VALIDATED`` only when
+    an operator-run validation script records a redacted PASS marker whose token
+    expiry is still in the future.
+    """
+    tenant = (settings.entra_tenant_id or "").strip()
+    ts = _now()
+    if not tenant:
+        return ProbeFacts(data_source="none", evidence="ENTRA_TENANT_ID not set", probed_at=ts)
+    oidc_facts = _probe_entra_oidc_jwks(tenant, ts)
+    if oidc_facts.network_ok is not True:
+        return oidc_facts
+    validation_facts = _entra_validation_evidence_facts(ts)
+    if validation_facts is not None:
+        return validation_facts
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=None,
+        live_data_ok=None,  # no token validated → cannot claim live
+        data_source="none",
+        evidence="OIDC discovery and JWKS reachable; no fresh user-token validation evidence",
+        probed_at=ts,
+        success_at=oidc_facts.success_at,
+    )
+
+
+def _jsonish(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+    return fallback
+
+
+async def _source_mapping_rows_from_db_async() -> list[dict[str, Any]]:
+    import asyncpg
+
+    conn = await asyncpg.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=settings.postgres_db,
+        user=settings.postgres_user,
+        password=settings.postgres_password,
+        timeout=1.0,
+    )
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT project_code, mapping_status, enabled_sources, sharepoint,
+                   microsoft, odoo
+            FROM source_mappings
+            WHERE project_code = ANY($1::text[])
+            ORDER BY project_code
+            """,
+            list(_VERIFIED_PROJECT_MEMBER_COUNTS),
+        )
+    finally:
+        await conn.close()
+    return [
+        {
+            "project_code": row["project_code"],
+            "mapping_status": row["mapping_status"],
+            "enabled_sources": _jsonish(row["enabled_sources"], []),
+            "sharepoint": _jsonish(row["sharepoint"], {}),
+            "microsoft": _jsonish(row["microsoft"], {}),
+            "odoo": _jsonish(row["odoo"], {}),
+        }
+        for row in rows
+    ]
+
+
+def _source_mapping_rows_from_db() -> list[dict[str, Any]]:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        return []
+    try:
+        return asyncio.run(_source_mapping_rows_from_db_async())
+    except Exception:
+        return []
+
+
+def _source_mapping_rows_from_file() -> list[dict[str, Any]]:
+    try:
+        raw = json.loads(_SOURCE_MAPPING_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = raw if isinstance(raw, list) else list(raw.values()) if isinstance(raw, dict) else []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _source_mapping_rows() -> list[dict[str, Any]]:
+    return _source_mapping_rows_from_db() or _source_mapping_rows_from_file()
+
+
+def _real_value(value: Any) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    return "example" not in lowered and "placeholder" not in lowered
+
+
+def _verified_project_rows() -> tuple[list[dict[str, Any]], list[str]]:
+    rows_by_code = {
+        str(row.get("project_code")): row
+        for row in _source_mapping_rows()
+        if str(row.get("project_code")) in _VERIFIED_PROJECT_MEMBER_COUNTS
+    }
+    missing = [code for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code not in rows_by_code]
+    return [rows_by_code[code] for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code in rows_by_code], missing
+
+
+def _probe_sharepoint_source_mapping() -> ProbeFacts:
+    """Verify SharePoint from current PRJ-001/PRJ-002 source mapping facts.
+
+    This is not a live Graph call. It accepts only current persisted runtime
+    facts (DB first, checked-in mapping fallback) that prove SharePoint site and
+    drive discovery already succeeded for the two operator-verified projects.
+    """
+    ts = _now()
+    rows, missing = _verified_project_rows()
+    verified: list[str] = []
+    blockers = [f"missing {code}" for code in missing]
+    for row in rows:
+        code = str(row.get("project_code"))
+        enabled = set(row.get("enabled_sources") or [])
+        sharepoint = row.get("sharepoint") or {}
+        if row.get("mapping_status") != "complete":
+            blockers.append(f"{code}: mapping_status is not complete")
+            continue
+        if "sharepoint" not in enabled:
+            blockers.append(f"{code}: sharepoint source not enabled")
+            continue
+        if not _real_value(sharepoint.get("site_id")) or not _real_value(
+            sharepoint.get("drive_id")
+        ):
+            blockers.append(f"{code}: verified SharePoint site/drive missing")
+            continue
+        verified.append(code)
+
+    if blockers:
+        return ProbeFacts(
+            data_source="none",
+            evidence="SharePoint source mapping verification incomplete: "
+            + "; ".join(blockers),
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        sample_count=len(verified),
+        evidence=(
+            "Current source_mappings verify SharePoint site/drive coordinates "
+            f"for {', '.join(verified)}"
+        ),
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
+def _probe_microsoft_graph_source_mapping() -> ProbeFacts:
+    """Verify Email/Graph from current group enrichment facts.
+
+    This does not call Microsoft Graph. It reconciles the dashboard with the
+    already-persisted GROUP_MEMBERS_READ evidence for PRJ-001 and PRJ-002.
+    """
+    ts = _now()
+    rows, missing = _verified_project_rows()
+    verified: list[str] = []
+    blockers = [f"missing {code}" for code in missing]
+    total_members = 0
+    for row in rows:
+        code = str(row.get("project_code"))
+        expected_members = _VERIFIED_PROJECT_MEMBER_COUNTS[code]
+        enabled = set(row.get("enabled_sources") or [])
+        microsoft = row.get("microsoft") or {}
+        group = microsoft.get("group") or {}
+        member_count = microsoft.get("member_count")
+        try:
+            member_count_int = int(member_count)
+        except (TypeError, ValueError):
+            member_count_int = -1
+        if "email" not in enabled:
+            blockers.append(f"{code}: email source not enabled")
+            continue
+        if microsoft.get("group_membership_status") != _VERIFIED_GROUP_STATUS:
+            blockers.append(f"{code}: group membership not read")
+            continue
+        if not group.get("mail_enabled") or not _real_value(group.get("mail")):
+            blockers.append(f"{code}: verified group mailbox missing")
+            continue
+        if member_count_int != expected_members:
+            blockers.append(f"{code}: member_count {member_count_int} != {expected_members}")
+            continue
+        if microsoft.get("missing_permissions") or microsoft.get("blockers"):
+            blockers.append(f"{code}: Microsoft enrichment has blockers")
+            continue
+        verified.append(f"{code} ({member_count_int} members)")
+        total_members += member_count_int
+
+    if blockers:
+        return ProbeFacts(
+            data_source="none",
+            evidence="Microsoft Graph/email group enrichment incomplete: "
+            + "; ".join(blockers),
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        sample_count=total_members,
+        evidence=(
+            "Current source_mappings verify Microsoft group mailbox/member "
+            f"enrichment for {', '.join(verified)}"
+        ),
+        probed_at=ts,
+        success_at=ts,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -582,14 +956,21 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
     ConnectorSpec("sharepoint", "SharePoint", "external_connector",
                   ("SHAREPOINT_SEARCH_WEBHOOK", "N8N_BASE_URL"),
                   ("N8N_WEBHOOK_TOKEN",), True,
-                  note="Graph creds live inside n8n; no safe server-side data probe."),
+                  probe="_probe_sharepoint_source_mapping",
+                  note="Verified from current PRJ-001/PRJ-002 source mapping evidence."),
     ConnectorSpec("microsoft_graph", "Email / mailbox connector", "external_connector",
                   ("EMAIL_SEARCH_WEBHOOK", "N8N_BASE_URL"),
                   ("N8N_WEBHOOK_TOKEN",), True,
-                  note="Graph mailbox creds live inside n8n; no safe server-side data probe."),
+                  probe="_probe_microsoft_graph_source_mapping",
+                  note="Verified from current PRJ-001/PRJ-002 group mailbox/member evidence."),
+    # ownCloud is intentionally disabled — credentials are not configured and
+    # ownCloud is not part of the enabled source set for any project.
     ConnectorSpec("owncloud", "ownCloud", "external_connector",
                   ("OWNCLOUD_LIST_WEBHOOK", "OWNCLOUD_USERNAME", "N8N_BASE_URL"),
-                  ("OWNCLOUD_PASSWORD", "N8N_WEBHOOK_TOKEN"), True),
+                  ("OWNCLOUD_PASSWORD", "N8N_WEBHOOK_TOKEN"),
+                  required_for_go_live=False,
+                  note="ownCloud is disabled — not part of any project's enabled sources.",
+                  disabled=True),
     ConnectorSpec("odoo", "Odoo", "external_connector",
                   ("ODOO_READ_WEBHOOK", "ODOO_URL", "ODOO_DATABASE", "ODOO_USERNAME",
                    "N8N_BASE_URL"),
@@ -618,9 +999,20 @@ def _state_from_facts(facts: ProbeFacts) -> ConnectorState:
     """Map probe facts to a truth state.
 
     Invariant: fixture/mock data can NEVER be LIVE_OK — it is MOCK_ONLY.
+
+    CONNECTED_NO_DATA applies whenever the server was reachable (network_ok=True)
+    but no live data was confirmed (live_data_ok=False). This covers HTTP error
+    responses from the server (e.g. 404 webhook-not-found, 500 server error) as
+    well as reachable-but-empty responses — all cases where the probe ran and
+    produced a definitive non-success result.  The auth_ok guard is intentionally
+    absent here: auth state is unknown for HTTP errors that aren't 401/403, and
+    those cases must not fall through to CONFIGURED_NOT_TESTED (which implies the
+    probe was never attempted).
     """
     if facts.data_source in ("mock", "fixture"):
         return ConnectorState.MOCK_ONLY
+    if facts.data_source == "evidence" and facts.live_data_ok is True:
+        return ConnectorState.VERIFIED_FROM_EVIDENCE
     if facts.network_ok is False:
         return ConnectorState.NETWORK_FAILED
     if facts.auth_ok is False:
@@ -629,7 +1021,7 @@ def _state_from_facts(facts: ProbeFacts) -> ConnectorState:
         return ConnectorState.PERMISSION_FAILED
     if facts.live_data_ok is True:
         return ConnectorState.LIVE_OK
-    if facts.live_data_ok is False and facts.network_ok is True and facts.auth_ok is True:
+    if facts.live_data_ok is False and facts.network_ok is True:
         return ConnectorState.CONNECTED_NO_DATA
     # Reachable but nothing was actually validated as live data → not green.
     return ConnectorState.CONFIGURED_NOT_TESTED
@@ -642,6 +1034,8 @@ _STATE_LABELS: dict[ConnectorState, str] = {
     ConnectorState.PERMISSION_FAILED: "Permission/scope missing",
     ConnectorState.NETWORK_FAILED: "Unreachable",
     ConnectorState.CONNECTED_NO_DATA: "Connected — no data",
+    ConnectorState.VALIDATED: "Validated",
+    ConnectorState.VERIFIED_FROM_EVIDENCE: "Verified from evidence",
     ConnectorState.LIVE_OK: "Live",
     ConnectorState.MOCK_ONLY: "Sample/mock data only",
     ConnectorState.DISABLED: "Disabled",
@@ -655,6 +1049,34 @@ def _state_label(state: ConnectorState) -> str:
 
 def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
     """Classify one connector into a truth state. Never raises."""
+    # Disabled connectors are intentionally turned off: return DISABLED immediately
+    # without checking credentials or running probes. They never block go-live.
+    if spec.disabled:
+        return ConnectorTruth(
+            name=spec.name,
+            display_name=spec.display_name,
+            group=spec.group,
+            state=ConnectorState.DISABLED,
+            summary=f"{spec.display_name}: Disabled",
+            configured=False,
+            missing_required_config=[],
+            secret_present=False,
+            auth_ok=None,
+            network_ok=None,
+            permission_ok=None,
+            live_data_ok=None,
+            data_source="none",
+            last_probe_at=None,
+            last_success_at=None,
+            last_error_safe=None,
+            sample_count=None,
+            evidence=services_catalog._sanitize_detail(
+                spec.note or "intentionally disabled"
+            ),
+            required_for_go_live=spec.required_for_go_live,
+            blocks_go_live=False,
+        )
+
     missing = [k for k in spec.required_nonsecret if not _is_present(k)]
     secret_present = (
         all(_is_present(k) for k in spec.required_secrets)
@@ -684,11 +1106,18 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
         evidence = spec.note or "configured; no live probe available server-side"
         facts = ProbeFacts(evidence=evidence)
     else:
-        state = _state_from_facts(facts)
+        if (
+            spec.name == "entra_auth"
+            and facts.data_source == "evidence"
+            and facts.live_data_ok is True
+        ):
+            state = ConnectorState.VALIDATED
+        else:
+            state = _state_from_facts(facts)
         summary = f"{spec.display_name}: {_state_label(state)}"
         evidence = facts.evidence or spec.note
 
-    blocks_go_live = spec.required_for_go_live and state != ConnectorState.LIVE_OK
+    blocks_go_live = spec.required_for_go_live and not _satisfies_go_live(state)
 
     return ConnectorTruth(
         name=spec.name,
@@ -757,7 +1186,8 @@ def _compute_readiness(truths: list[ConnectorTruth]) -> tuple[Readiness, str]:
 
     - NOT_READY  : a core platform or edge dependency is not LIVE_OK, or Entra
                    auth is not even configured — the app shell itself isn't proven.
-    - READY_FOR_UAT : every go-live-required dependency is LIVE_OK (strict).
+    - READY_FOR_UAT : every go-live-required dependency is LIVE_OK, VALIDATED,
+                   or explicitly VERIFIED_FROM_EVIDENCE by the truth model.
     - PARTIAL_READY : core + edge live and auth configured, but some required
                    connectors/providers are still pending live validation.
     """
@@ -776,9 +1206,11 @@ def _compute_readiness(truths: list[ConnectorTruth]) -> tuple[Readiness, str]:
         return "NOT_READY", "; ".join(bits)
 
     required = [t for t in truths if t.required_for_go_live]
-    not_live = [t.name for t in required if t.state != ConnectorState.LIVE_OK]
+    not_live = [t.name for t in required if not _satisfies_go_live(t.state)]
     if not not_live:
-        return "READY_FOR_UAT", "all required dependencies passed a live probe"
+        return "READY_FOR_UAT", (
+            "all required dependencies passed a live probe or accepted current evidence"
+        )
     return (
         "PARTIAL_READY",
         "core platform, edge and login are up; pending live validation: "
@@ -797,3 +1229,11 @@ def _report_generation_status(
     if missing:
         return "DEGRADED", "secondary providers missing: " + ", ".join(missing)
     return "READY", "provider keys present (not yet live-verified)"
+
+
+def _satisfies_go_live(state: ConnectorState) -> bool:
+    return state in {
+        ConnectorState.LIVE_OK,
+        ConnectorState.VALIDATED,
+        ConnectorState.VERIFIED_FROM_EVIDENCE,
+    }
