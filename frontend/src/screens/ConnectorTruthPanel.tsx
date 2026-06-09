@@ -35,6 +35,7 @@ function formatTs(iso: string | null): string {
 const STATE_LABEL: Record<ConnectorState, string> = {
   LIVE_OK: 'Live',
   VALIDATED: 'Validated',
+  PREVIOUSLY_VALIDATED_TOKEN_EXPIRED: 'Previously validated — token expired',
   VERIFIED_FROM_EVIDENCE: 'Verified from evidence',
   CONNECTED_NO_DATA: 'Connected — no data',
   CONFIGURED_NOT_TESTED: 'Configured — not tested',
@@ -52,6 +53,8 @@ const STATE_LABEL: Record<ConnectorState, string> = {
 const STATE_CLASS: Record<ConnectorState, string> = {
   LIVE_OK: 'bg-success/15 text-success border-success/40',
   VALIDATED: 'bg-success/15 text-success border-success/40',
+  PREVIOUSLY_VALIDATED_TOKEN_EXPIRED:
+    'bg-warning/15 text-warning border-warning/40',
   VERIFIED_FROM_EVIDENCE: 'bg-success/15 text-success border-success/40',
   CONNECTED_NO_DATA: 'bg-warning/15 text-warning border-warning/40',
   MOCK_ONLY: 'bg-warning/15 text-warning border-warning/40',

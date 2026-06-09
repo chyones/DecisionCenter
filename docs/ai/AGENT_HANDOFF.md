@@ -18,6 +18,32 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-09 Entra Token-Expiry Dashboard Fix
+
+The Entra connector truth now preserves prior validation history after the
+validated token expires:
+
+- Fresh passing evidence -> `VALIDATED`.
+- Passing evidence with an expired token -> `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED`.
+- Config with no validation evidence -> `CONFIGURED_NOT_TESTED`.
+- Missing config -> `NOT_CONFIGURED`.
+
+The frontend displays `Previously validated — token expired` with non-green
+warning styling. System Health maps the state to `unknown`. An admin-only
+current-browser-token revalidation endpoint validates the bearer token, calls
+Graph `/me`, and writes/returns only redacted evidence; `/root/dc_token.txt`
+remains CLI-only input.
+
+Validation: connector-truth integration tests `44 passed`; Ruff, compileall,
+frontend lint/build, doc drift, and AI context passed. The app image was rebuilt,
+the `app` service recreated, and `/healthz` returned `status=ok` with PostgreSQL,
+Redis, Qdrant, and MinIO all `ok`.
+
+Evidence:
+`docs/evidence/uat/ENTRA_TOKEN_EXPIRY_DASHBOARD_BEHAVIOR_2026-06-08.md`.
+Production remains `NOT_LIVE`; Gate 4, Gate 5, UAT, Slice 7, and LIVE were not
+started.
+
 ## 2026-06-03 Reconciliation Update
 
 This reconciliation does not change production app deployment. The deployed n8n

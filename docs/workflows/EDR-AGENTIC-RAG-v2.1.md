@@ -1738,6 +1738,30 @@ Gate 21. Hetzner server is hardened: ufw enabled, SSH key-only, Caddy HTTPS.
 Gate 22. Daily backups to Hetzner Storage Box are verified by a restore.
 ```
 
+### 33.1 Entra Connector Dashboard Truth
+
+The admin connector-truth dashboard MUST distinguish Entra configuration from
+validation history:
+
+- Fresh, passing token-validation evidence with a future expiry timestamp:
+  `VALIDATED`.
+- Passing validation evidence whose recorded token expiry is in the past:
+  `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED`.
+- Entra config present with no validation evidence ever recorded:
+  `CONFIGURED_NOT_TESTED`.
+- Required Entra config absent: `NOT_CONFIGURED`.
+
+`PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` MUST NOT be displayed as green and MUST
+NOT be collapsed into `CONFIGURED_NOT_TESTED`. Normal dashboard status MUST
+NOT depend on `/root/dc_token.txt`; that file remains CLI-only operator input.
+
+An admin current-browser-token revalidation path MAY read the request
+`Authorization` bearer token, but it MUST validate the token before calling
+Microsoft Graph `/me`. It MAY persist and return only redacted evidence:
+issuer/audience/tenant check results, token expiry timestamp, canonical role,
+`/me` result, and validation timestamp. The raw token MUST NOT be logged,
+printed, persisted, or returned.
+
 ---
 
 ## 34. Quick Start Commands (Reference)

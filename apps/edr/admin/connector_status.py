@@ -31,6 +31,24 @@ Design notes
 - A connector with ``disabled=True`` is intentionally turned off. It is
   classified as ``DISABLED`` regardless of credential presence, never appears
   in the go-live blocking list, and never shows as ``error`` on the health page.
+
+Entra token expiry policy
+-------------------------
+Entra access tokens expire hourly under normal operation. The dashboard MUST
+NOT require a manually-refreshed ``dc_token.txt`` for routine operation.
+
+Three distinct Entra states are supported:
+- ``VALIDATED``: evidence file exists and the validation token is still live.
+- ``PREVIOUSLY_VALIDATED_TOKEN_EXPIRED``: evidence exists but the token has
+  expired. The connector WAS validated — this is different from CONFIGURED_NOT_TESTED
+  which means it was *never* validated. Revalidation via the admin endpoint clears
+  this state.
+- ``CONFIGURED_NOT_TESTED``: config keys present but no validation evidence has
+  ever been saved (first-run or evidence file deleted).
+
+The ``/admin/connectors/entra/revalidate-current-token`` endpoint allows an
+admin to revalidate using their current browser session bearer token without
+needing CLI access.
 """
 from __future__ import annotations
 
@@ -60,6 +78,7 @@ class ConnectorState(StrEnum):
     NETWORK_FAILED = "NETWORK_FAILED"
     CONNECTED_NO_DATA = "CONNECTED_NO_DATA"
     VALIDATED = "VALIDATED"
+    PREVIOUSLY_VALIDATED_TOKEN_EXPIRED = "PREVIOUSLY_VALIDATED_TOKEN_EXPIRED"
     VERIFIED_FROM_EVIDENCE = "VERIFIED_FROM_EVIDENCE"
     LIVE_OK = "LIVE_OK"
     MOCK_ONLY = "MOCK_ONLY"
@@ -583,6 +602,20 @@ def _entra_validation_marker() -> dict[str, Any] | None:
 
 
 def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
+    """Return ProbeFacts derived from the persisted Entra validation marker.
+
+    Returns ``None`` if no valid evidence marker exists (no file, invalid
+    marker, or FAIL result) — the caller treats None as "no evidence".
+
+    When a valid marker exists but the validated token has expired, returns
+    facts with ``data_source="evidence"`` and ``live_data_ok=False``.  This
+    signals ``PREVIOUSLY_VALIDATED_TOKEN_EXPIRED`` in ``classify()``, which is
+    semantically distinct from ``CONFIGURED_NOT_TESTED``: the connector was
+    verified before — it just needs revalidation, not first-time setup.
+
+    When a valid marker exists and the token is still live, returns facts with
+    ``data_source="evidence"`` and ``live_data_ok=True`` → ``VALIDATED``.
+    """
     marker = _entra_validation_marker()
     if marker is None:
         return None
@@ -606,18 +639,28 @@ def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
     validated_at = _parse_utc_datetime(marker.get("validated_at"))
     if expires_at is None or validated_at is None:
         return None
+
+    role = services_catalog._sanitize_detail(str(marker.get("role") or "unknown"))
     now = datetime.now(timezone.utc)
+
     if expires_at <= now:
+        # Evidence exists but the token that was validated has since expired.
+        # data_source="evidence" + live_data_ok=False signals
+        # PREVIOUSLY_VALIDATED_TOKEN_EXPIRED (not CONFIGURED_NOT_TESTED).
+        expired_text = expires_at.isoformat().replace("+00:00", "Z")
         return ProbeFacts(
             network_ok=True,
             auth_ok=None,
-            live_data_ok=None,
-            data_source="none",
-            evidence="OIDC discovery and JWKS reachable; latest Entra validation evidence expired",
+            live_data_ok=False,
+            data_source="evidence",
+            evidence=(
+                f"Previous Entra validation found (role={role}) but token expired "
+                f"at {expired_text}. Use POST /admin/connectors/entra/revalidate-current-token "
+                "to revalidate with the current browser session."
+            ),
             probed_at=ts,
         )
 
-    role = services_catalog._sanitize_detail(str(marker.get("role") or "unknown"))
     expires_text = expires_at.isoformat().replace("+00:00", "Z")
     return ProbeFacts(
         network_ok=True,
@@ -693,6 +736,11 @@ def _probe_entra() -> ProbeFacts:
     The dashboard never reads a token. Entra moves to ``VALIDATED`` only when
     an operator-run validation script records a redacted PASS marker whose token
     expiry is still in the future.
+
+    Token expiry is handled transparently:
+    - Fresh evidence → VALIDATED (classify handles data_source=evidence + live=True)
+    - Expired evidence → PREVIOUSLY_VALIDATED_TOKEN_EXPIRED (data_source=evidence + live=False)
+    - No evidence → CONFIGURED_NOT_TESTED (None returned here → fallback ProbeFacts)
     """
     tenant = (settings.entra_tenant_id or "").strip()
     ts = _now()
@@ -713,6 +761,93 @@ def _probe_entra() -> ProbeFacts:
         probed_at=ts,
         success_at=oidc_facts.success_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin revalidation — writes redacted evidence, never stores raw token
+# ---------------------------------------------------------------------------
+
+
+def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[str, Any]:
+    """Validate a user bearer token and write redacted evidence to the evidence file.
+
+    Accepts the raw token **only for the duration of this call**. The token is:
+    - Passed to EntraJWTValidator.validate() for cryptographic verification.
+    - Used to decode the ``exp`` claim (already verified above).
+    - Never written to any file, log, or return value.
+
+    What IS written to the evidence file (only):
+    - result: "PASS" only when Graph /me also succeeded, otherwise "FAIL"
+    - validated_at: ISO timestamp of this call
+    - token_expires_at: ISO timestamp of the token expiry
+    - role: the resolved role string (sanitised)
+    - me_role: same as role
+    - checks: dict of boolean pass/fail for each validation step
+
+    Raises ValueError if the token is invalid or already expired.
+    Returns the redacted payload dict (no token, no secret values).
+    """
+    from apps.edr.auth.validator import EntraJWTValidator
+
+    tenant = (settings.entra_tenant_id or "").strip()
+    client_id = (settings.entra_client_id or "").strip()
+    if not tenant or not client_id:
+        raise ValueError("Entra not configured (ENTRA_TENANT_ID or ENTRA_CLIENT_ID missing)")
+
+    validator = EntraJWTValidator(tenant, client_id)
+    try:
+        jwt_claims = validator.validate(token)
+    except Exception as exc:
+        raise ValueError("Token validation failed") from exc
+
+    try:
+        import jwt as _pyjwt  # PyJWT (validated in EntraJWTValidator above)
+        unverified = _pyjwt.decode(token, options={"verify_signature": False})
+        exp_ts = int(unverified.get("exp", 0))
+        expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+    except Exception as exc:
+        raise ValueError("Cannot read token expiry claim") from exc
+
+    now = datetime.now(timezone.utc)
+    if expires_at <= now:
+        raise ValueError(
+            "Token is already expired — cannot revalidate with an expired token. "
+            "Log in again and retry."
+        )
+
+    role = services_catalog._sanitize_detail(str(jwt_claims.role or "unknown"))
+    expires_iso = expires_at.isoformat().replace("+00:00", "Z")
+    validated_iso = now.isoformat().replace("+00:00", "Z")
+
+    payload: dict[str, Any] = {
+        "result": "PASS" if me_ok else "FAIL",
+        "validated_at": validated_iso,
+        "token_expires_at": expires_iso,
+        "role": role,
+        "me_role": role,
+        "checks": {
+            "oidc_discovery_ok": True,
+            "jwks_ok": True,
+            "issuer_ok": True,
+            "audience_ok": True,
+            "tenant_ok": True,
+            "expiry_valid": True,
+            "role_present": bool(jwt_claims.role),
+            "me_role_ok": me_ok,
+        },
+    }
+
+    # Write marker to evidence file. No raw token is written.
+    marker_line = (
+        f"{_ENTRA_VALIDATION_MARKER_PREFIX} "
+        + json.dumps(payload, sort_keys=True)
+        + f" {_ENTRA_VALIDATION_MARKER_SUFFIX}\n"
+    )
+    _ENTRA_VALIDATION_EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _ENTRA_VALIDATION_EVIDENCE_PATH.write_text(marker_line, encoding="utf-8")
+
+    # Return only redacted evidence — no token, no secret values.
+    return payload
 
 
 def _jsonish(value: Any, fallback: Any) -> Any:
@@ -1008,6 +1143,11 @@ def _state_from_facts(facts: ProbeFacts) -> ConnectorState:
     absent here: auth state is unknown for HTTP errors that aren't 401/403, and
     those cases must not fall through to CONFIGURED_NOT_TESTED (which implies the
     probe was never attempted).
+
+    Note: ``data_source="evidence"`` with ``live_data_ok=False`` is intentionally
+    NOT handled here — that combination is Entra-specific and is mapped to
+    ``PREVIOUSLY_VALIDATED_TOKEN_EXPIRED`` by ``classify()`` before reaching this
+    function.
     """
     if facts.data_source in ("mock", "fixture"):
         return ConnectorState.MOCK_ONLY
@@ -1035,6 +1175,7 @@ _STATE_LABELS: dict[ConnectorState, str] = {
     ConnectorState.NETWORK_FAILED: "Unreachable",
     ConnectorState.CONNECTED_NO_DATA: "Connected — no data",
     ConnectorState.VALIDATED: "Validated",
+    ConnectorState.PREVIOUSLY_VALIDATED_TOKEN_EXPIRED: "Previously validated — token expired",
     ConnectorState.VERIFIED_FROM_EVIDENCE: "Verified from evidence",
     ConnectorState.LIVE_OK: "Live",
     ConnectorState.MOCK_ONLY: "Sample/mock data only",
@@ -1111,7 +1252,17 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
             and facts.data_source == "evidence"
             and facts.live_data_ok is True
         ):
+            # Fresh validation evidence present and token still live.
             state = ConnectorState.VALIDATED
+        elif (
+            spec.name == "entra_auth"
+            and facts.data_source == "evidence"
+            and facts.live_data_ok is False
+        ):
+            # Previous validation evidence exists but the validated token expired.
+            # This is distinct from CONFIGURED_NOT_TESTED: the connector was proven
+            # to work before — it needs revalidation, not first-time setup.
+            state = ConnectorState.PREVIOUSLY_VALIDATED_TOKEN_EXPIRED
         else:
             state = _state_from_facts(facts)
         summary = f"{spec.display_name}: {_state_label(state)}"

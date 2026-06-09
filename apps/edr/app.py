@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -221,7 +221,7 @@ def _extract_claims(
         try:
             return validator.validate(token)
         except Exception as exc:
-            raise HTTPException(status_code=401, detail=f"Invalid token: {exc}")
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
     # Bypass mode — Entra not configured
     if settings.app_env == "production":
         raise HTTPException(status_code=500, detail="ENTRA_CLIENT_ID not configured in production")
@@ -1525,6 +1525,51 @@ def admin_connectors_truth(
     return connector_status.build_report(run_probes=probe)
 
 
+@app.post("/admin/connectors/entra/revalidate-current-token")
+async def admin_entra_revalidate_token(
+    request: Request,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> dict:
+    """Revalidate Entra auth using the caller's current browser bearer token.
+
+    The auth dependency validates the token before this handler calls Graph
+    ``/me``. Only redacted validation evidence is persisted or returned.
+    """
+    _require_admin(claims)
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=400,
+            detail="Authorization: Bearer <token> required",
+        )
+    _raw_token = auth_header[7:].strip()
+    _me_ok = False
+    try:
+        from urllib.request import Request as _URLReq
+        from urllib.request import urlopen as _urlopen
+
+        _me_req = _URLReq(
+            "https://graph.microsoft.com/v1.0/me",
+            headers={"Authorization": f"Bearer {_raw_token}"},
+            method="GET",
+        )
+        with _urlopen(_me_req, timeout=10) as _resp:  # noqa: S310
+            _me_ok = _resp.status == 200
+    except Exception:
+        _me_ok = False
+    try:
+        evidence = await run_in_threadpool(
+            connector_status.write_entra_validation_evidence_marker,
+            _raw_token,
+            me_ok=_me_ok,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        del _raw_token
+    return evidence
+
+
 # ---------------------------------------------------------------------------
 # Phase 2B Slice 3 — System Health + cost monitor
 # Implements GET /admin/health/live and GET /admin/cost per
@@ -1598,6 +1643,7 @@ _CONNECTOR_STATE_TO_HEALTH: dict[connector_status.ConnectorState, str] = {
     connector_status.ConnectorState.VALIDATED: "ok",
     connector_status.ConnectorState.VERIFIED_FROM_EVIDENCE: "ok",
     connector_status.ConnectorState.CONNECTED_NO_DATA: "ok",
+    connector_status.ConnectorState.PREVIOUSLY_VALIDATED_TOKEN_EXPIRED: "unknown",
     connector_status.ConnectorState.CONFIGURED_NOT_TESTED: "unknown",
     connector_status.ConnectorState.MOCK_ONLY: "unknown",
     connector_status.ConnectorState.DISABLED: "unknown",

@@ -246,19 +246,23 @@ never claim an unconfigured or unproven integration is working. Source of truth:
 
 Truth states: `NOT_CONFIGURED`, `CONFIGURED_NOT_TESTED`, `AUTH_FAILED`,
 `PERMISSION_FAILED`, `NETWORK_FAILED`, `CONNECTED_NO_DATA`, `VALIDATED`,
-`VERIFIED_FROM_EVIDENCE`, `LIVE_OK`, `MOCK_ONLY`, `DISABLED`, `UNKNOWN`. A
-connector is shown green only on a real `LIVE_OK` probe, a current Entra
-`VALIDATED` marker, or accepted current source evidence — container-up,
-route-exists and fixture-exists are not evidence. Fixture/mock data is capped at
-`MOCK_ONLY` and can never be `LIVE_OK`.
+`PREVIOUSLY_VALIDATED_TOKEN_EXPIRED`, `VERIFIED_FROM_EVIDENCE`, `LIVE_OK`,
+`MOCK_ONLY`, `DISABLED`, `UNKNOWN`. A connector is shown green only on a real
+`LIVE_OK` probe, a current Entra `VALIDATED` marker, or accepted current source
+evidence — container-up, route-exists and fixture-exists are not evidence.
+Fixture/mock data is capped at `MOCK_ONLY` and can never be `LIVE_OK`.
 
 Real current connector states (config-derived; live probes execute in-container):
 
 - Core platform (PostgreSQL, Redis, Qdrant, MinIO): live-probed — reachability is
   the liveness proof → `LIVE_OK` when reachable.
 - Public edge (Cloudflare Tunnel + Caddy): live-probed via HTTPS `/healthz`.
-- Microsoft Entra authentication: `VALIDATED` only while a redacted, operator-run
-  fresh-token validation marker is current; otherwise `CONFIGURED_NOT_TESTED`.
+- Microsoft Entra authentication: `VALIDATED` while redacted passing evidence
+  has a future token expiry; `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` when passing
+  validation history exists but its token expiry is past;
+  `CONFIGURED_NOT_TESTED` only when config exists and no validation evidence has
+  ever been recorded. `/root/dc_token.txt` remains CLI-only input and is not a
+  normal dashboard dependency.
 - n8n and Odoo: live-probed through the runtime stack and shown `LIVE_OK` only
   when the probe returns real reachability/data evidence.
 - SharePoint and email / Microsoft Graph: may be `VERIFIED_FROM_EVIDENCE` only

@@ -21,6 +21,7 @@ Covered:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -29,9 +30,14 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from apps.edr.admin import connector_status as cs
-from apps.edr.app import admin_connectors_truth
+from apps.edr.app import (
+    _extract_claims,
+    admin_connectors_truth,
+    admin_entra_revalidate_token,
+)
 from apps.edr.rbac.roles import Role
 
 
@@ -251,9 +257,190 @@ def test_expired_entra_validation_marker_is_not_validated(
 
     truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
 
-    assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.state is cs.ConnectorState.PREVIOUSLY_VALIDATED_TOKEN_EXPIRED
+    assert truth.state is not cs.ConnectorState.CONFIGURED_NOT_TESTED
     assert truth.blocks_go_live is True
     assert truth.state is not cs.ConnectorState.VALIDATED
+    assert truth.data_source == "evidence"
+    assert truth.live_data_ok is False
+
+
+def test_configured_entra_without_validation_evidence_remains_configured_not_tested(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    marker = tmp_path / "missing-entra-validation-evidence.md"
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+    monkeypatch.setattr(
+        cs,
+        "_probe_entra_oidc_jwks",
+        lambda tenant, ts: cs.ProbeFacts(
+            network_ok=True,
+            live_data_ok=None,
+            data_source="none",
+            evidence="OIDC discovery and JWKS reachable",
+            probed_at=ts,
+            success_at=ts,
+        ),
+    )
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.data_source == "none"
+    assert truth.blocks_go_live is True
+
+
+def test_missing_entra_config_is_not_configured(monkeypatch) -> None:
+    monkeypatch.setattr(cs.settings, "entra_client_id", None, raising=False)
+    monkeypatch.setattr(cs.settings, "entra_tenant_id", None, raising=False)
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.NOT_CONFIGURED
+    assert truth.configured is False
+    assert truth.blocks_go_live is True
+
+
+def test_entra_revalidation_marker_never_stores_or_returns_raw_token(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    raw_token = "secret-header.payload.signature"
+    marker = tmp_path / "entra-validation.md"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+
+    class FakeValidator:
+        def __init__(self, tenant_id: str, client_id: str) -> None:
+            assert tenant_id == cs.settings.entra_tenant_id
+            assert client_id == cs.settings.entra_client_id
+
+        def validate(self, token: str) -> MagicMock:
+            assert token == raw_token
+            return MagicMock(role="admin")
+
+    monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FakeValidator)
+    monkeypatch.setattr(
+        "jwt.decode",
+        lambda token, options: {"exp": int(expires_at.timestamp())},
+    )
+
+    result = cs.write_entra_validation_evidence_marker(raw_token, me_ok=True)
+    stored = marker.read_text(encoding="utf-8")
+    returned = json.dumps(result, sort_keys=True)
+
+    assert raw_token not in stored
+    assert raw_token not in returned
+    assert set(result) == {
+        "result",
+        "validated_at",
+        "token_expires_at",
+        "role",
+        "me_role",
+        "checks",
+    }
+    assert result["role"] == "admin"
+    assert result["checks"] == {
+        "oidc_discovery_ok": True,
+        "jwks_ok": True,
+        "issuer_ok": True,
+        "audience_ok": True,
+        "tenant_ok": True,
+        "expiry_valid": True,
+        "role_present": True,
+        "me_role_ok": True,
+    }
+
+
+def test_entra_revalidation_failure_never_returns_raw_token(
+    entra_configured, monkeypatch
+) -> None:
+    raw_token = "secret-invalid-token"
+
+    class FailingValidator:
+        def __init__(self, tenant_id: str, client_id: str) -> None:
+            pass
+
+        def validate(self, token: str) -> MagicMock:
+            raise ValueError(f"upstream rejected {token}")
+
+    monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FailingValidator)
+
+    with pytest.raises(ValueError) as exc:
+        cs.write_entra_validation_evidence_marker(raw_token, me_ok=False)
+
+    assert raw_token not in str(exc.value)
+    assert str(exc.value) == "Token validation failed"
+
+
+def test_auth_dependency_failure_never_echoes_raw_token(
+    entra_configured, monkeypatch
+) -> None:
+    raw_token = "secret-auth-header-token"
+
+    class FailingValidator:
+        def __init__(self, tenant_id: str, client_id: str) -> None:
+            pass
+
+        def validate(self, token: str) -> MagicMock:
+            raise ValueError(f"upstream rejected {token}")
+
+    monkeypatch.setattr("apps.edr.app.EntraJWTValidator", FailingValidator)
+
+    with pytest.raises(HTTPException) as exc:
+        _extract_claims(
+            authorization=f"Bearer {raw_token}",
+            x_user_role=None,
+            x_user_id=None,
+        )
+
+    assert exc.value.status_code == 401
+    assert raw_token not in str(exc.value.detail)
+    assert exc.value.detail == "Invalid token"
+
+
+def test_entra_revalidation_endpoint_never_returns_raw_token(monkeypatch) -> None:
+    raw_token = "secret-browser-token"
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/admin/connectors/entra/revalidate-current-token",
+            "headers": [(b"authorization", f"Bearer {raw_token}".encode())],
+        }
+    )
+
+    class GraphMeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: GraphMeResponse())
+
+    def fake_write(token: str, *, me_ok: bool) -> dict[str, Any]:
+        assert token == raw_token
+        assert me_ok is True
+        return {
+            "result": "PASS",
+            "validated_at": "2026-06-09T00:00:00Z",
+            "token_expires_at": "2026-06-09T01:00:00Z",
+            "role": "admin",
+            "checks": {"me_role_ok": True},
+        }
+
+    monkeypatch.setattr(cs, "write_entra_validation_evidence_marker", fake_write)
+
+    result = asyncio.run(
+        admin_entra_revalidate_token(
+            request=request,
+            claims=_claims(Role.ADMIN.value),
+        )
+    )
+
+    assert raw_token not in json.dumps(result, sort_keys=True)
 
 
 def _verified_source_mapping_rows() -> list[dict[str, Any]]:
@@ -516,6 +703,40 @@ def test_verified_group_membership_marks_graph_email_verified(
     assert truth.blocks_go_live is False
     assert "17 members" in truth.evidence
     assert "18 members" in truth.evidence
+
+
+def test_existing_connector_truth_states_remain_unchanged(
+    odoo_configured,
+    microsoft_connectors_configured,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(cs, "_probe_odoo", _fake_evidence_response)
+    monkeypatch.setattr(cs, "_source_mapping_rows", _verified_source_mapping_rows)
+    for attr in ("anthropic_api_key", "voyage_api_key", "cohere_api_key"):
+        monkeypatch.setattr(cs.settings, attr, None, raising=False)
+
+    states = {
+        name: cs.classify(cs.CONNECTOR_SPEC_BY_NAME[name], run_probe=True).state
+        for name in (
+            "odoo",
+            "sharepoint",
+            "microsoft_graph",
+            "owncloud",
+            "anthropic",
+            "voyage",
+            "cohere",
+        )
+    }
+
+    assert states == {
+        "odoo": cs.ConnectorState.LIVE_OK,
+        "sharepoint": cs.ConnectorState.VERIFIED_FROM_EVIDENCE,
+        "microsoft_graph": cs.ConnectorState.VERIFIED_FROM_EVIDENCE,
+        "owncloud": cs.ConnectorState.DISABLED,
+        "anthropic": cs.ConnectorState.NOT_CONFIGURED,
+        "voyage": cs.ConnectorState.NOT_CONFIGURED,
+        "cohere": cs.ConnectorState.NOT_CONFIGURED,
+    }
 
 
 def test_incomplete_group_membership_stays_configured_not_tested(
