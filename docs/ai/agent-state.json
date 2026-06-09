@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "e1b40d02b05538710f919c5daa19e0275268579b",
+  "current_commit": "f5bfdcd5d68a54ef26c37d1c704e4734dbca39e0",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -100,12 +100,12 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "450ecc8681ee37a0ae99c10c584d11b6a1afa74f",
-    "run_id": 26876872322,
+    "commit": "4b24c3e28ef4f56cca3f169d3e176099e8513a12",
+    "run_id": 27196869862,
     "status": "completed",
-    "conclusion": "failure",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/26876872322",
-    "note": "Latest main CI verified through GitHub REST API on 2026-06-03 before the reconciliation commit. Jobs frontend and smoke failed before this local reconciliation."
+    "conclusion": "success",
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/27196869862",
+    "note": "Last fully green CI run before governance anchor refresh. Both smoke and frontend jobs passed."
   },
   "latest_local_validation": {
     "date": "2026-06-02",
@@ -131,7 +131,7 @@
     "uat_flow": "SKIP (does not fake browser-authenticated success)",
     "entra_auth_test": "REQUIRES_BROWSER (real Entra JWT needed)",
     "report_generation_test": "REQUIRES_BROWSER (authenticated report generation not tested)",
-    "evidence_panel_test": "REQUIRES_BROWSER (generated report evidence panel not tested)",
+    "evidence_panel_test": "REQUIRES_BROWSER (authenticated report generation not tested)",
     "doc_drift": "clean",
     "ai_context": "clean",
     "postflight": "clean (allow-no-evidence)",
