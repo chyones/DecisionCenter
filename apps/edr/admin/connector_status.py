@@ -160,6 +160,7 @@ class ProbeFacts:
     last_error_safe: str | None = None
     probed_at: str | None = None
     success_at: str | None = None
+    token_expires_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +214,7 @@ class ConnectorTruth(BaseModel):
     data_source: DataSource
     last_probe_at: str | None
     last_success_at: str | None
+    token_expires_at: str | None
     last_error_safe: str | None
     sample_count: int | None
     evidence: str
@@ -654,11 +656,12 @@ def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
             live_data_ok=False,
             data_source="evidence",
             evidence=(
-                f"Previous Entra validation found (role={role}) but token expired "
-                f"at {expired_text}. Use POST /admin/connectors/entra/revalidate-current-token "
-                "to revalidate with the current browser session."
+                f"Previous Entra validation for role={role} expired and "
+                "requires revalidation."
             ),
             probed_at=ts,
+            success_at=validated_at.isoformat().replace("+00:00", "Z"),
+            token_expires_at=expired_text,
         )
 
     expires_text = expires_at.isoformat().replace("+00:00", "Z")
@@ -676,6 +679,7 @@ def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
         ),
         probed_at=ts,
         success_at=validated_at.isoformat().replace("+00:00", "Z"),
+        token_expires_at=expires_text,
     )
 
 
@@ -776,8 +780,8 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
     - Used to decode the ``exp`` claim (already verified above).
     - Never written to any file, log, or return value.
 
-    What IS written to the evidence file (only):
-    - result: "PASS" only when Graph /me also succeeded, otherwise "FAIL"
+    What IS written to the evidence file after all checks pass (only):
+    - result: "PASS"
     - validated_at: ISO timestamp of this call
     - token_expires_at: ISO timestamp of the token expiry
     - role: the resolved role string (sanitised)
@@ -814,13 +818,17 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
             "Token is already expired — cannot revalidate with an expired token. "
             "Log in again and retry."
         )
+    if not me_ok:
+        raise ValueError(
+            "Microsoft session validation failed. Sign in again and retry."
+        )
 
     role = services_catalog._sanitize_detail(str(jwt_claims.role or "unknown"))
     expires_iso = expires_at.isoformat().replace("+00:00", "Z")
     validated_iso = now.isoformat().replace("+00:00", "Z")
 
     payload: dict[str, Any] = {
-        "result": "PASS" if me_ok else "FAIL",
+        "result": "PASS",
         "validated_at": validated_iso,
         "token_expires_at": expires_iso,
         "role": role,
@@ -1209,6 +1217,7 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
             data_source="none",
             last_probe_at=None,
             last_success_at=None,
+            token_expires_at=None,
             last_error_safe=None,
             sample_count=None,
             evidence=services_catalog._sanitize_detail(
@@ -1286,6 +1295,7 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
         data_source=facts.data_source,
         last_probe_at=facts.probed_at,
         last_success_at=facts.success_at,
+        token_expires_at=facts.token_expires_at,
         last_error_safe=services_catalog._sanitize_detail(facts.last_error_safe)
         if facts.last_error_safe
         else None,

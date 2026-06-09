@@ -262,7 +262,11 @@ Real current connector states (config-derived; live probes execute in-container)
   validation history exists but its token expiry is past;
   `CONFIGURED_NOT_TESTED` only when config exists and no validation evidence has
   ever been recorded. `/root/dc_token.txt` remains CLI-only input and is not a
-  normal dashboard dependency.
+  normal dashboard dependency. Expired history is rendered as `Expired`, with
+  separate last-success, token-expiry, and last-check timestamps plus a
+  `Revalidate with current browser session` action. It is never shown as
+  current validation evidence, and failed revalidation preserves the prior
+  redacted marker.
 - n8n and Odoo: live-probed through the runtime stack and shown `LIVE_OK` only
   when the probe returns real reachability/data evidence.
 - SharePoint and email / Microsoft Graph: may be `VERIFIED_FROM_EVIDENCE` only

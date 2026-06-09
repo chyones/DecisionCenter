@@ -18,6 +18,32 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-09 Entra Expired-State UI Badge Fix
+
+The Entra card now treats `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` as action
+required rather than current positive validation:
+
+- Status is `Expired`, with warning styling.
+- Current-validation wording and internal endpoint instructions are absent.
+- Timestamps are split into `Last successful validation`, `Token expired at`,
+  and `Last checked`.
+- `Revalidate with current browser session` force-refreshes the API token
+  through the existing MSAL browser flow before calling the redacted backend
+  revalidation endpoint.
+- Successful revalidation returns the card to `Validated`; failed acquisition,
+  token validation, or Graph `/me` keeps the expired state and displays
+  sign-in/retry guidance.
+- Failed Graph `/me` validation no longer overwrites the previous successful
+  redacted evidence marker.
+
+JWT issuer, audience, tenant, expiry, and role validation rules were not
+changed. No token file, fake token, Microsoft permission, Gate, deployment, or
+LIVE work was used.
+
+Evidence:
+`docs/evidence/uat/ENTRA_EXPIRED_STATE_UI_BADGE_FIX_2026-06-09.md`.
+Production remains `NOT_LIVE`.
+
 ## 2026-06-09 Entra Token-Expiry Dashboard Fix
 
 The Entra connector truth now preserves prior validation history after the

@@ -586,6 +586,7 @@ export interface ConnectorTruth {
   data_source: ConnectorDataSource;
   last_probe_at: string | null;
   last_success_at: string | null;
+  token_expires_at: string | null;
   last_error_safe: string | null;
   sample_count: number | null;
   evidence: string;

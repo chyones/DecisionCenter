@@ -1754,6 +1754,14 @@ validation history:
 `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` MUST NOT be displayed as green and MUST
 NOT be collapsed into `CONFIGURED_NOT_TESTED`. Normal dashboard status MUST
 NOT depend on `/root/dc_token.txt`; that file remains CLI-only operator input.
+For this state, the UI MUST:
+
+- label the connector `Expired` or `Action required`;
+- omit current-validation wording such as `validated once`;
+- show `Last successful validation`, `Token expired at`, and `Last checked` as
+  separate timestamps;
+- omit internal route or HTTP-method instructions; and
+- offer `Revalidate with current browser session`.
 
 An admin current-browser-token revalidation path MAY read the request
 `Authorization` bearer token, but it MUST validate the token before calling
@@ -1761,6 +1769,15 @@ Microsoft Graph `/me`. It MAY persist and return only redacted evidence:
 issuer/audience/tenant check results, token expiry timestamp, canonical role,
 `/me` result, and validation timestamp. The raw token MUST NOT be logged,
 printed, persisted, or returned.
+
+The frontend revalidation action MUST request a fresh/current API access token
+through the existing MSAL browser flow. It SHOULD attempt silent acquisition
+with forced refresh first and MAY use the existing interactive redirect fallback.
+The backend MUST retain the existing cryptographic issuer, audience, tenant,
+expiry, and canonical-role validation. Passing evidence is replaced only after
+both token validation and Graph `/me` succeed. A failed acquisition or
+validation MUST preserve the expired state and prior redacted successful
+evidence, with user-facing sign-in/retry guidance.
 
 ---
 

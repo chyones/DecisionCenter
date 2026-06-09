@@ -2,8 +2,8 @@
  * Connectors & APIs (`/admin/connectors`) — admin-only.
  *
  * Honest connector status. Reads `GET /admin/connectors/truth` (the Connector
- * Status Truth model) and renders explicit states with evidence and "Last
- * verified" timestamps. Nothing is shown green unless a real live probe
+ * Status Truth model) and renders explicit states with evidence and
+ * state-appropriate timestamps. Nothing is shown green unless a real live probe
  * returned `LIVE_OK`; missing credentials show `Not configured`, and configured
  * dependencies with no live proof show `Configured — not tested`.
  *
@@ -20,7 +20,7 @@ export function AdminConnectorsScreen() {
           Connectors &amp; APIs
         </h1>
         <span className="text-caption text-text-muted">
-          read-only · admin · live-probe truth
+          admin · live-probe truth
         </span>
       </div>
       <ConnectorTruthPanel variant="full" />

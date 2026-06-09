@@ -234,6 +234,8 @@ def test_fresh_entra_validation_marker_marks_auth_validated(
     assert truth.live_data_ok is True
     assert truth.blocks_go_live is False
     assert "role=admin" in truth.evidence
+    assert truth.last_success_at is not None
+    assert truth.token_expires_at is not None
 
 
 def test_expired_entra_validation_marker_is_not_validated(
@@ -263,6 +265,11 @@ def test_expired_entra_validation_marker_is_not_validated(
     assert truth.state is not cs.ConnectorState.VALIDATED
     assert truth.data_source == "evidence"
     assert truth.live_data_ok is False
+    assert truth.last_success_at is not None
+    assert truth.token_expires_at is not None
+    assert "POST" not in truth.evidence
+    assert "current-token" not in truth.evidence
+    assert "requires revalidation" in truth.evidence
 
 
 def test_configured_entra_without_validation_evidence_remains_configured_not_tested(
@@ -370,6 +377,40 @@ def test_entra_revalidation_failure_never_returns_raw_token(
 
     assert raw_token not in str(exc.value)
     assert str(exc.value) == "Token validation failed"
+
+
+def test_failed_graph_me_revalidation_preserves_previous_evidence(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    raw_token = "secret-current-session-token"
+    marker = tmp_path / "entra-validation.md"
+    _write_entra_marker(marker, expires_delta=timedelta(minutes=-5))
+    previous_evidence = marker.read_text(encoding="utf-8")
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+
+    class FakeValidator:
+        def __init__(self, tenant_id: str, client_id: str) -> None:
+            pass
+
+        def validate(self, token: str) -> MagicMock:
+            assert token == raw_token
+            return MagicMock(role="admin")
+
+    monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FakeValidator)
+    monkeypatch.setattr(
+        "jwt.decode",
+        lambda token, options: {"exp": int(expires_at.timestamp())},
+    )
+
+    with pytest.raises(ValueError) as exc:
+        cs.write_entra_validation_evidence_marker(raw_token, me_ok=False)
+
+    assert str(exc.value) == (
+        "Microsoft session validation failed. Sign in again and retry."
+    )
+    assert marker.read_text(encoding="utf-8") == previous_evidence
+    assert raw_token not in marker.read_text(encoding="utf-8")
 
 
 def test_auth_dependency_failure_never_echoes_raw_token(

@@ -62,8 +62,14 @@ function saveHashForRestore(): void {
   }
 }
 
+export interface AccessTokenOptions {
+  forceRefresh?: boolean;
+}
+
 /** Acquire an access token for API calls; redirects to login when needed. */
-export async function acquireAccessToken(): Promise<string> {
+export async function acquireAccessToken(
+  options: AccessTokenOptions = {},
+): Promise<string> {
   if (!pca) return '';
   const account = pca.getActiveAccount() ?? pca.getAllAccounts()[0];
   if (!account) {
@@ -72,7 +78,11 @@ export async function acquireAccessToken(): Promise<string> {
     return '';
   }
   try {
-    const res = await pca.acquireTokenSilent({ account, scopes: tokenScopes });
+    const res = await pca.acquireTokenSilent({
+      account,
+      scopes: tokenScopes,
+      forceRefresh: options.forceRefresh,
+    });
     return res.accessToken;
   } catch {
     saveHashForRestore();

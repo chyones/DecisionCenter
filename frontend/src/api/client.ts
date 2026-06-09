@@ -38,7 +38,10 @@ export class ApiClient {
   private async buildHeaders(
     init?: RequestInit,
   ): Promise<Record<string, string>> {
-    const auth = await this.getAuthHeaders();
+    const explicitHeaders = new Headers(init?.headers);
+    const auth = explicitHeaders.has('authorization')
+      ? {}
+      : await this.getAuthHeaders();
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...Object.fromEntries(

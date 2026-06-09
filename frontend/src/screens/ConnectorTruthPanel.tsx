@@ -5,16 +5,19 @@
  * NEVER shows green unless the backend reported `LIVE_OK`, `VALIDATED`, or
  * accepted current evidence. `CONFIGURED_NOT_TESTED` and `NOT_CONFIGURED` are
  * neutral/grey — not success.
- * Surfaces, per the truth model: explicit state, evidence, "Last verified"
- * timestamp, missing non-secret config, data source, and go-live blocking.
+ * Surfaces explicit state, evidence, verification/check timestamps, missing
+ * non-secret config, data source, and go-live blocking.
  *
  * `variant="banner"` renders only the top readiness banner (used on the
  * Dashboard); `variant="full"` adds the grouped connector breakdown (used on
  * the Connectors screen).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 
 import { useApi, ApiError } from '../api';
+import { acquireAccessToken, productionAuthEnabled } from '../auth/msalConfig';
+import { Button, useToasts } from '../components';
 import type {
   ConnectorState,
   ConnectorTruth,
@@ -35,7 +38,7 @@ function formatTs(iso: string | null): string {
 const STATE_LABEL: Record<ConnectorState, string> = {
   LIVE_OK: 'Live',
   VALIDATED: 'Validated',
-  PREVIOUSLY_VALIDATED_TOKEN_EXPIRED: 'Previously validated — token expired',
+  PREVIOUSLY_VALIDATED_TOKEN_EXPIRED: 'Expired',
   VERIFIED_FROM_EVIDENCE: 'Verified from evidence',
   CONNECTED_NO_DATA: 'Connected — no data',
   CONFIGURED_NOT_TESTED: 'Configured — not tested',
@@ -101,6 +104,38 @@ const REPORTGEN_CLASS: Record<ReportGeneration, string> = {
   BLOCKED: 'text-error',
 };
 
+/** Render the data-source chip and record count for a connector row. */
+function dataSourceChip(t: ConnectorTruth): React.ReactNode {
+  if (t.data_source === 'none') return null;
+  if (
+    t.name === 'entra_auth' &&
+    t.state === 'VALIDATED' &&
+    t.data_source === 'evidence'
+  ) {
+    return (
+      <span className="ml-2 rounded-sm border border-border px-1">
+        Current validation evidence
+      </span>
+    );
+  }
+  if (
+    t.name === 'entra_auth' &&
+    t.state === 'PREVIOUSLY_VALIDATED_TOKEN_EXPIRED'
+  ) {
+    return null;
+  }
+  return (
+    <>
+      <span className="ml-2 rounded-sm border border-border px-1">
+        data: {t.data_source}
+      </span>
+      {t.sample_count != null && (
+        <span className="ml-2">· {t.sample_count} records</span>
+      )}
+    </>
+  );
+}
+
 function ReadinessBanner({ report }: { report: ConnectorTruthReport }) {
   return (
     <div className={`rounded-sm border px-4 py-3 ${READINESS_CLASS[report.readiness]}`}>
@@ -123,7 +158,24 @@ function ReadinessBanner({ report }: { report: ConnectorTruthReport }) {
   );
 }
 
-function ConnectorRow({ t }: { t: ConnectorTruth }) {
+function ConnectorRow({
+  t,
+  onRevalidate,
+  revalidating = false,
+  revalidationError = null,
+}: {
+  t: ConnectorTruth;
+  onRevalidate?: () => void;
+  revalidating?: boolean;
+  revalidationError?: string | null;
+}) {
+  const isExpiredEntra =
+    t.name === 'entra_auth' &&
+    t.state === 'PREVIOUSLY_VALIDATED_TOKEN_EXPIRED';
+  const hasEntraValidationHistory =
+    t.name === 'entra_auth' &&
+    (t.state === 'VALIDATED' || isExpiredEntra);
+
   return (
     <li className="border-b border-border py-3 last:border-0">
       <div className="flex items-center justify-between gap-3">
@@ -135,18 +187,29 @@ function ConnectorRow({ t }: { t: ConnectorTruth }) {
       <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-caption text-text-muted">
         <dt>Evidence</dt>
         <dd className="text-text-secondary">{t.evidence || '—'}</dd>
-        <dt>Last verified</dt>
-        <dd className="text-text-secondary">
-          {formatTs(t.last_success_at ?? t.last_probe_at)}
-          {t.data_source !== 'none' && (
-            <span className="ml-2 rounded-sm border border-border px-1">
-              data: {t.data_source}
-            </span>
-          )}
-          {t.sample_count != null && (
-            <span className="ml-2">· {t.sample_count} records</span>
-          )}
-        </dd>
+        {hasEntraValidationHistory ? (
+          <>
+            <dt>Last successful validation</dt>
+            <dd className="text-text-secondary">
+              {formatTs(t.last_success_at)}
+              {dataSourceChip(t)}
+            </dd>
+            <dt>{isExpiredEntra ? 'Token expired at' : 'Token expires at'}</dt>
+            <dd className={isExpiredEntra ? 'text-warning' : 'text-text-secondary'}>
+              {formatTs(t.token_expires_at)}
+            </dd>
+            <dt>Last checked</dt>
+            <dd className="text-text-secondary">{formatTs(t.last_probe_at)}</dd>
+          </>
+        ) : (
+          <>
+            <dt>Last verified</dt>
+            <dd className="text-text-secondary">
+              {formatTs(t.last_success_at ?? t.last_probe_at)}
+              {dataSourceChip(t)}
+            </dd>
+          </>
+        )}
         {t.missing_required_config.length > 0 && (
           <>
             <dt>Missing config</dt>
@@ -162,12 +225,45 @@ function ConnectorRow({ t }: { t: ConnectorTruth }) {
             <dd className="text-error">{t.last_error_safe}</dd>
           </>
         )}
+        {isExpiredEntra && onRevalidate && (
+          <>
+            <dt className="sr-only">Action</dt>
+            <dd className="col-span-2 mt-2">
+              <Button
+                variant="secondary"
+                size="compact"
+                icon={<RefreshCw aria-hidden="true" className="h-4 w-4" />}
+                isLoading={revalidating}
+                onClick={onRevalidate}
+              >
+                Revalidate with current browser session
+              </Button>
+              {revalidationError && (
+                <p role="alert" className="mt-2 text-caption text-error">
+                  {revalidationError}
+                </p>
+              )}
+            </dd>
+          </>
+        )}
       </dl>
     </li>
   );
 }
 
-function Group({ title, items }: { title: string; items: ConnectorTruth[] }) {
+function Group({
+  title,
+  items,
+  onRevalidate,
+  revalidating,
+  revalidationError,
+}: {
+  title: string;
+  items: ConnectorTruth[];
+  onRevalidate?: () => void;
+  revalidating?: boolean;
+  revalidationError?: string | null;
+}) {
   if (items.length === 0) return null;
   return (
     <section className="mb-6">
@@ -176,7 +272,13 @@ function Group({ title, items }: { title: string; items: ConnectorTruth[] }) {
       </h3>
       <ul className="rounded-sm border border-border bg-surface-raised px-4">
         {items.map((t) => (
-          <ConnectorRow key={t.name} t={t} />
+          <ConnectorRow
+            key={t.name}
+            t={t}
+            onRevalidate={onRevalidate}
+            revalidating={revalidating}
+            revalidationError={revalidationError}
+          />
         ))}
       </ul>
     </section>
@@ -189,9 +291,14 @@ export function ConnectorTruthPanel({
   variant?: 'full' | 'banner';
 }) {
   const api = useApi();
+  const { addToast } = useToasts();
   const [report, setReport] = useState<ConnectorTruthReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [revalidating, setRevalidating] = useState(false);
+  const [revalidationError, setRevalidationError] = useState<string | null>(
+    null,
+  );
 
   const fetchReport = useCallback(
     async (probe: boolean) => {
@@ -217,6 +324,44 @@ export function ConnectorTruthPanel({
     },
     [api],
   );
+
+  const revalidateEntra = useCallback(async () => {
+    setRevalidating(true);
+    setRevalidationError(null);
+    try {
+      let headers: HeadersInit | undefined;
+      if (productionAuthEnabled) {
+        const token = await acquireAccessToken({ forceRefresh: true });
+        if (!token) {
+          setRevalidationError(
+            'Sign in to Microsoft again, then retry revalidation.',
+          );
+          return;
+        }
+        headers = { Authorization: `Bearer ${token}` };
+      }
+
+      await api.post(
+        '/admin/connectors/entra/revalidate-current-token',
+        {},
+        headers ? { headers } : undefined,
+      );
+      await fetchReport(true);
+      addToast(
+        'success',
+        'Microsoft Entra validation is current.',
+        'Revalidation complete',
+      );
+    } catch (err) {
+      const message =
+        err instanceof ApiError && (err.status === 400 || err.status === 401)
+          ? 'Your Microsoft session could not be validated. Sign in again, then retry.'
+          : 'Revalidation failed. Refresh your Microsoft login and retry.';
+      setRevalidationError(message);
+    } finally {
+      setRevalidating(false);
+    }
+  }, [addToast, api, fetchReport]);
 
   useEffect(() => {
     void fetchReport(true);
@@ -258,7 +403,13 @@ export function ConnectorTruthPanel({
       </div>
       <Group title="Core platform" items={report.core_platform} />
       <Group title="Public edge" items={report.edge} />
-      <Group title="Microsoft login" items={report.auth} />
+      <Group
+        title="Microsoft login"
+        items={report.auth}
+        onRevalidate={() => void revalidateEntra()}
+        revalidating={revalidating}
+        revalidationError={revalidationError}
+      />
       <Group title="External connectors" items={report.external_connectors} />
       <Group title="AI providers" items={report.ai_providers} />
     </div>
