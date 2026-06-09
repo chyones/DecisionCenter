@@ -5,7 +5,7 @@ import re
 import socket
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -1740,7 +1740,7 @@ async def admin_health_live(
 
     return HealthLiveResponse(
         services=services,
-        checked_at=datetime.now().isoformat(),
+        checked_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -3275,7 +3275,7 @@ async def admin_dashboard_summary(
         monthly_percent=monthly_percent,
         services=svc_statuses,
         recent_events=recent,
-        checked_at=datetime.now().isoformat(),
+        checked_at=datetime.now(timezone.utc).isoformat(),
     )
 
 

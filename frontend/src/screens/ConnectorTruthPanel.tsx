@@ -104,6 +104,35 @@ const REPORTGEN_CLASS: Record<ReportGeneration, string> = {
   BLOCKED: 'text-error',
 };
 
+/** Dynamic title for PARTIAL_READY: when only AI providers are blocking,
+ *  show "Microsoft connectors ready — AI providers pending" instead of the
+ *  generic "connectors pending" which falsely implies Microsoft connectors
+ *  are still unverified. */
+function readinessTitle(report: ConnectorTruthReport): string {
+  if (report.readiness !== 'PARTIAL_READY') return READINESS_LABEL[report.readiness];
+  const aiNames = new Set(report.ai_providers.map((t) => t.name));
+  if (report.blocking.length > 0 && report.blocking.every((n) => aiNames.has(n))) {
+    return 'Microsoft connectors ready — AI providers pending';
+  }
+  return READINESS_LABEL['PARTIAL_READY'];
+}
+
+/** Format the blocking list contextually.
+ *  When all blockers are AI providers, emit "AI providers missing: …" with
+ *  display names rather than raw internal names. */
+function blockingLine(report: ConnectorTruthReport): string {
+  if (report.blocking.length === 0) return '';
+  const aiNames = new Set(report.ai_providers.map((t) => t.name));
+  const allAI = report.blocking.every((n) => aiNames.has(n));
+  if (allAI) {
+    const displayNames = report.blocking
+      .map((n) => report.ai_providers.find((t) => t.name === n)?.display_name ?? n)
+      .join(', ');
+    return `AI providers missing: ${displayNames}`;
+  }
+  return `Blocking go-live: ${report.blocking.join(', ')}`;
+}
+
 /** Render the data-source chip and record count for a connector row. */
 function dataSourceChip(t: ConnectorTruth): React.ReactNode {
   if (t.data_source === 'none') return null;
@@ -140,7 +169,7 @@ function ReadinessBanner({ report }: { report: ConnectorTruthReport }) {
   return (
     <div className={`rounded-sm border px-4 py-3 ${READINESS_CLASS[report.readiness]}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-title font-semibold">{READINESS_LABEL[report.readiness]}</p>
+        <p className="text-title font-semibold">{readinessTitle(report)}</p>
         <span className="text-caption opacity-80">
           verified {formatTs(report.generated_at)}
         </span>
@@ -151,7 +180,7 @@ function ReadinessBanner({ report }: { report: ConnectorTruthReport }) {
       </p>
       {report.blocking.length > 0 && (
         <p className="mt-1 text-caption text-text-muted">
-          Blocking go-live: {report.blocking.join(', ')}
+          {blockingLine(report)}
         </p>
       )}
     </div>

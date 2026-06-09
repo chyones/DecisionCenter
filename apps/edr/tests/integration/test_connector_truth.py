@@ -894,3 +894,126 @@ def test_truth_endpoint_separates_core_from_connectors() -> None:
     assert any(t.name == "odoo" for t in report.external_connectors)
     assert any(t.name == "entra_auth" for t in report.auth)
     assert any(t.group == "edge" for t in report.edge)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard wording: verified states satisfy go-live; AI providers do not
+# make Microsoft connectors appear pending
+# ---------------------------------------------------------------------------
+
+
+def _build_truth(
+    name: str,
+    display_name: str,
+    group: cs.Group,
+    state: cs.ConnectorState,
+    required_for_go_live: bool,
+) -> cs.ConnectorTruth:
+    """Build a minimal ConnectorTruth for _compute_readiness unit tests."""
+    satisfies = cs._satisfies_go_live(state)
+    return cs.ConnectorTruth(
+        name=name,
+        display_name=display_name,
+        group=group,
+        state=state,
+        summary=f"{name}: {state}",
+        configured=state is not cs.ConnectorState.NOT_CONFIGURED,
+        missing_required_config=[],
+        secret_present=True,
+        auth_ok=None,
+        network_ok=None,
+        permission_ok=None,
+        live_data_ok=None,
+        data_source="none",
+        last_probe_at=None,
+        last_success_at=None,
+        token_expires_at=None,
+        last_error_safe=None,
+        sample_count=None,
+        evidence="",
+        required_for_go_live=required_for_go_live,
+        blocks_go_live=required_for_go_live and not satisfies,
+    )
+
+
+def _all_microsoft_verified_truths(
+    ai_state: cs.ConnectorState = cs.ConnectorState.NOT_CONFIGURED,
+) -> list[cs.ConnectorTruth]:
+    """Return a truth list where every Microsoft connector is verified/validated
+    and AI providers are in ``ai_state``.  Used to assert wording accuracy."""
+    return [
+        _build_truth("postgres", "PostgreSQL", "core_platform", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("redis", "Redis", "core_platform", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("qdrant", "Qdrant", "core_platform", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("minio", "MinIO", "core_platform", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("public_edge", "Cloudflare Tunnel / public edge", "edge", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("caddy_routing", "Caddy routing", "edge", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("entra_auth", "Microsoft Entra authentication", "auth", cs.ConnectorState.VALIDATED, True),
+        _build_truth("n8n", "n8n webhook", "external_connector", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("sharepoint", "SharePoint", "external_connector", cs.ConnectorState.VERIFIED_FROM_EVIDENCE, True),
+        _build_truth("microsoft_graph", "Email / mailbox connector", "external_connector", cs.ConnectorState.VERIFIED_FROM_EVIDENCE, True),
+        _build_truth("owncloud", "ownCloud", "external_connector", cs.ConnectorState.DISABLED, False),
+        _build_truth("odoo", "Odoo", "external_connector", cs.ConnectorState.LIVE_OK, True),
+        _build_truth("anthropic", "Anthropic (report generation)", "ai_provider", ai_state, True),
+        _build_truth("voyage", "Voyage (embeddings)", "ai_provider", ai_state, True),
+        _build_truth("cohere", "Cohere (rerank)", "ai_provider", ai_state, True),
+    ]
+
+
+def test_satisfies_go_live_for_validated_and_verified_states() -> None:
+    """VALIDATED, LIVE_OK, VERIFIED_FROM_EVIDENCE all satisfy go-live.
+    Anything else does not."""
+    assert cs._satisfies_go_live(cs.ConnectorState.LIVE_OK) is True
+    assert cs._satisfies_go_live(cs.ConnectorState.VALIDATED) is True
+    assert cs._satisfies_go_live(cs.ConnectorState.VERIFIED_FROM_EVIDENCE) is True
+    assert cs._satisfies_go_live(cs.ConnectorState.CONFIGURED_NOT_TESTED) is False
+    assert cs._satisfies_go_live(cs.ConnectorState.NOT_CONFIGURED) is False
+    assert cs._satisfies_go_live(cs.ConnectorState.DISABLED) is False
+    assert cs._satisfies_go_live(cs.ConnectorState.CONNECTED_NO_DATA) is False
+
+
+def test_partial_ready_reason_names_ai_providers_when_microsoft_verified() -> None:
+    """When Entra=VALIDATED, Odoo=LIVE_OK, SharePoint/Graph=VERIFIED_FROM_EVIDENCE,
+    and only AI providers remain blocking, readiness_reason names AI providers by
+    internal name — NOT Microsoft connectors."""
+    truths = _all_microsoft_verified_truths(ai_state=cs.ConnectorState.NOT_CONFIGURED)
+
+    readiness, reason = cs._compute_readiness(truths)
+
+    assert readiness == "PARTIAL_READY"
+    # AI providers named explicitly (internal lowercase names from _compute_readiness)
+    assert "anthropic" in reason
+    assert "voyage" in reason
+    assert "cohere" in reason
+    # Microsoft connectors NOT listed as pending
+    assert "sharepoint" not in reason
+    assert "microsoft_graph" not in reason
+    assert "entra_auth" not in reason
+    assert "odoo" not in reason
+
+
+def test_ai_provider_blocking_does_not_put_microsoft_connectors_in_blocking_list() -> None:
+    """Blocking list must contain only AI provider names when Microsoft connectors
+    are VALIDATED / LIVE_OK / VERIFIED_FROM_EVIDENCE.  ownCloud is never blocking."""
+    truths = _all_microsoft_verified_truths(ai_state=cs.ConnectorState.NOT_CONFIGURED)
+
+    blocking = [t.name for t in truths if t.blocks_go_live]
+
+    assert set(blocking) == {"anthropic", "voyage", "cohere"}
+    assert "sharepoint" not in blocking
+    assert "microsoft_graph" not in blocking
+    assert "entra_auth" not in blocking
+    assert "odoo" not in blocking
+    assert "owncloud" not in blocking
+
+
+def test_all_microsoft_connectors_verified_gives_ready_for_uat_when_ai_configured() -> None:
+    """When every connector including AI providers satisfies go-live, the report
+    is READY_FOR_UAT and the blocking list is empty."""
+    truths = _all_microsoft_verified_truths(ai_state=cs.ConnectorState.LIVE_OK)
+
+    readiness, reason = cs._compute_readiness(truths)
+
+    assert readiness == "READY_FOR_UAT"
+    blocking = [t.name for t in truths if t.blocks_go_live]
+    assert blocking == []
