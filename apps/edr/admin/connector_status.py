@@ -858,214 +858,6 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
     return payload
 
 
-def _jsonish(value: Any, fallback: Any) -> Any:
-    if value is None:
-        return fallback
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return fallback
-    return fallback
-
-
-async def _source_mapping_rows_from_db_async() -> list[dict[str, Any]]:
-    import asyncpg
-
-    conn = await asyncpg.connect(
-        host=settings.postgres_host,
-        port=settings.postgres_port,
-        database=settings.postgres_db,
-        user=settings.postgres_user,
-        password=settings.postgres_password,
-        timeout=1.0,
-    )
-    try:
-        rows = await conn.fetch(
-            """
-            SELECT project_code, mapping_status, enabled_sources, sharepoint,
-                   microsoft, odoo
-            FROM source_mappings
-            WHERE project_code = ANY($1::text[])
-            ORDER BY project_code
-            """,
-            list(_VERIFIED_PROJECT_MEMBER_COUNTS),
-        )
-    finally:
-        await conn.close()
-    return [
-        {
-            "project_code": row["project_code"],
-            "mapping_status": row["mapping_status"],
-            "enabled_sources": _jsonish(row["enabled_sources"], []),
-            "sharepoint": _jsonish(row["sharepoint"], {}),
-            "microsoft": _jsonish(row["microsoft"], {}),
-            "odoo": _jsonish(row["odoo"], {}),
-        }
-        for row in rows
-    ]
-
-
-def _source_mapping_rows_from_db() -> list[dict[str, Any]]:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        return []
-    try:
-        return asyncio.run(_source_mapping_rows_from_db_async())
-    except Exception:
-        return []
-
-
-def _source_mapping_rows_from_file() -> list[dict[str, Any]]:
-    try:
-        raw = json.loads(_SOURCE_MAPPING_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    rows = raw if isinstance(raw, list) else list(raw.values()) if isinstance(raw, dict) else []
-    return [row for row in rows if isinstance(row, dict)]
-
-
-def _source_mapping_rows() -> list[dict[str, Any]]:
-    return _source_mapping_rows_from_db() or _source_mapping_rows_from_file()
-
-
-def _real_value(value: Any) -> bool:
-    text = str(value or "").strip()
-    if not text:
-        return False
-    lowered = text.lower()
-    return "example" not in lowered and "placeholder" not in lowered
-
-
-def _verified_project_rows() -> tuple[list[dict[str, Any]], list[str]]:
-    rows_by_code = {
-        str(row.get("project_code")): row
-        for row in _source_mapping_rows()
-        if str(row.get("project_code")) in _VERIFIED_PROJECT_MEMBER_COUNTS
-    }
-    missing = [code for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code not in rows_by_code]
-    return [rows_by_code[code] for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code in rows_by_code], missing
-
-
-def _probe_sharepoint_source_mapping() -> ProbeFacts:
-    """Verify SharePoint from current PRJ-001/PRJ-002 source mapping facts.
-
-    This is not a live Graph call. It accepts only current persisted runtime
-    facts (DB first, checked-in mapping fallback) that prove SharePoint site and
-    drive discovery already succeeded for the two operator-verified projects.
-    """
-    ts = _now()
-    rows, missing = _verified_project_rows()
-    verified: list[str] = []
-    blockers = [f"missing {code}" for code in missing]
-    for row in rows:
-        code = str(row.get("project_code"))
-        enabled = set(row.get("enabled_sources") or [])
-        sharepoint = row.get("sharepoint") or {}
-        if row.get("mapping_status") != "complete":
-            blockers.append(f"{code}: mapping_status is not complete")
-            continue
-        if "sharepoint" not in enabled:
-            blockers.append(f"{code}: sharepoint source not enabled")
-            continue
-        if not _real_value(sharepoint.get("site_id")) or not _real_value(
-            sharepoint.get("drive_id")
-        ):
-            blockers.append(f"{code}: verified SharePoint site/drive missing")
-            continue
-        verified.append(code)
-
-    if blockers:
-        return ProbeFacts(
-            data_source="none",
-            evidence="SharePoint source mapping verification incomplete: "
-            + "; ".join(blockers),
-            probed_at=ts,
-        )
-    return ProbeFacts(
-        network_ok=True,
-        auth_ok=True,
-        permission_ok=True,
-        live_data_ok=True,
-        data_source="evidence",
-        sample_count=len(verified),
-        evidence=(
-            "Current source_mappings verify SharePoint site/drive coordinates "
-            f"for {', '.join(verified)}"
-        ),
-        probed_at=ts,
-        success_at=ts,
-    )
-
-
-def _probe_microsoft_graph_source_mapping() -> ProbeFacts:
-    """Verify Email/Graph from current group enrichment facts.
-
-    This does not call Microsoft Graph. It reconciles the dashboard with the
-    already-persisted GROUP_MEMBERS_READ evidence for PRJ-001 and PRJ-002.
-    """
-    ts = _now()
-    rows, missing = _verified_project_rows()
-    verified: list[str] = []
-    blockers = [f"missing {code}" for code in missing]
-    total_members = 0
-    for row in rows:
-        code = str(row.get("project_code"))
-        expected_members = _VERIFIED_PROJECT_MEMBER_COUNTS[code]
-        enabled = set(row.get("enabled_sources") or [])
-        microsoft = row.get("microsoft") or {}
-        group = microsoft.get("group") or {}
-        member_count = microsoft.get("member_count")
-        try:
-            member_count_int = int(member_count)
-        except (TypeError, ValueError):
-            member_count_int = -1
-        if "email" not in enabled:
-            blockers.append(f"{code}: email source not enabled")
-            continue
-        if microsoft.get("group_membership_status") != _VERIFIED_GROUP_STATUS:
-            blockers.append(f"{code}: group membership not read")
-            continue
-        if not group.get("mail_enabled") or not _real_value(group.get("mail")):
-            blockers.append(f"{code}: verified group mailbox missing")
-            continue
-        if member_count_int != expected_members:
-            blockers.append(f"{code}: member_count {member_count_int} != {expected_members}")
-            continue
-        if microsoft.get("missing_permissions") or microsoft.get("blockers"):
-            blockers.append(f"{code}: Microsoft enrichment has blockers")
-            continue
-        verified.append(f"{code} ({member_count_int} members)")
-        total_members += member_count_int
-
-    if blockers:
-        return ProbeFacts(
-            data_source="none",
-            evidence="Microsoft Graph/email group enrichment incomplete: "
-            + "; ".join(blockers),
-            probed_at=ts,
-        )
-    return ProbeFacts(
-        network_ok=True,
-        auth_ok=True,
-        permission_ok=True,
-        live_data_ok=True,
-        data_source="evidence",
-        sample_count=total_members,
-        evidence=(
-            "Current source_mappings verify Microsoft group mailbox/member "
-            f"enrichment for {', '.join(verified)}"
-        ),
-        probed_at=ts,
-        success_at=ts,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Connector registry — the dependencies the dashboard must tell the truth about
 # ---------------------------------------------------------------------------
@@ -1398,3 +1190,216 @@ def _satisfies_go_live(state: ConnectorState) -> bool:
         ConnectorState.VALIDATED,
         ConnectorState.VERIFIED_FROM_EVIDENCE,
     }
+
+
+# ---------------------------------------------------------------------------
+# Source-mapping helpers (SharePoint / Graph evidence probes)
+# ---------------------------------------------------------------------------
+
+
+def _jsonish(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+    return fallback
+
+
+async def _source_mapping_rows_from_db_async() -> list[dict[str, Any]]:
+    import asyncpg
+
+    conn = await asyncpg.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=settings.postgres_db,
+        user=settings.postgres_user,
+        password=settings.postgres_password,
+        timeout=1.0,
+    )
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT project_code, mapping_status, enabled_sources, sharepoint,
+                   microsoft, odoo
+            FROM source_mappings
+            WHERE project_code = ANY($1::text[])
+            ORDER BY project_code
+            """,
+            list(_VERIFIED_PROJECT_MEMBER_COUNTS),
+        )
+    finally:
+        await conn.close()
+    return [
+        {
+            "project_code": row["project_code"],
+            "mapping_status": row["mapping_status"],
+            "enabled_sources": _jsonish(row["enabled_sources"], []),
+            "sharepoint": _jsonish(row["sharepoint"], {}),
+            "microsoft": _jsonish(row["microsoft"], {}),
+            "odoo": _jsonish(row["odoo"], {}),
+        }
+        for row in rows
+    ]
+
+
+def _source_mapping_rows_from_db() -> list[dict[str, Any]]:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        return []
+    try:
+        return asyncio.run(_source_mapping_rows_from_db_async())
+    except Exception:
+        return []
+
+
+def _source_mapping_rows_from_file() -> list[dict[str, Any]]:
+    try:
+        raw = json.loads(_SOURCE_MAPPING_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = raw if isinstance(raw, list) else list(raw.values()) if isinstance(raw, dict) else []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _source_mapping_rows() -> list[dict[str, Any]]:
+    return _source_mapping_rows_from_db() or _source_mapping_rows_from_file()
+
+
+def _real_value(value: Any) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    lowered = text.lower()
+    return "example" not in lowered and "placeholder" not in lowered
+
+
+def _verified_project_rows() -> tuple[list[dict[str, Any]], list[str]]:
+    rows_by_code = {
+        str(row.get("project_code")): row
+        for row in _source_mapping_rows()
+        if str(row.get("project_code")) in _VERIFIED_PROJECT_MEMBER_COUNTS
+    }
+    missing = [code for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code not in rows_by_code]
+    return [rows_by_code[code] for code in _VERIFIED_PROJECT_MEMBER_COUNTS if code in rows_by_code], missing
+
+
+def _probe_sharepoint_source_mapping() -> ProbeFacts:
+    """Verify SharePoint from current PRJ-001/PRJ-002 source mapping facts.
+
+    This is not a live Graph call. It accepts only current persisted runtime
+    facts (DB first, checked-in mapping fallback) that prove SharePoint site and
+    drive discovery already succeeded for the two operator-verified projects.
+    """
+    ts = _now()
+    rows, missing = _verified_project_rows()
+    verified: list[str] = []
+    blockers = [f"missing {code}" for code in missing]
+    for row in rows:
+        code = str(row.get("project_code"))
+        enabled = set(row.get("enabled_sources") or [])
+        sharepoint = row.get("sharepoint") or {}
+        if row.get("mapping_status") != "complete":
+            blockers.append(f"{code}: mapping_status is not complete")
+            continue
+        if "sharepoint" not in enabled:
+            blockers.append(f"{code}: sharepoint source not enabled")
+            continue
+        if not _real_value(sharepoint.get("site_id")) or not _real_value(
+            sharepoint.get("drive_id")
+        ):
+            blockers.append(f"{code}: verified SharePoint site/drive missing")
+            continue
+        verified.append(code)
+
+    if blockers:
+        return ProbeFacts(
+            data_source="none",
+            evidence="SharePoint source mapping verification incomplete: "
+            + "; ".join(blockers),
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        sample_count=len(verified),
+        evidence=(
+            "Current source_mappings verify SharePoint site/drive coordinates "
+            f"for {', '.join(verified)}"
+        ),
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
+def _probe_microsoft_graph_source_mapping() -> ProbeFacts:
+    """Verify Email/Graph from current group enrichment facts.
+
+    This does not call Microsoft Graph. It reconciles the dashboard with the
+    already-persisted GROUP_MEMBERS_READ evidence for PRJ-001 and PRJ-002.
+    """
+    ts = _now()
+    rows, missing = _verified_project_rows()
+    verified: list[str] = []
+    blockers = [f"missing {code}" for code in missing]
+    total_members = 0
+    for row in rows:
+        code = str(row.get("project_code"))
+        expected_members = _VERIFIED_PROJECT_MEMBER_COUNTS[code]
+        enabled = set(row.get("enabled_sources") or [])
+        microsoft = row.get("microsoft") or {}
+        group = microsoft.get("group") or {}
+        member_count = microsoft.get("member_count")
+        try:
+            member_count_int = int(member_count)
+        except (TypeError, ValueError):
+            member_count_int = -1
+        if "email" not in enabled:
+            blockers.append(f"{code}: email source not enabled")
+            continue
+        if microsoft.get("group_membership_status") != _VERIFIED_GROUP_STATUS:
+            blockers.append(f"{code}: group membership not read")
+            continue
+        if not group.get("mail_enabled") or not _real_value(group.get("mail")):
+            blockers.append(f"{code}: verified group mailbox missing")
+            continue
+        if member_count_int != expected_members:
+            blockers.append(f"{code}: member_count {member_count_int} != {expected_members}")
+            continue
+        if microsoft.get("missing_permissions") or microsoft.get("blockers"):
+            blockers.append(f"{code}: Microsoft enrichment has blockers")
+            continue
+        verified.append(f"{code} ({member_count_int} members)")
+        total_members += member_count_int
+
+    if blockers:
+        return ProbeFacts(
+            data_source="none",
+            evidence="Microsoft Graph/email group enrichment incomplete: "
+            + "; ".join(blockers),
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        permission_ok=True,
+        live_data_ok=True,
+        data_source="evidence",
+        sample_count=total_members,
+        evidence=(
+            "Current source_mappings verify Microsoft group mailbox/member "
+            f"enrichment for {', '.join(verified)}"
+        ),
+        probed_at=ts,
+        success_at=ts,
+    )
