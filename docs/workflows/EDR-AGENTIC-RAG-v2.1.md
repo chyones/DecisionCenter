@@ -1532,6 +1532,8 @@ Exit test: no stub strings remain in Node 01 output and RBAC denial tests pass.
 - Implement `n8n/email_search.json`.
 - Implement `n8n/owncloud_list.json`.
 - Implement `n8n/odoo_read.json`.
+- Bound Odoo `search_read` requests to a caller-supplied integer limit from
+  1–100 so health probes and retrieval calls do not over-fetch records.
 - Validate connector output against `docs/schemas/evidence-object.schema.json`.
 
 Exit test: all four workflow files are no longer empty and each workflow returns valid

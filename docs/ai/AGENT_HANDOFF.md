@@ -45,6 +45,27 @@ and frontend lint passed. Full required validation and CI are recorded in
 Production remains `NOT_LIVE`; Microsoft Gate 4, deployment, live UAT, and
 Slice 7 were not started.
 
+## 2026-06-10 Odoo Dashboard Timeout Reliability Fix
+
+The Odoo connector card's intermittent `TimeoutError` was traced without
+printing credentials or response records. App-to-n8n connectivity was healthy,
+and quiet-state live Odoo probes succeeded in 4.4–4.9 seconds. The dashboard
+requested 5 records, but the deployed n8n workflow ignored that request and
+returned 100; the dashboard also used a fixed 10-second timeout instead of the
+configured 60-second connector timeout.
+
+Source now makes the probe timeout `max(10 seconds, N8N_TIMEOUT)` and makes
+`n8n/odoo_read.json` validate and honor request limits from 1–100. Focused tests
+passed 63/63; CI-equivalent integration tests passed 720 with 1 skipped and 14
+live probes deselected; smoke 2/2, goldenset 64/64, and Playwright 78/78 passed.
+Ruff, compileall, frontend lint/build, JSON parsing, and wrapped n8n Code-node
+syntax checks passed.
+
+No app deployment, n8n import, restart, or credential change occurred. The
+currently deployed workflow still returns 100 records; a quiet-state deployed
+probe was green in 4.604 seconds after validation load ended. Production
+remains `NOT_LIVE`.
+
 ## 2026-06-09 Entra Expired-State UI Badge Fix
 
 The Entra card now treats `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` as action

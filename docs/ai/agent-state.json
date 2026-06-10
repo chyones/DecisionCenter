@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "adc1f1c34110dded0847906a9b82005d4c67c145",
+  "current_commit": "d8af200b113034c79be6cafab9dc2d15f7930c86",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -100,29 +100,35 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "adc1f1c34110dded0847906a9b82005d4c67c145",
-    "run_id": 27203382418,
+    "commit": "d8af200b113034c79be6cafab9dc2d15f7930c86",
+    "run_id": 27255075931,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/27203382418",
-    "note": "Both smoke and frontend jobs passed for the pre-fix main anchor."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/27255075931",
+    "note": "Both smoke and frontend jobs passed for the Entra validation action fix."
   },
   "latest_local_validation": {
     "date": "2026-06-10",
-    "context": "Entra validation button visibility and current MSAL browser-session validation fix. Configured not-tested, no-evidence, expired, failed, and action-required states keep a Validate/Revalidate action visible. The backend validates the DecisionCenter API token directly and does not send it to Graph /me.",
-    "starting_head": "adc1f1c34110dded0847906a9b82005d4c67c145",
+    "context": "Odoo dashboard timeout reliability fix. The truth probe now honors configured N8N_TIMEOUT with a 10-second minimum, and the n8n workflow validates and honors a caller limit from 1-100 instead of always fetching 100 records.",
+    "starting_head": "d8af200b113034c79be6cafab9dc2d15f7930c86",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "55 passed",
-    "targeted_frontend": "24 passed across Chromium, Firefox, and WebKit",
-    "ruff_apps_scripts": "clean",
+    "targeted_backend": "63 passed",
+    "integration_backend": "720 passed, 1 skipped, 14 live probes deselected",
+    "smoke": "2 passed",
+    "phase2a_e2e": "PASS; 18 workflow nodes visited",
+    "goldenset": "64/64 passed; 100% pass rate; 93.75% precision",
+    "frontend_ui": "78 passed across Chromium, Firefox, and WebKit",
+    "ruff": "clean",
     "compileall_apps_scripts": "clean",
     "frontend_lint": "clean",
     "frontend_build": "passed with existing Vite large-chunk warning",
-    "doc_drift": "clean",
-    "ai_context": "clean",
-    "postflight": "clean (allow-no-evidence)",
-    "evidence_file": "docs/evidence/uat/ENTRA_VALIDATION_BUTTON_VISIBILITY_FIX_2026-06-10.md",
-    "verdict": "ENTRA_VALIDATION_BUTTON_VISIBILITY_FIXED_PENDING_CI_NOT_LIVE"
+    "n8n_workflow_validation": "valid JSON; Code-node syntax valid in async wrapper",
+    "runtime_recheck": "quiet-state deployed probe LIVE_OK in 4.604 seconds; deployed workflow still returned 100 records",
+    "doc_drift": "pending governance refresh check",
+    "ai_context": "pending governance refresh check",
+    "postflight": "pending",
+    "evidence_file": "docs/evidence/uat/ODOO_DASHBOARD_TIMEOUT_FIX_2026-06-10.md",
+    "verdict": "ODOO_DASHBOARD_TIMEOUT_FIX_PENDING_CI_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -161,7 +167,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Admin: refresh the System Health panel — Odoo now shows ok (live), SharePoint/Graph show unknown (no safe probe), ownCloud shows error (not configured). public_edge + caddy_routing already validated on the Connectors page. For permanence, rebuild the app image from the committed host repo (docker compose build app && docker compose up -d app) so both the connector-truth async fix and the System Health truth-mirroring survive container recreation. Then run real live UAT and capture redacted evidence before Slice 7.",
+  "next_action": "After CI is green and only with explicit operator approval, roll out the app source and import/activate the updated n8n Odoo workflow so the dashboard uses the configured timeout and the live webhook honors the five-record probe limit. Production remains NOT_LIVE. Real live UAT evidence is still required before Slice 7.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": false,

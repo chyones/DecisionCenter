@@ -32,6 +32,20 @@ API-audience token to Graph `/me`. Only redacted evidence is stored. Production
 remains `NOT_LIVE`; Microsoft Gate 4, deployment, live UAT, and Slice 7 remain
 untouched.
 
+## 2026-06-10 Odoo Dashboard Timeout Reliability Context
+
+The Odoo connector truth probe now uses the greater of its existing 10-second
+minimum or configured `N8N_TIMEOUT`. The n8n Odoo workflow validates and honors
+an optional caller limit from 1–100 instead of always fetching 100 records; the
+dashboard probe requests 5.
+
+Redacted runtime diagnosis found healthy app-to-n8n connectivity and successful
+quiet-state Odoo reads around 4.4–4.9 seconds, but the deployed 100-record
+workflow timed out under concurrent validation load. No app deployment, n8n
+workflow import, service restart, or credential change was performed. The
+source fix is pending CI and an explicitly approved future rollout. Production
+remains `NOT_LIVE`.
+
 ## 2026-06-03 Reconciliation Context
 
 This session reconciled owner-operator expectations and Odoo webhook security

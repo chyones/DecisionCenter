@@ -354,7 +354,11 @@ def _probe_odoo() -> ProbeFacts:
 
     try:
         req = Request(url, data=payload, headers=headers, method="POST")
-        with urlopen(req, timeout=services_catalog.PROBE_TIMEOUT_SECONDS * 5) as resp:  # noqa: S310
+        timeout = max(
+            services_catalog.PROBE_TIMEOUT_SECONDS * 5,
+            settings.n8n_timeout,
+        )
+        with urlopen(req, timeout=timeout) as resp:  # noqa: S310
             status = resp.status
             body_bytes = resp.read(65536)
     except HTTPError as exc:

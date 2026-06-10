@@ -660,6 +660,52 @@ def test_configured_odoo_live_probe_returns_live_ok(odoo_configured, monkeypatch
     assert truth.blocks_go_live is False
 
 
+def test_odoo_probe_uses_requested_limit_and_connector_timeout(
+    odoo_configured,
+    monkeypatch,
+) -> None:
+    """The dashboard probe stays small and allows the configured n8n timeout."""
+    captured: dict[str, Any] = {}
+
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return json.dumps(
+                {
+                    "evidence": [
+                        {
+                            "evidence_id": "odoo-project-project-1",
+                            "source_type": "odoo",
+                            "title": "Project",
+                            "source_uri": "https://odoo.example.com/web#id=1",
+                        }
+                    ]
+                }
+            ).encode()
+
+    def _urlopen(request, *, timeout):
+        captured["payload"] = json.loads(request.data)
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr(cs.settings, "n8n_timeout", 60)
+    monkeypatch.setattr("urllib.request.urlopen", _urlopen)
+
+    facts = cs._probe_odoo()
+
+    assert captured["payload"]["limit"] == 5
+    assert captured["timeout"] == 60
+    assert facts.live_data_ok is True
+    assert facts.sample_count == 1
+
+
 def test_configured_odoo_empty_evidence_is_connected_no_data(odoo_configured, monkeypatch) -> None:
     """Webhook reachable but evidence list is empty ⇒ CONNECTED_NO_DATA, not LIVE_OK."""
     monkeypatch.setattr(

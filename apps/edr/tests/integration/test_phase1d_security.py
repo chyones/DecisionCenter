@@ -213,6 +213,17 @@ def test_odoo_workflow_reads_credentials_from_env() -> None:
         assert needle not in raw, f"odoo workflow still uses {needle}"
 
 
+def test_odoo_workflow_honors_bounded_request_limit() -> None:
+    workflow = json.loads(Path("n8n/odoo_read.json").read_text(encoding="utf-8"))
+    query_node = next(node for node in workflow["nodes"] if node["name"] == "Odoo Query")
+    code = query_node["parameters"]["jsCode"]
+
+    assert "const requestedLimit = Number(raw.limit ?? 100);" in code
+    assert "limit must be an integer between 1 and 100" in code
+    assert "limit:requestedLimit" in code
+    assert "limit:100" not in code
+
+
 # ---------------------------------------------------------------------------
 # L-2 — Validator surfaces all roles from the Entra claim
 # ---------------------------------------------------------------------------

@@ -374,6 +374,8 @@ ODOO_API_KEY=              # Odoo API key for that user
 **n8n JSON-RPC call:**
 `POST {odoo_url}/jsonrpc`
 Method: `execute_kw`, model and domain from the Python payload.
+The optional request `limit` must be an integer from 1–100. The connector
+defaults to 100 for ordinary retrieval; the dashboard truth probe requests 5.
 
 **Credential storage:** `.env` on server for direct Python access. n8n credential store for
 workflow-level auth. Never in Git.
@@ -396,6 +398,8 @@ absent from reports when user lacks finance permission.
 - Domain filter syntax error → Odoo returns 200 with an error payload (not HTTP 4xx).
 - Financial figure absent from record → must surface as `"Not available"`, not omitted silently.
 - Multiple Odoo databases → wrong `ODOO_DATABASE` value causes silent auth failure.
+- Slow Odoo responses → the dashboard truth probe uses the configured
+  `N8N_TIMEOUT` with a 10-second minimum and reports a safe timeout if exceeded.
 
 ---
 
