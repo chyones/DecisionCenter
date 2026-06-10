@@ -43,8 +43,8 @@ Redacted runtime diagnosis found healthy app-to-n8n connectivity and successful
 quiet-state Odoo reads around 4.4–4.9 seconds, but the deployed 100-record
 workflow timed out under concurrent validation load. No app deployment, n8n
 workflow import, service restart, or credential change was performed. The
-source fix is pending CI and an explicitly approved future rollout. Production
-remains `NOT_LIVE`.
+source fix is CI-green in run `27261573729` and awaits an explicitly approved
+future rollout. Production remains `NOT_LIVE`.
 
 ## 2026-06-03 Reconciliation Context
 

@@ -61,10 +61,11 @@ live probes deselected; smoke 2/2, goldenset 64/64, and Playwright 78/78 passed.
 Ruff, compileall, frontend lint/build, JSON parsing, and wrapped n8n Code-node
 syntax checks passed.
 
-No app deployment, n8n import, restart, or credential change occurred. The
-currently deployed workflow still returns 100 records; a quiet-state deployed
-probe was green in 4.604 seconds after validation load ended. Production
-remains `NOT_LIVE`.
+GitHub Actions run `27261573729` passed both `frontend` and `smoke`. No app
+deployment, n8n import, restart, or credential change occurred. The currently
+deployed workflow still returns 100 records; a quiet-state deployed probe was
+green in 4.604 seconds after validation load ended. Production remains
+`NOT_LIVE`.
 
 ## 2026-06-09 Entra Expired-State UI Badge Fix
 

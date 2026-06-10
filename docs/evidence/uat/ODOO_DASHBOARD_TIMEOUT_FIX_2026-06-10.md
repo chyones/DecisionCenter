@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED_NOT_LIVE — PENDING CI**
+**IMPLEMENTED_CI_GREEN_NOT_LIVE**
 
 Production remains `NOT_LIVE`. This change did not deploy the app, import the
 n8n workflow, restart services, or change credentials.
@@ -65,6 +65,7 @@ probe unnecessarily increased latency and made the fixed timeout fragile.
 | n8n Code-node script | syntax-valid when checked in its async execution wrapper |
 | Documentation drift | clean before governance refresh |
 | AI context | clean before governance refresh |
+| GitHub Actions | run `27261573729`: frontend success; smoke success |
 
 The host Python installation has an unrelated FastAPI/Pydantic mismatch, so
 authoritative pytest runs used the repository's pinned app image with the
@@ -75,4 +76,3 @@ current worktree bind-mounted.
 The source fix is not active in the deployed app or active n8n workflow until
 an explicitly approved rollout. The existing deployed workflow still returns
 100 records. No rollout was performed in this task.
-

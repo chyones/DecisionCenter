@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "d8af200b113034c79be6cafab9dc2d15f7930c86",
+  "current_commit": "74c944b41aff8f5915f28bd98e6fdeae7ba38862",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -100,12 +100,12 @@
     ]
   },
   "latest_verified_ci": {
-    "commit": "d8af200b113034c79be6cafab9dc2d15f7930c86",
-    "run_id": 27255075931,
+    "commit": "74c944b41aff8f5915f28bd98e6fdeae7ba38862",
+    "run_id": 27261573729,
     "status": "completed",
     "conclusion": "success",
-    "url": "https://github.com/chyones/DecisionCenter/actions/runs/27255075931",
-    "note": "Both smoke and frontend jobs passed for the Entra validation action fix."
+    "url": "https://github.com/chyones/DecisionCenter/actions/runs/27261573729",
+    "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
     "date": "2026-06-10",
@@ -124,11 +124,12 @@
     "frontend_build": "passed with existing Vite large-chunk warning",
     "n8n_workflow_validation": "valid JSON; Code-node syntax valid in async wrapper",
     "runtime_recheck": "quiet-state deployed probe LIVE_OK in 4.604 seconds; deployed workflow still returned 100 records",
-    "doc_drift": "pending governance refresh check",
-    "ai_context": "pending governance refresh check",
-    "postflight": "pending",
+    "doc_drift": "clean",
+    "ai_context": "clean",
+    "postflight": "clean (allow-no-evidence)",
     "evidence_file": "docs/evidence/uat/ODOO_DASHBOARD_TIMEOUT_FIX_2026-06-10.md",
-    "verdict": "ODOO_DASHBOARD_TIMEOUT_FIX_PENDING_CI_NOT_LIVE"
+    "ci_run": "27261573729; frontend success; smoke success",
+    "verdict": "ODOO_DASHBOARD_TIMEOUT_FIX_CI_GREEN_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
