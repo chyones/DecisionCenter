@@ -204,6 +204,14 @@ function ConnectorRow({
   const hasEntraValidationHistory =
     t.name === 'entra_auth' &&
     (t.state === 'VALIDATED' || isExpiredEntra);
+  const canValidateEntra =
+    t.name === 'entra_auth' &&
+    t.configured &&
+    t.state !== 'NOT_CONFIGURED' &&
+    t.state !== 'DISABLED';
+  const validationActionLabel = hasEntraValidationHistory
+    ? 'Revalidate with current Microsoft session'
+    : 'Validate with current Microsoft session';
 
   return (
     <li className="border-b border-border py-3 last:border-0">
@@ -254,7 +262,7 @@ function ConnectorRow({
             <dd className="text-error">{t.last_error_safe}</dd>
           </>
         )}
-        {isExpiredEntra && onRevalidate && (
+        {canValidateEntra && onRevalidate && (
           <>
             <dt className="sr-only">Action</dt>
             <dd className="col-span-2 mt-2">
@@ -265,7 +273,7 @@ function ConnectorRow({
                 isLoading={revalidating}
                 onClick={onRevalidate}
               >
-                Revalidate with current browser session
+                {validationActionLabel}
               </Button>
               {revalidationError && (
                 <p role="alert" className="mt-2 text-caption text-error">
@@ -360,10 +368,13 @@ export function ConnectorTruthPanel({
     try {
       let headers: HeadersInit | undefined;
       if (productionAuthEnabled) {
-        const token = await acquireAccessToken({ forceRefresh: true });
+        const token = await acquireAccessToken({
+          forceRefresh: true,
+          interactiveFallback: false,
+        });
         if (!token) {
           setRevalidationError(
-            'Sign in to Microsoft again, then retry revalidation.',
+            'Sign in with Microsoft again, then retry validation',
           );
           return;
         }
@@ -382,10 +393,14 @@ export function ConnectorTruthPanel({
         'Revalidation complete',
       );
     } catch (err) {
-      const message =
-        err instanceof ApiError && (err.status === 400 || err.status === 401)
-          ? 'Your Microsoft session could not be validated. Sign in again, then retry.'
-          : 'Revalidation failed. Refresh your Microsoft login and retry.';
+      let message = 'Validation failed. Sign in with Microsoft again, then retry.';
+      if (err instanceof ApiError && err.status === 400) {
+        message = err.message;
+      } else if (err instanceof ApiError && err.status === 401) {
+        message = 'Sign in with Microsoft again, then retry validation';
+      } else if (err instanceof ApiError && err.status === 403) {
+        message = 'Your Microsoft account is not authorized to validate this connection.';
+      }
       setRevalidationError(message);
     } finally {
       setRevalidating(false);

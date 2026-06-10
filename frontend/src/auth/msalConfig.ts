@@ -64,6 +64,7 @@ function saveHashForRestore(): void {
 
 export interface AccessTokenOptions {
   forceRefresh?: boolean;
+  interactiveFallback?: boolean;
 }
 
 /** Acquire an access token for API calls; redirects to login when needed. */
@@ -73,6 +74,9 @@ export async function acquireAccessToken(
   if (!pca) return '';
   const account = pca.getActiveAccount() ?? pca.getAllAccounts()[0];
   if (!account) {
+    if (options.interactiveFallback === false) {
+      return '';
+    }
     saveHashForRestore();
     await pca.loginRedirect({ scopes: tokenScopes });
     return '';
@@ -85,6 +89,9 @@ export async function acquireAccessToken(
     });
     return res.accessToken;
   } catch {
+    if (options.interactiveFallback === false) {
+      return '';
+    }
     saveHashForRestore();
     await pca.acquireTokenRedirect({ account, scopes: tokenScopes });
     return '';

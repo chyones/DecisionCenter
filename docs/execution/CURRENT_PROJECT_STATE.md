@@ -264,9 +264,14 @@ Real current connector states (config-derived; live probes execute in-container)
   ever been recorded. `/root/dc_token.txt` remains CLI-only input and is not a
   normal dashboard dependency. Expired history is rendered as `Expired`, with
   separate last-success, token-expiry, and last-check timestamps plus a
-  `Revalidate with current browser session` action. It is never shown as
-  current validation evidence, and failed revalidation preserves the prior
-  redacted marker.
+  `Revalidate with current Microsoft session` action. Every configured
+  non-current state, including `CONFIGURED_NOT_TESTED`, failed validation, and
+  expired evidence, keeps a Validate/Revalidate action visible. The action
+  force-refreshes the existing MSAL API token without redirecting away on
+  acquisition failure. The backend validates issuer, audience, tenant, expiry,
+  canonical roles, and `oid` identity against the authenticated request, and
+  persists no raw token or user identity. The API-audience token is not sent to
+  Graph `/me`. Failed validation preserves prior redacted evidence.
 - n8n and Odoo: live-probed through the runtime stack and shown `LIVE_OK` only
   when the probe returns real reachability/data evidence.
 - SharePoint and email / Microsoft Graph: may be `VERIFIED_FROM_EVIDENCE` only

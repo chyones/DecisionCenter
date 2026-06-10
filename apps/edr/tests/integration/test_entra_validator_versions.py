@@ -104,6 +104,28 @@ def test_rejects_wrong_audience_with_diagnostic() -> None:
     assert "aud=" in str(exc.value)
 
 
+def test_rejects_expired_token() -> None:
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iat": now - 120,
+            "nbf": now - 120,
+            "exp": now - 60,
+            "oid": "expired-user",
+            "ver": "2.0",
+            "iss": _V2_ISS,
+            "aud": _CLIENT,
+            "roles": ["admin"],
+        },
+        _PRIVATE_KEY,
+        algorithm="RS256",
+        headers={"kid": "test-kid"},
+    )
+
+    with pytest.raises(jwt.ExpiredSignatureError):
+        _validator().validate(token)
+
+
 def test_falls_back_to_v1_keys_when_kid_missing() -> None:
     """A v1 token whose kid is absent from the v2 keyset uses the v1 endpoint."""
     from jwt.exceptions import PyJWKClientError

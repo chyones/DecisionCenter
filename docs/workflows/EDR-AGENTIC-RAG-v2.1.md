@@ -1754,30 +1754,44 @@ validation history:
 `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` MUST NOT be displayed as green and MUST
 NOT be collapsed into `CONFIGURED_NOT_TESTED`. Normal dashboard status MUST
 NOT depend on `/root/dc_token.txt`; that file remains CLI-only operator input.
-For this state, the UI MUST:
+For expired validation, the UI MUST:
 
 - label the connector `Expired` or `Action required`;
 - omit current-validation wording such as `validated once`;
 - show `Last successful validation`, `Token expired at`, and `Last checked` as
   separate timestamps;
 - omit internal route or HTTP-method instructions; and
-- offer `Revalidate with current browser session`.
+- offer `Revalidate with current Microsoft session`.
 
-An admin current-browser-token revalidation path MAY read the request
-`Authorization` bearer token, but it MUST validate the token before calling
-Microsoft Graph `/me`. It MAY persist and return only redacted evidence:
-issuer/audience/tenant check results, token expiry timestamp, canonical role,
-`/me` result, and validation timestamp. The raw token MUST NOT be logged,
-printed, persisted, or returned.
+For configured Entra states without current passing user-token evidence,
+including `CONFIGURED_NOT_TESTED`, expired evidence, failed validation, and
+other configured action-required states, the connector card MUST keep a
+user-facing `Validate with current Microsoft session` or
+`Revalidate with current Microsoft session` action visible. OIDC discovery and
+JWKS reachability alone MUST NOT hide this action or mark user-token validation
+complete.
+
+An admin current-browser-token validation path MAY read the request
+`Authorization` bearer token. It MUST validate the token issuer, audience,
+tenant, expiry, canonical roles, and `oid` user identity, and it MUST confirm
+that the validated token identity and role match the authenticated request.
+The DecisionCenter API-audience token MUST NOT be sent to Microsoft Graph
+`/me`, because Graph requires a Graph-audience token. The path MAY persist and
+return only redacted evidence: validation timestamp, token expiry timestamp,
+canonical role, and boolean issuer/audience/tenant/expiry/role/identity check
+results. The raw token and raw user identity MUST NOT be logged, printed,
+persisted, or returned.
 
 The frontend revalidation action MUST request a fresh/current API access token
 through the existing MSAL browser flow. It SHOULD attempt silent acquisition
-with forced refresh first and MAY use the existing interactive redirect fallback.
+with forced refresh first. If browser-session acquisition fails, the action
+MUST stay visible, MUST NOT mark validation complete, and MUST display
+`Sign in with Microsoft again, then retry validation`.
 The backend MUST retain the existing cryptographic issuer, audience, tenant,
-expiry, and canonical-role validation. Passing evidence is replaced only after
-both token validation and Graph `/me` succeed. A failed acquisition or
-validation MUST preserve the expired state and prior redacted successful
-evidence, with user-facing sign-in/retry guidance.
+expiry, canonical-role, and user-identity validation. Passing evidence is
+replaced only after every check succeeds. A failed acquisition or validation
+MUST preserve the not-tested/expired/action-required state and prior redacted
+successful evidence, with a safe user-facing reason and sign-in/retry guidance.
 
 ---
 

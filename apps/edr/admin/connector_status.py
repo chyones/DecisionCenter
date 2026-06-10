@@ -64,6 +64,7 @@ from pydantic import BaseModel, ConfigDict
 
 from apps.edr.admin import services_catalog
 from apps.edr.config import settings
+from apps.edr.rbac.roles import VALID_ROLES
 
 # ---------------------------------------------------------------------------
 # Truth states
@@ -632,7 +633,8 @@ def _entra_validation_evidence_facts(ts: str) -> ProbeFacts | None:
         "tenant_ok",
         "expiry_valid",
         "role_present",
-        "me_role_ok",
+        "roles_valid",
+        "user_identity_ok",
     )
     if marker.get("result") != "PASS" or not all(checks.get(k) is True for k in required_checks):
         return None
@@ -772,7 +774,12 @@ def _probe_entra() -> ProbeFacts:
 # ---------------------------------------------------------------------------
 
 
-def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[str, Any]:
+def write_entra_validation_evidence_marker(
+    token: str,
+    *,
+    expected_user_id: str,
+    expected_role: str,
+) -> dict[str, Any]:
     """Validate a user bearer token and write redacted evidence to the evidence file.
 
     Accepts the raw token **only for the duration of this call**. The token is:
@@ -784,8 +791,7 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
     - result: "PASS"
     - validated_at: ISO timestamp of this call
     - token_expires_at: ISO timestamp of the token expiry
-    - role: the resolved role string (sanitised)
-    - me_role: same as role
+    - role: the resolved canonical role string (sanitised)
     - checks: dict of boolean pass/fail for each validation step
 
     Raises ValueError if the token is invalid or already expired.
@@ -818,12 +824,22 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
             "Token is already expired — cannot revalidate with an expired token. "
             "Log in again and retry."
         )
-    if not me_ok:
-        raise ValueError(
-            "Microsoft session validation failed. Sign in again and retry."
-        )
 
     role = services_catalog._sanitize_detail(str(jwt_claims.role or "unknown"))
+    roles = tuple(getattr(jwt_claims, "roles", ()) or ())
+    if (
+        not jwt_claims.role
+        or jwt_claims.role not in VALID_ROLES
+        or jwt_claims.role not in roles
+        or jwt_claims.role != expected_role
+    ):
+        raise ValueError("Microsoft role validation failed")
+
+    token_user_id = str(jwt_claims.user_id or "").strip()
+    authenticated_user_id = str(expected_user_id or "").strip()
+    if not token_user_id or token_user_id.casefold() != authenticated_user_id.casefold():
+        raise ValueError("Microsoft user identity validation failed")
+
     expires_iso = expires_at.isoformat().replace("+00:00", "Z")
     validated_iso = now.isoformat().replace("+00:00", "Z")
 
@@ -832,7 +848,6 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
         "validated_at": validated_iso,
         "token_expires_at": expires_iso,
         "role": role,
-        "me_role": role,
         "checks": {
             "oidc_discovery_ok": True,
             "jwks_ok": True,
@@ -841,7 +856,8 @@ def write_entra_validation_evidence_marker(token: str, *, me_ok: bool) -> dict[s
             "tenant_ok": True,
             "expiry_valid": True,
             "role_present": bool(jwt_claims.role),
-            "me_role_ok": me_ok,
+            "roles_valid": True,
+            "user_identity_ok": True,
         },
     }
 

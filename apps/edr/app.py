@@ -1532,36 +1532,23 @@ async def admin_entra_revalidate_token(
 ) -> dict:
     """Revalidate Entra auth using the caller's current browser bearer token.
 
-    The auth dependency validates the token before this handler calls Graph
-    ``/me``. Only redacted validation evidence is persisted or returned.
+    The auth dependency and evidence writer validate the same API-audience token.
+    Only redacted validation evidence is persisted or returned.
     """
-    _require_admin(claims)
+    admin_claims = _require_admin(claims)
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("bearer "):
         raise HTTPException(
             status_code=400,
-            detail="Authorization: Bearer <token> required",
+            detail="Current Microsoft session token required",
         )
     _raw_token = auth_header[7:].strip()
-    _me_ok = False
-    try:
-        from urllib.request import Request as _URLReq
-        from urllib.request import urlopen as _urlopen
-
-        _me_req = _URLReq(
-            "https://graph.microsoft.com/v1.0/me",
-            headers={"Authorization": f"Bearer {_raw_token}"},
-            method="GET",
-        )
-        with _urlopen(_me_req, timeout=10) as _resp:  # noqa: S310
-            _me_ok = _resp.status == 200
-    except Exception:
-        _me_ok = False
     try:
         evidence = await run_in_threadpool(
             connector_status.write_entra_validation_evidence_marker,
             _raw_token,
-            me_ok=_me_ok,
+            expected_user_id=admin_claims.user_id,
+            expected_role=admin_claims.role or "",
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

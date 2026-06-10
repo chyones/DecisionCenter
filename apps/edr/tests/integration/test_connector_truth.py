@@ -25,6 +25,7 @@ import asyncio
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -186,7 +187,6 @@ def _write_entra_marker(path, *, expires_delta: timedelta, result: str = "PASS")
         "validated_at": now.isoformat().replace("+00:00", "Z"),
         "token_expires_at": (now + expires_delta).isoformat().replace("+00:00", "Z"),
         "role": "admin",
-        "me_role": "admin",
         "checks": {
             "oidc_discovery_ok": True,
             "jwks_ok": True,
@@ -195,7 +195,8 @@ def _write_entra_marker(path, *, expires_delta: timedelta, result: str = "PASS")
             "tenant_ok": True,
             "expiry_valid": True,
             "role_present": True,
-            "me_role_ok": True,
+            "roles_valid": True,
+            "user_identity_ok": True,
         },
     }
     path.write_text(
@@ -297,6 +298,36 @@ def test_configured_entra_without_validation_evidence_remains_configured_not_tes
     assert truth.blocks_go_live is True
 
 
+def test_legacy_entra_marker_without_identity_check_is_not_current(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    marker = tmp_path / "legacy-entra-validation.md"
+    _write_entra_marker(marker, expires_delta=timedelta(minutes=30))
+    payload = marker.read_text(encoding="utf-8").replace(
+        ', "user_identity_ok": true',
+        "",
+    )
+    marker.write_text(payload, encoding="utf-8")
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+    monkeypatch.setattr(
+        cs,
+        "_probe_entra_oidc_jwks",
+        lambda tenant, ts: cs.ProbeFacts(
+            network_ok=True,
+            live_data_ok=None,
+            data_source="none",
+            evidence="OIDC discovery and JWKS reachable",
+            probed_at=ts,
+            success_at=ts,
+        ),
+    )
+
+    truth = cs.classify(cs.CONNECTOR_SPEC_BY_NAME["entra_auth"], run_probe=True)
+
+    assert truth.state is cs.ConnectorState.CONFIGURED_NOT_TESTED
+    assert truth.blocks_go_live is True
+
+
 def test_missing_entra_config_is_not_configured(monkeypatch) -> None:
     monkeypatch.setattr(cs.settings, "entra_client_id", None, raising=False)
     monkeypatch.setattr(cs.settings, "entra_tenant_id", None, raising=False)
@@ -323,7 +354,11 @@ def test_entra_revalidation_marker_never_stores_or_returns_raw_token(
 
         def validate(self, token: str) -> MagicMock:
             assert token == raw_token
-            return MagicMock(role="admin")
+            return MagicMock(
+                user_id="user-admin",
+                role="admin",
+                roles=("admin",),
+            )
 
     monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FakeValidator)
     monkeypatch.setattr(
@@ -331,18 +366,23 @@ def test_entra_revalidation_marker_never_stores_or_returns_raw_token(
         lambda token, options: {"exp": int(expires_at.timestamp())},
     )
 
-    result = cs.write_entra_validation_evidence_marker(raw_token, me_ok=True)
+    result = cs.write_entra_validation_evidence_marker(
+        raw_token,
+        expected_user_id="user-admin",
+        expected_role="admin",
+    )
     stored = marker.read_text(encoding="utf-8")
     returned = json.dumps(result, sort_keys=True)
 
     assert raw_token not in stored
     assert raw_token not in returned
+    assert "user-admin" not in stored
+    assert "user-admin" not in returned
     assert set(result) == {
         "result",
         "validated_at",
         "token_expires_at",
         "role",
-        "me_role",
         "checks",
     }
     assert result["role"] == "admin"
@@ -354,7 +394,8 @@ def test_entra_revalidation_marker_never_stores_or_returns_raw_token(
         "tenant_ok": True,
         "expiry_valid": True,
         "role_present": True,
-        "me_role_ok": True,
+        "roles_valid": True,
+        "user_identity_ok": True,
     }
 
 
@@ -373,13 +414,17 @@ def test_entra_revalidation_failure_never_returns_raw_token(
     monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FailingValidator)
 
     with pytest.raises(ValueError) as exc:
-        cs.write_entra_validation_evidence_marker(raw_token, me_ok=False)
+        cs.write_entra_validation_evidence_marker(
+            raw_token,
+            expected_user_id="user-admin",
+            expected_role="admin",
+        )
 
     assert raw_token not in str(exc.value)
     assert str(exc.value) == "Token validation failed"
 
 
-def test_failed_graph_me_revalidation_preserves_previous_evidence(
+def test_failed_user_identity_validation_preserves_previous_evidence(
     entra_configured, monkeypatch, tmp_path
 ) -> None:
     raw_token = "secret-current-session-token"
@@ -395,7 +440,11 @@ def test_failed_graph_me_revalidation_preserves_previous_evidence(
 
         def validate(self, token: str) -> MagicMock:
             assert token == raw_token
-            return MagicMock(role="admin")
+            return MagicMock(
+                user_id="different-user",
+                role="admin",
+                roles=("admin",),
+            )
 
     monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FakeValidator)
     monkeypatch.setattr(
@@ -404,11 +453,53 @@ def test_failed_graph_me_revalidation_preserves_previous_evidence(
     )
 
     with pytest.raises(ValueError) as exc:
-        cs.write_entra_validation_evidence_marker(raw_token, me_ok=False)
+        cs.write_entra_validation_evidence_marker(
+            raw_token,
+            expected_user_id="user-admin",
+            expected_role="admin",
+        )
 
-    assert str(exc.value) == (
-        "Microsoft session validation failed. Sign in again and retry."
+    assert str(exc.value) == "Microsoft user identity validation failed"
+    assert marker.read_text(encoding="utf-8") == previous_evidence
+    assert raw_token not in marker.read_text(encoding="utf-8")
+
+
+def test_failed_role_validation_preserves_previous_evidence(
+    entra_configured, monkeypatch, tmp_path
+) -> None:
+    raw_token = "secret-current-session-token"
+    marker = tmp_path / "entra-validation.md"
+    _write_entra_marker(marker, expires_delta=timedelta(minutes=-5))
+    previous_evidence = marker.read_text(encoding="utf-8")
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    monkeypatch.setattr(cs, "_ENTRA_VALIDATION_EVIDENCE_PATH", marker)
+
+    class FakeValidator:
+        def __init__(self, tenant_id: str, client_id: str) -> None:
+            pass
+
+        def validate(self, token: str) -> MagicMock:
+            assert token == raw_token
+            return MagicMock(
+                user_id="user-admin",
+                role="executive",
+                roles=("executive",),
+            )
+
+    monkeypatch.setattr("apps.edr.auth.validator.EntraJWTValidator", FakeValidator)
+    monkeypatch.setattr(
+        "jwt.decode",
+        lambda token, options: {"exp": int(expires_at.timestamp())},
     )
+
+    with pytest.raises(ValueError) as exc:
+        cs.write_entra_validation_evidence_marker(
+            raw_token,
+            expected_user_id="user-admin",
+            expected_role="admin",
+        )
+
+    assert str(exc.value) == "Microsoft role validation failed"
     assert marker.read_text(encoding="utf-8") == previous_evidence
     assert raw_token not in marker.read_text(encoding="utf-8")
 
@@ -450,26 +541,21 @@ def test_entra_revalidation_endpoint_never_returns_raw_token(monkeypatch) -> Non
         }
     )
 
-    class GraphMeResponse:
-        status = 200
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: GraphMeResponse())
-
-    def fake_write(token: str, *, me_ok: bool) -> dict[str, Any]:
+    def fake_write(
+        token: str,
+        *,
+        expected_user_id: str,
+        expected_role: str,
+    ) -> dict[str, Any]:
         assert token == raw_token
-        assert me_ok is True
+        assert expected_user_id == "user-admin"
+        assert expected_role == "admin"
         return {
             "result": "PASS",
             "validated_at": "2026-06-09T00:00:00Z",
             "token_expires_at": "2026-06-09T01:00:00Z",
             "role": "admin",
-            "checks": {"me_role_ok": True},
+            "checks": {"user_identity_ok": True},
         }
 
     monkeypatch.setattr(cs, "write_entra_validation_evidence_marker", fake_write)
@@ -482,6 +568,19 @@ def test_entra_revalidation_endpoint_never_returns_raw_token(monkeypatch) -> Non
     )
 
     assert raw_token not in json.dumps(result, sort_keys=True)
+
+
+def test_entra_frontend_requests_forced_silent_msal_validation_token() -> None:
+    panel_source = Path("frontend/src/screens/ConnectorTruthPanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    msal_source = Path("frontend/src/auth/msalConfig.ts").read_text(encoding="utf-8")
+
+    assert "acquireAccessToken({" in panel_source
+    assert "forceRefresh: true" in panel_source
+    assert "interactiveFallback: false" in panel_source
+    assert "pca.acquireTokenSilent({" in msal_source
+    assert msal_source.count("options.interactiveFallback === false") == 2
 
 
 def _verified_source_mapping_rows() -> list[dict[str, Any]]:

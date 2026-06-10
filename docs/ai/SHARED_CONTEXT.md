@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `450ecc8681ee37a0ae99c10c584d11b6a1afa74f` (verified starting HEAD before reconciliation commit)
+- Current verified commit (anchor): `adc1f1c34110dded0847906a9b82005d4c67c145`
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,19 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-10 Entra Validation Action Context
+
+The Entra connector card keeps a current-session Validate/Revalidate action
+visible whenever Entra is configured but fresh passing user-token evidence is
+absent, expired, or failed. The click force-refreshes the existing MSAL API
+token and leaves the button visible with sign-in guidance if acquisition fails.
+
+The backend validates the DecisionCenter API token's issuer, audience, tenant,
+expiry, canonical roles, and `oid` identity consistency. It does not send that
+API-audience token to Graph `/me`. Only redacted evidence is stored. Production
+remains `NOT_LIVE`; Microsoft Gate 4, deployment, live UAT, and Slice 7 remain
+untouched.
 
 ## 2026-06-03 Reconciliation Context
 

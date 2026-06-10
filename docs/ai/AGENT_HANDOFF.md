@@ -18,6 +18,33 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-10 Entra Validation Button And Browser Session Fix
+
+The Entra connector card now keeps a Validate/Revalidate action visible for
+every configured state that lacks current passing user-token evidence,
+including `CONFIGURED_NOT_TESTED`, expired evidence, failed validation, and
+other action-required states. A current `VALIDATED` card retains a secondary
+Revalidate action.
+
+The validation click requests the current DecisionCenter API token through the
+existing MSAL session with `forceRefresh: true`. This action disables the
+interactive redirect fallback so acquisition failure leaves the card and
+button visible with `Sign in with Microsoft again, then retry validation`.
+
+The backend no longer sends the DecisionCenter API-audience token to Graph
+`/me`. It validates issuer, audience, tenant, expiry, canonical role membership,
+and `oid` identity consistency against the authenticated request. Only redacted
+timestamps, role, and boolean checks are persisted; raw tokens and raw user
+identity are never stored or returned. Legacy evidence without the identity
+check is not accepted as current proof.
+
+Targeted validation: connector/validator backend tests `55 passed`; Entra card
+Playwright tests `24 passed` across Chromium, Firefox, and WebKit; targeted Ruff
+and frontend lint passed. Full required validation and CI are recorded in
+`docs/evidence/uat/ENTRA_VALIDATION_BUTTON_VISIBILITY_FIX_2026-06-10.md`.
+Production remains `NOT_LIVE`; Microsoft Gate 4, deployment, live UAT, and
+Slice 7 were not started.
+
 ## 2026-06-09 Entra Expired-State UI Badge Fix
 
 The Entra card now treats `PREVIOUSLY_VALIDATED_TOKEN_EXPIRED` as action
