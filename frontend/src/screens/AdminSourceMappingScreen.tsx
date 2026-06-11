@@ -1007,9 +1007,11 @@ export function AdminSourceMappingScreen() {
   const handleEnrichEmailGroups = async () => {
     setEnrichLoading(true);
     try {
+      // Empty list defers to the backend's supported enrichment scope
+      // (pilot: PRJ-001/PRJ-002), keeping the scope defined in one place.
       const result = await api.post<EmailGroupEnrichmentResponse>(
         '/admin/source-mappings/enrich-email-groups',
-        { project_codes: ['PRJ-001', 'PRJ-002'] },
+        { project_codes: [] },
       );
       setEnrichResult(result);
       setShowEnrich(true);

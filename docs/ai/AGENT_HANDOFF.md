@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `450ecc8681ee37a0ae99c10c584d11b6a1afa74f` (verified starting HEAD before reconciliation commit)
+- **Current anchor:** `2c5a6d11eb34106b392e283df9e40d5e67cf2694` (verified starting HEAD of the 2026-06-11 remediation session; latest CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,65 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-06-11 Audit Remediation (read-write session)
+
+Targeted fixes from the 2026-06-10 full read-only audit
+(`FULL_SYSTEM_AUDIT_REPORT.md`, audited at HEAD `2c5a6d1`):
+
+- Upload Zone is wired end-to-end: Query Composer uploads ready files via
+  `POST /upload` (new `ApiClient.postForm`) and attaches the returned
+  `upload_ids` to the `POST /reports/staging` payload. `ReportRequest` in
+  `apps/edr/app.py` now carries `upload_ids: list[str] = []`, recorded in the
+  workflow inputs/audit trail (node-level ingestion remains a later phase).
+  Regression tests: `apps/edr/tests/integration/test_upload_ids_field.py`.
+- Admin "Enrich Email Groups" no longer hardcodes `['PRJ-001','PRJ-002']` in
+  the frontend; it sends an empty `project_codes` list and defers to the
+  backend's pilot scope so the scope is defined in one place. The backend
+  pilot guard (PRJ-001/PRJ-002 only) is unchanged — it is a deliberate,
+  tested invariant.
+- Publish node (`apps/edr/graph/node_17_publish.py`) no longer silently
+  swallows exceptions; artifact-copy, approval-log, and review-state failures
+  are logged and surfaced in `state.outputs["publish_errors"]`. Existing
+  `publish_status` values are unchanged.
+- Caddyfile production block now sends `Content-Security-Policy` and
+  `Permissions-Policy` headers (MSAL redirect/silent-iframe flows allowed via
+  `login.microsoftonline.com` in connect-src/frame-src/form-action).
+- Dockerfile now runs the app as non-root `appuser` (uid 10001). Verified
+  safe: the app persists artifacts to MinIO/Postgres only; the legacy
+  `/staging`, `/final`, `/logs` bind mounts are not written by the app.
+- `apps/edr/config.py` fails fast at startup when `APP_ENV=production` is set
+  while `POSTGRES_PASSWORD` or `MINIO_SECRET_KEY` still hold the `change-me`
+  placeholder. The check is deliberately a plain post-construction check, not
+  a pydantic validator, because a `ValidationError` would echo the full
+  settings input — secrets included — into startup logs.
+  **Operator warning:** the live `.env` sets `APP_ENV=production` with both
+  placeholders still in place, so rotate both secrets before the next app
+  image rebuild or the container will refuse to boot (with a clear message).
+- `docker-compose.override.example.yml` and
+  `docs/operations/deployment_overrides.md` now document the previously
+  git-ignored mandatory deployment override (MinIO port remap, Caddy port
+  reset, cloudflared tunnel). No secret values are tracked.
+
+Audit corrections recorded for future agents:
+
+- `microsoft_rescan.py` `_PLACEHOLDER_*` constants are placeholder-**detection**
+  sets used to flag mappings that still contain seeded example values — not
+  stub data. The audit's "replace placeholder constants" finding is a false
+  positive; no change was made.
+- The Odoo probe-timeout fix already landed in `74c944b`
+  (probe timeout `max(50s, N8N_TIMEOUT)`, probe `limit: 5`, workflow honors
+  limits). Remaining work is operator-side: re-import `n8n/odoo_read.json`
+  into the runtime n8n and rebuild the app image.
+
+Validation (host venv, `APP_ENV=local`): integration suite 721 passed with 14
+live probes deselected (run twice: before and after the `app.py` change);
+smoke 2/2; targeted upload_ids/publish/smoke 28 passed; Ruff, compileall,
+frontend lint and build, doc_drift, and ai_context all clean. The audit's
+in-container pytest timeouts were environmental, not failing tests.
+
+Production remains `NOT_LIVE`; Slice 7 not started; no deployment, n8n import,
+restart, or credential change occurred in this session.
 
 ## 2026-06-10 Entra Validation Button And Browser Session Fix
 
@@ -195,7 +254,17 @@ workspace checks and the A-01/C-6 admin DOM checks are automated and green.
 
 ## Latest Audit Verdict
 
-The 2026-05-24 read-only project audit at
+The 2026-06-10 full read-only audit at `2c5a6d11eb34106b392e283df9e40d5e67cf2694`
+(`FULL_SYSTEM_AUDIT_REPORT.md`) returned primary verdict
+**`GOVERNANCE_BLOCKED_NOT_LIVE`** — structurally sound and well-architected,
+but not ready for live operation and correctly locked by its own governance
+controls. Key technical blockers: empty AI provider keys (100% LLM fallback),
+2 of 4 n8n workflows not imported into the runtime, expired Entra token, and
+default Postgres/MinIO passwords. The 2026-06-11 remediation session closed
+the safe code fixes (see above); credentials, n8n imports, and password
+rotation remain operator actions.
+
+The earlier 2026-05-24 read-only audit at
 `c3ab71d9864e17c3d99da847e5f673fabe2f1dba` rated the repo **7/10** and
 returned final recommendation `NOT_GO_LIVE_READY_BUT_HEALTHY`.
 
@@ -274,19 +343,14 @@ If anchor drift exceeds 3 commits, stop and fix governance before coding.
 
 | Check | Result |
 |---|---|
-| Full backend pytest (bind-mounted current source) | 582 passed, 3 skipped |
-| Golden-set eval | 64/64 passed |
-| Playwright security-DOM | 12/12 passed across Chromium, Firefox, WebKit |
+| Integration suite (host venv, APP_ENV=local, 2026-06-11) | 721 passed, 14 live probes deselected (run before and after the app.py change) |
+| Smoke (host venv, 2026-06-11) | 2 passed |
+| Targeted upload_ids / publish / smoke (2026-06-11) | 28 passed |
 | Frontend lint | clean |
 | Frontend build | passed; existing Vite large-chunk warning remains |
-| Odoo live integration subset | 2 passed |
-| Connector truth tests | 22 passed |
-| n8n headerAuth workflow tests | 4 passed |
-| Connector truth live probe | Odoo `LIVE_OK` (100 evidence items); report generation `BLOCKED` |
-| Latest GitHub CI known from prior audit | failed at run 26876872322 on HEAD `450ecc8`; no new CI run was started here |
-| doc_drift | clean |
-| ai_context | clean |
-| postflight | clean |
+| Ruff / compileall | clean |
+| doc_drift / ai_context | clean |
+| Latest verified GitHub CI | run `27261573729` green on `74c944b`; the 2026-06-11 remediation commit requires a new CI run |
 
 ## Required Validation
 

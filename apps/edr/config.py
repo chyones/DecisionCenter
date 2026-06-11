@@ -62,4 +62,29 @@ class Settings(BaseSettings):
     monthly_cost_target_usd: float = Field(default=300, gt=0)
 
 
+def _reject_placeholder_secrets_in_production(s: Settings) -> None:
+    """Fail fast when production runs on the local-convenience defaults.
+
+    Deliberately a plain check (not a pydantic validator): a ValidationError
+    would echo the full settings input — secrets included — into startup logs.
+    """
+    if s.app_env != "production":
+        return
+    weak = [
+        name
+        for name, value in (
+            ("POSTGRES_PASSWORD", s.postgres_password),
+            ("MINIO_SECRET_KEY", s.minio_secret_key),
+        )
+        if value == "change-me"
+    ]
+    if weak:
+        raise RuntimeError(
+            "Placeholder secrets are not allowed when APP_ENV=production: "
+            + ", ".join(weak)
+            + ". Rotate them in .env (or set APP_ENV=local for development)."
+        )
+
+
 settings = Settings()
+_reject_placeholder_secrets_in_production(settings)

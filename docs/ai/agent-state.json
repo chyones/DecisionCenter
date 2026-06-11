@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "74c944b41aff8f5915f28bd98e6fdeae7ba38862",
+  "current_commit": "2c5a6d11eb34106b392e283df9e40d5e67cf2694",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -82,10 +82,11 @@
   "latest_report": "docs/execution/PHASE_2D_SLICE_6_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_read_only_audit": {
-    "date": "2026-05-25",
-    "audited_head": "e1992b125af08efc955de8560e0f41287a9f5eba",
+    "date": "2026-06-10",
+    "audited_head": "2c5a6d11eb34106b392e283df9e40d5e67cf2694",
+    "report_file": "FULL_SYSTEM_AUDIT_REPORT.md",
     "overall_rating": "not re-rated",
-    "final_recommendation": "NOT_GO_LIVE_READY",
+    "final_recommendation": "GOVERNANCE_BLOCKED_NOT_LIVE",
     "go_live_ready": false,
     "closed_blockers": [
       "production frontend delivery path missing",
@@ -95,6 +96,10 @@
       "production hardening evidence missing"
     ],
     "main_blockers": [
+      "AI provider keys empty (100% LLM fallback)",
+      "n8n sharepoint_search and email_search workflows not imported in runtime",
+      "Entra token expired",
+      "default Postgres/MinIO passwords",
       "real UAT flow not proven",
       "go-live approval not completed"
     ]
@@ -108,28 +113,21 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-10",
-    "context": "Odoo dashboard timeout reliability fix. The truth probe now honors configured N8N_TIMEOUT with a 10-second minimum, and the n8n workflow validates and honors a caller limit from 1-100 instead of always fetching 100 records.",
-    "starting_head": "d8af200b113034c79be6cafab9dc2d15f7930c86",
+    "date": "2026-06-11",
+    "context": "Audit remediation of FULL_SYSTEM_AUDIT_REPORT.md findings: Upload Zone wired end-to-end (POST /upload + upload_ids on ReportRequest), Enrich Email Groups frontend defers to backend pilot scope, publish-node exceptions surfaced via publish_errors, Caddyfile CSP/Permissions-Policy, config.py fail-fast on change-me secrets when APP_ENV=production, Dockerfile non-root USER, docker-compose.override.example.yml + deployment_overrides.md. Audit corrections: microsoft_rescan placeholder constants are detection sets (false positive); Odoo probe timeout already fixed in 74c944b (operator re-import pending).",
+    "starting_head": "2c5a6d11eb34106b392e283df9e40d5e67cf2694",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "63 passed",
-    "integration_backend": "720 passed, 1 skipped, 14 live probes deselected",
+    "targeted_backend": "28 passed (upload_ids field, phase1g publish, smoke)",
+    "integration_backend": "721 passed, 14 live probes deselected (host venv, APP_ENV=local)",
     "smoke": "2 passed",
-    "phase2a_e2e": "PASS; 18 workflow nodes visited",
-    "goldenset": "64/64 passed; 100% pass rate; 93.75% precision",
-    "frontend_ui": "78 passed across Chromium, Firefox, and WebKit",
     "ruff": "clean",
     "compileall_apps_scripts": "clean",
     "frontend_lint": "clean",
     "frontend_build": "passed with existing Vite large-chunk warning",
-    "n8n_workflow_validation": "valid JSON; Code-node syntax valid in async wrapper",
-    "runtime_recheck": "quiet-state deployed probe LIVE_OK in 4.604 seconds; deployed workflow still returned 100 records",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "postflight": "clean (allow-no-evidence)",
-    "evidence_file": "docs/evidence/uat/ODOO_DASHBOARD_TIMEOUT_FIX_2026-06-10.md",
-    "ci_run": "27261573729; frontend success; smoke success",
-    "verdict": "ODOO_DASHBOARD_TIMEOUT_FIX_CI_GREEN_NOT_LIVE"
+    "operator_warning": "live .env runs APP_ENV=production with change-me POSTGRES_PASSWORD/MINIO_SECRET_KEY; the new fail-fast blocks the next app image rebuild until both are rotated",
+    "verdict": "AUDIT_REMEDIATION_LOCAL_GREEN_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -168,7 +166,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "After CI is green and only with explicit operator approval, roll out the app source and import/activate the updated n8n Odoo workflow so the dashboard uses the configured timeout and the live webhook honors the five-record probe limit. Production remains NOT_LIVE. Real live UAT evidence is still required before Slice 7.",
+  "next_action": "Operator: rotate POSTGRES_PASSWORD and MINIO_SECRET_KEY before any app image rebuild (config now fails fast on change-me when APP_ENV=production). Then, after CI is green and only with explicit operator approval, roll out the app source and import/activate the n8n workflows (re-import odoo_read; import sharepoint_search and email_search with the Header Auth credential). Production remains NOT_LIVE. Real live UAT evidence is still required before Slice 7.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": false,

@@ -16,6 +16,8 @@ export interface ReportRequest {
   document_type?: string;
   mailbox_scope?: string;
   output_formats: OutputFormat[];
+  /** IDs returned by `POST /upload` for files attached to this request. */
+  upload_ids?: string[];
 }
 
 export interface ReportResponse {

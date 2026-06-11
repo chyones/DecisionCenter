@@ -6,7 +6,8 @@
  * - Submit wired to `POST /reports/staging`.
  * - All screen states: idle, draft, submitting, queued, error, no_projects.
  * - Upload zone: local file selection, validation, preview, remove.
- *   Validation mirrors the backend upload contract.
+ *   Files are uploaded via `POST /upload` on submit and their `upload_id`s
+ *   attached to the staging request.
  */
 
 import { useEffect, useState } from 'react';
@@ -15,7 +16,12 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button, useToasts } from '../components';
 import { useApi } from '../api';
 import { isApiError } from '../api';
-import type { OutputFormat, ReportResponse, WorkspaceContextResponse } from '../api';
+import type {
+  OutputFormat,
+  ReportResponse,
+  UploadResponse,
+  WorkspaceContextResponse,
+} from '../api';
 import { UploadZone } from './UploadZone';
 import type { UploadFile } from './UploadZone';
 
@@ -100,17 +106,36 @@ export function QueryComposerScreen() {
     projectCode.trim().length > 0 &&
     query.trim().length > 0;
 
+  async function uploadFiles(): Promise<string[]> {
+    const uploadIds: string[] = [];
+    for (const f of files.filter((file) => file.status === 'ready')) {
+      const form = new FormData();
+      form.append('file', f.file, f.file.name);
+      try {
+        const uploaded = await api.postForm<UploadResponse>('/upload', form);
+        uploadIds.push(uploaded.upload_id);
+      } catch (err) {
+        const detail =
+          isApiError(err) || err instanceof Error ? err.message : 'upload failed';
+        throw new Error(`Upload failed for ${f.file.name}: ${detail}`);
+      }
+    }
+    return uploadIds;
+  }
+
   async function handleSubmit() {
     if (!canSubmit) return;
     setState('submitting');
     setErrorMsg('');
 
     try {
+      const uploadIds = await uploadFiles();
       const res = await api.post<ReportResponse>('/reports/staging', {
         user_id: workspace?.user_id || 'frontend-user',
         query: query.trim(),
         project_code: projectCode,
         output_formats: formats,
+        ...(uploadIds.length > 0 ? { upload_ids: uploadIds } : {}),
       });
       setState('queued');
       window.location.replace(

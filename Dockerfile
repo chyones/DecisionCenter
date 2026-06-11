@@ -18,6 +18,11 @@ COPY .github ./.github
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
+# Run as non-root. The app persists artifacts to MinIO/Postgres only; the
+# legacy /staging, /final, /logs bind mounts are not written by the app.
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
 EXPOSE 8000
 
 CMD ["uvicorn", "apps.edr.app:app", "--host", "0.0.0.0", "--port", "8000"]

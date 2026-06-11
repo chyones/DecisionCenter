@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `adc1f1c34110dded0847906a9b82005d4c67c145`
+- Current verified commit (anchor): `2c5a6d11eb34106b392e283df9e40d5e67cf2694`
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,36 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-11 Audit Remediation Context
+
+The 2026-06-10 full read-only audit (`FULL_SYSTEM_AUDIT_REPORT.md`, verdict
+`GOVERNANCE_BLOCKED_NOT_LIVE`) was remediated in source:
+
+- Upload Zone is wired end-to-end: Query Composer uploads files via
+  `POST /upload` (`ApiClient.postForm`) and attaches `upload_ids` to
+  `POST /reports/staging`; `ReportRequest` now carries `upload_ids`.
+- Admin "Enrich Email Groups" sends an empty `project_codes` list; the backend
+  pilot scope (PRJ-001/PRJ-002, a deliberate tested invariant) is the single
+  source of truth.
+- `node_17_publish.py` surfaces previously swallowed exceptions via logging and
+  `state.outputs["publish_errors"]`.
+- Caddyfile production block sends `Content-Security-Policy` and
+  `Permissions-Policy` (MSAL flows allowed). Dockerfile runs as non-root
+  `appuser` (the `/staging`, `/final`, `/logs` bind mounts are not written by
+  the app).
+- `config.py` fails fast when `APP_ENV=production` still uses `change-me`
+  secrets. **Operator warning:** the live `.env` is exactly in that state, so
+  rotate `POSTGRES_PASSWORD` and `MINIO_SECRET_KEY` before the next app image
+  rebuild.
+- `docker-compose.override.example.yml` + `docs/operations/deployment_overrides.md`
+  document the git-ignored mandatory deployment override.
+
+Audit corrections: `microsoft_rescan.py` `_PLACEHOLDER_*` constants are
+placeholder-detection sets (audit false positive; unchanged); the Odoo probe
+timeout fix already landed in `74c944b` — remaining work is the operator n8n
+re-import and app rebuild. No deployment, n8n import, restart, or credential
+change occurred. Production remains `NOT_LIVE`.
 
 ## 2026-06-10 Entra Validation Action Context
 
@@ -280,7 +310,7 @@ Ignored or local-only files must not be committed (see `.gitignore` and
 - **Governance drift rule:** After every pushed commit (not just at closeout),
   refresh `agent-state.json`, `AGENT_HANDOFF.md`, and `SHARED_CONTEXT.md`
   before ending the session. Run `python3 scripts/check_doc_drift.py` before
-  starting any new slice. If anchor drift exceeds 3 commits, stop and fix
+  starting any new slice.  If anchor drift exceeds 3 commits, stop and fix
   governance before writing any more code.
 - If a future user explicitly authorizes Slice 7, update this shared context,
   the handoff, and `docs/ai/agent-state.json` only as part of that approved

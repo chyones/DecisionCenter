@@ -45,6 +45,9 @@ class ReportRequest(BaseModel):
     document_type: str | None = None
     mailbox_scope: str | None = None
     output_formats: list[Literal["md", "docx", "xlsx", "pdf", "pptx"]] = ["md"]
+    # IDs returned by POST /upload for files attached to this request. Recorded
+    # in the workflow inputs/audit trail; node-level ingestion is a later phase.
+    upload_ids: list[str] = []
 
 
 class ApproveRequest(BaseModel):

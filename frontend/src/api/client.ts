@@ -118,6 +118,14 @@ export class ApiClient {
     });
   }
 
+  /**
+   * POST multipart form data (e.g. `POST /upload`). The browser sets the
+   * multipart Content-Type boundary, so no Content-Type header is forced.
+   */
+  postForm<T>(path: string, body: FormData, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, { ...init, method: 'POST', body });
+  }
+
   put<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
     return this.request<T>(path, {
       ...init,

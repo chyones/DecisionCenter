@@ -1,0 +1,34 @@
+# Template for the git-ignored docker-compose.override.yml used in the current
+# shared-host deployment. Copy to docker-compose.override.yml and adjust:
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# Why this override exists (see docs/operations/deployment_overrides.md):
+# - The shared host runs other stacks (VirtualTour360) that already own host
+#   ports 80/443 (vt360_caddy) and 9000/9001 (vt360_minio).
+# - External ingress is a Cloudflare Tunnel instead of published host ports;
+#   TLS terminates at the Cloudflare edge.
+services:
+  minio:
+    # vt360_minio already owns localhost ports 9000 and 9001.
+    ports: !reset
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
+  caddy:
+    # No host ports; ingress is tunnel-only.
+    ports: !reset []
+
+  # DecisionCenter-scoped Cloudflare Tunnel.
+  # Routes the Cloudflare edge hostname (e.g. vantage.elrace.com) -> http://caddy:80
+  # over the compose network. NO host ports are published; this service never
+  # binds host 80/443 and does not affect other apps on the host.
+  # Requires CLOUDFLARED_TUNNEL_TOKEN in .env (git-ignored) or the shell env.
+  # `latest` is convenient; pin to a specific cloudflared release for production.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARED_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      - caddy
