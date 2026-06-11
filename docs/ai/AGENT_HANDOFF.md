@@ -18,6 +18,30 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-11 Entra Revalidation Non-Root Runtime Fix
+
+The post-`b7a4140` app rebuild exposed a runtime-only Entra revalidation
+regression. Browser requests carried a valid admin bearer token: `/me` returned
+HTTP 200 and `POST /admin/connectors/entra/revalidate-current-token` passed the
+JWT and admin checks, then returned HTTP 500 while writing the redacted evidence
+marker. The rebuilt app runs as uid 10001, while the marker file copied into the
+image remained root-owned and read-only to `appuser`.
+
+`Dockerfile` now grants `appuser` ownership of only
+`docs/evidence/uat/ENTRA_CONNECTOR_TRUTH_REVALIDATION_2026-06-08.md`. The app
+image was rebuilt and recreated; the marker is writable by uid 10001 and
+`/healthz` is green. The frontend was rebuilt from current `b7a4140` source and
+the public edge serves the refreshed artifact. The embedded production scope
+has the required `api://<backend-api-client-id>/access_as_user` shape and its
+audience and tenant match backend configuration.
+
+Validation: connector truth tests 49 passed; Ruff, compileall, doc drift, and AI
+context checks passed. The operator's post-fix browser revalidation returned
+HTTP 200, wrote a fresh redacted PASS marker, and moved runtime Entra connector
+truth to `VALIDATED` with evidence as its data source. No post-fix HTTP 500 or
+permission error remains. Production remains `NOT_LIVE`; no go-live work was
+performed.
+
 ## 2026-06-11 Audit Remediation (read-write session)
 
 Targeted fixes from the 2026-06-10 full read-only audit

@@ -18,9 +18,11 @@ COPY .github ./.github
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# Run as non-root. The app persists artifacts to MinIO/Postgres only; the
-# legacy /staging, /final, /logs bind mounts are not written by the app.
-RUN useradd --create-home --uid 10001 appuser
+# Run as non-root. Entra revalidation updates one redacted runtime evidence
+# marker; keep that file writable without granting write access to the source tree.
+RUN useradd --create-home --uid 10001 appuser \
+    && chown appuser:appuser \
+        /app/docs/evidence/uat/ENTRA_CONNECTOR_TRUTH_REVALIDATION_2026-06-08.md
 USER appuser
 
 EXPOSE 8000
