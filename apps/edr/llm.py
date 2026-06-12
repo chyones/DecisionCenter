@@ -46,8 +46,13 @@ _TIER_CAPS: dict[str, dict[str, int]] = {
 }
 
 # Locked DeepSeek model IDs (same locking convention as the Anthropic tiers).
-_DEEPSEEK_LIGHT_MODEL = "deepseek-chat"
-_DEEPSEEK_HEAVY_MODEL = "deepseek-chat"
+# The DeepSeek API accepts only deepseek-v4-flash and deepseek-v4-pro
+# (HTTP 400 observed live 2026-06-12 for any other name, including the
+# retired deepseek-chat). Flash serves the light/default tier; pro serves
+# the heavy (report) tier.
+_DEEPSEEK_LIGHT_MODEL = "deepseek-v4-flash"
+_DEEPSEEK_HEAVY_MODEL = "deepseek-v4-pro"
+_DEEPSEEK_DEFAULT_MODEL = _DEEPSEEK_LIGHT_MODEL
 
 _DEEPSEEK_TIER_MODELS: dict[str, str] = {
     "light": _DEEPSEEK_LIGHT_MODEL,
@@ -65,8 +70,8 @@ _DEEPSEEK_TIER_CAPS: dict[str, dict[str, int]] = {
 _COST_RATES: dict[str, dict[str, float]] = {
     _LIGHT_MODEL: {"input": 0.25, "output": 1.25},
     _HEAVY_MODEL: {"input": 3.00, "output": 15.00},
-    "deepseek-chat": {"input": 0.27, "output": 1.10},
-    "deepseek-reasoner": {"input": 0.55, "output": 2.19},
+    _DEEPSEEK_LIGHT_MODEL: {"input": 0.27, "output": 1.10},
+    _DEEPSEEK_HEAVY_MODEL: {"input": 0.55, "output": 2.19},
 }
 
 _DEEPSEEK_TIMEOUT_SECONDS = 120.0
@@ -130,7 +135,10 @@ def active_provider() -> str:
 
 def _resolve_model_and_caps(provider: str, tier: str) -> tuple[str, dict[str, int]]:
     if provider == "deepseek":
-        model = _DEEPSEEK_TIER_MODELS.get(tier, tier)
+        # Never forward an unknown tier string as the API model name — the
+        # DeepSeek API rejects it with HTTP 400 (observed live with
+        # tier="standard"). Unknown tiers resolve to the default model.
+        model = _DEEPSEEK_TIER_MODELS.get(tier, _DEEPSEEK_DEFAULT_MODEL)
         return model, _DEEPSEEK_TIER_CAPS.get(tier, _DEEPSEEK_TIER_CAPS["heavy"])
     return _TIER_MODELS.get(tier, tier), _TIER_CAPS.get(tier, _TIER_CAPS["heavy"])
 

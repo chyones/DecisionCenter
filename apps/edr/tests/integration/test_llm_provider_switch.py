@@ -89,7 +89,7 @@ async def test_deepseek_with_key_calls_http_api_not_fallback(
         return httpx.Response(
             200,
             json={
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
                 "choices": [
                     {"message": {"role": "assistant", "content": '{"intents": ["delay"]}'}}
                 ],
@@ -224,7 +224,7 @@ def _fenced_response_handler(seen: dict):
         return httpx.Response(
             200,
             json={
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
                 "choices": [
                     {
                         "message": {
@@ -299,3 +299,67 @@ async def test_expect_json_false_leaves_fences_untouched(
     )
 
     assert result.content == '```json\n{"intents": ["delay"]}\n```'
+
+
+# ---------------------------------------------------------------------------
+# DeepSeek model-name resolution (live HTTP 400: tier string sent as model)
+# ---------------------------------------------------------------------------
+
+
+def test_deepseek_tiers_resolve_to_valid_api_models() -> None:
+    assert llm._resolve_model_and_caps("deepseek", "light")[0] == "deepseek-v4-flash"
+    assert llm._resolve_model_and_caps("deepseek", "heavy")[0] == "deepseek-v4-pro"
+
+
+def test_deepseek_unknown_tier_never_forwarded_as_model_name() -> None:
+    # A deployed call with tier="standard" was rejected by the live API with
+    # HTTP 400 because the tier string itself was sent as the model name.
+    for tier in ("standard", "advanced", "report", "", "not-a-tier"):
+        model, caps = llm._resolve_model_and_caps("deepseek", tier)
+        assert model == "deepseek-v4-flash", tier
+        assert model != tier
+        assert caps == llm._DEEPSEEK_TIER_CAPS["heavy"]
+
+
+@pytest.mark.asyncio
+async def test_deepseek_standard_tier_sends_default_model_over_http(
+    deepseek_active: pytest.MonkeyPatch,
+) -> None:
+    llm.reset_daily_cost()
+    deepseek_active.setattr(settings, "deepseek_api_key", "test-key-not-real", raising=False)
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "model": "deepseek-v4-flash",
+                "choices": [
+                    {"message": {"role": "assistant", "content": '{"ok": true}'}}
+                ],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 3},
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def client_with_mock_transport(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_async_client(*args, **kwargs)
+
+    deepseek_active.setattr(llm.httpx, "AsyncClient", client_with_mock_transport)
+
+    result = await llm.call_llm(
+        prompt="Query: status",
+        tier="standard",
+        request_id="r-ds-standard",
+        node_name="uat_standard_tier",
+        expect_json=True,
+    )
+
+    assert seen["payload"]["model"] == "deepseek-v4-flash"
+    assert result.model == "deepseek-v4-flash"
+    assert result.input_tokens == 11
+    assert result.output_tokens == 3

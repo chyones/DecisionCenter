@@ -66,7 +66,7 @@ class _MockDeepSeek(BaseHTTPRequestHandler):
             "quality_gate_status": "not_run",
         }
         response = json.dumps({
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-pro",
             "choices": [{"message": {"role": "assistant", "content": json.dumps(report)}}],
             "usage": {"prompt_tokens": 321, "completion_tokens": 123},
         }).encode("utf-8")
@@ -117,7 +117,7 @@ def main() -> int:
     req = _requests_seen[0] if _requests_seen else {}
     checks["endpoint_is_chat_completions"] = req.get("path") == "/chat/completions"
     checks["authorization_header_present"] = req.get("authorization_header_present") is True
-    checks["deepseek_model_requested"] = req.get("model") == "deepseek-chat"
+    checks["deepseek_model_requested"] = req.get("model") == "deepseek-v4-pro"
     checks["report_content_from_deepseek_not_fallback"] = MARKER in json.dumps(report)
     checks["fallback_shell_absent"] = "fallback mode" not in json.dumps(report).lower()
     checks["usage_tokens_recorded"] = result_state.outputs.get("node_12_cost_usd", 0) > 0
