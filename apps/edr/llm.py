@@ -1,6 +1,10 @@
 """LLM client with cost guardrails, prompt-injection protection, and Langfuse tracing.
 
 Spec: Sections 20.1 (LLM tiers), 22 (cost model), 24.1 (prompt injection).
+
+Provider selection (LLM_PROVIDER): "anthropic" (default) or "deepseek".
+Anthropic support is kept intact; the switch only changes which provider
+serves generation at runtime.
 """
 
 from __future__ import annotations
@@ -9,6 +13,9 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+import httpx
+
 from apps.edr.config import settings
 
 try:
@@ -38,11 +45,31 @@ _TIER_CAPS: dict[str, dict[str, int]] = {
     "heavy": {"input": 60_000, "output": 4_000},
 }
 
+# Locked DeepSeek model IDs (same locking convention as the Anthropic tiers).
+_DEEPSEEK_LIGHT_MODEL = "deepseek-chat"
+_DEEPSEEK_HEAVY_MODEL = "deepseek-chat"
+
+_DEEPSEEK_TIER_MODELS: dict[str, str] = {
+    "light": _DEEPSEEK_LIGHT_MODEL,
+    "heavy": _DEEPSEEK_HEAVY_MODEL,
+}
+
+# DeepSeek caps: deepseek-chat exposes a 64K context window and 8K max output,
+# so both tiers are clamped below the Anthropic figures.
+_DEEPSEEK_TIER_CAPS: dict[str, dict[str, int]] = {
+    "light": {"input": 56_000, "output": 8_000},
+    "heavy": {"input": 56_000, "output": 4_000},
+}
+
 # Cost rates (USD per million tokens) — conservative estimates aligned with spec.
 _COST_RATES: dict[str, dict[str, float]] = {
     _LIGHT_MODEL: {"input": 0.25, "output": 1.25},
     _HEAVY_MODEL: {"input": 3.00, "output": 15.00},
+    "deepseek-chat": {"input": 0.27, "output": 1.10},
+    "deepseek-reasoner": {"input": 0.55, "output": 2.19},
 }
+
+_DEEPSEEK_TIMEOUT_SECONDS = 120.0
 
 # Prompt-injection patterns from spec Section 24.1
 _INJECTION_PATTERNS: list[str] = [
@@ -87,6 +114,34 @@ class LLMResult:
 
 
 # ---------------------------------------------------------------------------
+# Provider selection
+# ---------------------------------------------------------------------------
+def active_provider() -> str:
+    """Resolve the generation provider from settings ("anthropic" | "deepseek").
+
+    Unknown values fall back to "anthropic" so a typo in LLM_PROVIDER cannot
+    silently disable guardrails or route to an unintended endpoint.
+    """
+    provider = (settings.llm_provider or "anthropic").strip().lower()
+    if provider not in ("anthropic", "deepseek"):
+        return "anthropic"
+    return provider
+
+
+def _resolve_model_and_caps(provider: str, tier: str) -> tuple[str, dict[str, int]]:
+    if provider == "deepseek":
+        model = _DEEPSEEK_TIER_MODELS.get(tier, tier)
+        return model, _DEEPSEEK_TIER_CAPS.get(tier, _DEEPSEEK_TIER_CAPS["heavy"])
+    return _TIER_MODELS.get(tier, tier), _TIER_CAPS.get(tier, _TIER_CAPS["heavy"])
+
+
+def _provider_key_available(provider: str) -> bool:
+    if provider == "deepseek":
+        return bool(settings.deepseek_api_key)
+    return bool(settings.anthropic_api_key) and anthropic is not None
+
+
+# ---------------------------------------------------------------------------
 # Prompt-injection sanitizer
 # ---------------------------------------------------------------------------
 def sanitize_evidence(text: str) -> tuple[str, bool]:
@@ -109,6 +164,22 @@ def sanitize_evidence(text: str) -> tuple[str, bool]:
 def sanitize_prompt(text: str) -> tuple[str, bool]:
     """Alias for sanitize_evidence; operates on the same rule set."""
     return sanitize_evidence(text)
+
+
+# ---------------------------------------------------------------------------
+# JSON fence stripping
+# ---------------------------------------------------------------------------
+# Some providers (DeepSeek in particular) wrap JSON answers in markdown code
+# fences even when the prompt asks for raw JSON, which breaks json.loads in
+# the graph nodes and silently routes reports to the deterministic
+# evidence-builder. Strip a single outer fence; unfenced content is untouched.
+_CODE_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def strip_code_fences(text: str) -> str:
+    """Remove one outer markdown code fence (```json ... ```), if present."""
+    match = _CODE_FENCE_RE.match(text or "")
+    return match.group(1) if match else text
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +315,56 @@ def _langfuse_trace(
 
 
 # ---------------------------------------------------------------------------
+# Provider transports
+# ---------------------------------------------------------------------------
+async def _call_anthropic(
+    model: str, prompt: str, max_tokens: int
+) -> tuple[str, int, int]:
+    """Anthropic Messages API. Returns (content, input_tokens, output_tokens)."""
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    response = await client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    input_tokens = response.usage.input_tokens if response.usage else 0
+    output_tokens = response.usage.output_tokens if response.usage else 0
+    content = response.content[0].text if response.content else ""
+    return content, input_tokens, output_tokens
+
+
+async def _call_deepseek(
+    model: str, prompt: str, max_tokens: int
+) -> tuple[str, int, int]:
+    """DeepSeek chat-completions API (OpenAI-compatible).
+
+    Returns (content, input_tokens, output_tokens).
+    """
+    async with httpx.AsyncClient(
+        base_url=settings.deepseek_base_url,
+        timeout=_DEEPSEEK_TIMEOUT_SECONDS,
+    ) as client:
+        response = await client.post(
+            "/chat/completions",
+            headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    choices = data.get("choices") or []
+    message = (choices[0].get("message") or {}) if choices else {}
+    content = message.get("content") or ""
+    usage = data.get("usage") or {}
+    return content, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+
+
+# ---------------------------------------------------------------------------
 # Main LLM call
 # ---------------------------------------------------------------------------
 async def call_llm(
@@ -254,13 +375,15 @@ async def call_llm(
     expect_json: bool = False,
     max_tokens: int | None = None,
 ) -> LLMResult:
-    """Call Anthropic with all Phase-1E guardrails.
+    """Call the active generation provider with all Phase-1E guardrails.
 
-    Falls back to deterministic heuristics when ``ANTHROPIC_API_KEY`` is not
+    The provider is selected at runtime via ``LLM_PROVIDER`` ("anthropic" by
+    default, "deepseek" to route generation to DeepSeek). Falls back to
+    deterministic heuristics when the active provider's API key is not
     configured (local dev / CI).
     """
-    model = _TIER_MODELS.get(tier, tier)
-    caps = _TIER_CAPS.get(tier, _TIER_CAPS["heavy"])
+    provider = active_provider()
+    model, caps = _resolve_model_and_caps(provider, tier)
 
     # 1. Prompt-injection protection on the prompt itself
     sanitized_prompt, flagged = sanitize_prompt(prompt)
@@ -277,8 +400,8 @@ async def call_llm(
             f"Input token cap exceeded for {tier}: {est_input_tokens} > {caps['input']}"
         )
 
-    # 4. Fallback mode when API key is missing
-    if not settings.anthropic_api_key or anthropic is None:
+    # 4. Fallback mode when the active provider's API key is missing
+    if not _provider_key_available(provider):
         return _fallback_result(
             sanitized_prompt=sanitized_prompt,
             tier=tier,
@@ -288,26 +411,27 @@ async def call_llm(
             request_id=request_id,
         )
 
-    # 5. Real Anthropic call
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    # 5. Real provider call
     start = datetime.now(timezone.utc)
 
-    response = await client.messages.create(
-        model=model,
-        max_tokens=max_tokens or caps["output"],
-        messages=[{"role": "user", "content": sanitized_prompt}],
-    )
+    if provider == "deepseek":
+        content, input_tokens, output_tokens = await _call_deepseek(
+            model, sanitized_prompt, max_tokens or caps["output"]
+        )
+    else:
+        content, input_tokens, output_tokens = await _call_anthropic(
+            model, sanitized_prompt, max_tokens or caps["output"]
+        )
+
+    if expect_json:
+        content = strip_code_fences(content)
 
     latency_ms = (datetime.now(timezone.utc) - start).total_seconds() * 1000
-    input_tokens = response.usage.input_tokens if response.usage else 0
-    output_tokens = response.usage.output_tokens if response.usage else 0
     cost = _estimate_cost(model, input_tokens, output_tokens)
 
     # Record actual cost and tokens
     _cost_tracker.record_cost(cost, model=model)
     _cost_tracker.record_tokens(request_id, input_tokens, output_tokens)
-
-    content = response.content[0].text if response.content else ""
 
     # 6. Langfuse tracing
     _langfuse_trace(

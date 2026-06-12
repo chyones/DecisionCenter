@@ -31,6 +31,9 @@ Design notes
 - A connector with ``disabled=True`` is intentionally turned off. It is
   classified as ``DISABLED`` regardless of credential presence, never appears
   in the go-live blocking list, and never shows as ``error`` on the health page.
+- Generation LLM providers (Anthropic, DeepSeek) follow the ``LLM_PROVIDER``
+  runtime switch: the inactive provider is classified ``DISABLED`` (kept, not
+  removed) and only the active one is required for go-live.
 
 Entra token expiry policy
 -------------------------
@@ -105,6 +108,7 @@ _EXTRA_ENV_KEY_TO_SETTING: dict[str, str] = {
     "ENTRA_TENANT_ID": "entra_tenant_id",
     "ENTRA_CLIENT_SECRET": "entra_client_secret",
     "ANTHROPIC_API_KEY": "anthropic_api_key",
+    "DEEPSEEK_API_KEY": "deepseek_api_key",
     "VOYAGE_API_KEY": "voyage_api_key",
     "COHERE_API_KEY": "cohere_api_key",
     "PUBLIC_HOSTNAME": "public_hostname",
@@ -127,6 +131,30 @@ _ENTRA_VALIDATION_MARKER_PREFIX = "<!-- connector_truth_entra_validation:"
 _ENTRA_VALIDATION_MARKER_SUFFIX = "-->"
 _VERIFIED_PROJECT_MEMBER_COUNTS = {"PRJ-001": 17, "PRJ-002": 18}
 _VERIFIED_GROUP_STATUS = "GROUP_MEMBERS_READ"
+
+#: Generation LLM providers governed by the LLM_PROVIDER runtime switch.
+#: Embeddings (Voyage) and rerank (Cohere) are NOT part of this switch.
+_GENERATION_PROVIDER_NAMES = ("anthropic", "deepseek")
+
+
+def _active_llm_provider() -> str:
+    """Resolve the active generation provider from settings.
+
+    Unknown/empty values fall back to "anthropic" (mirrors apps.edr.llm).
+    """
+    provider = (getattr(settings, "llm_provider", None) or "anthropic").strip().lower()
+    if provider not in _GENERATION_PROVIDER_NAMES:
+        return "anthropic"
+    return provider
+
+
+def _inactive_generation_provider(spec: ConnectorSpec) -> bool:
+    """True when ``spec`` is a generation provider turned off by LLM_PROVIDER."""
+    return (
+        spec.group == "ai_provider"
+        and spec.name in _GENERATION_PROVIDER_NAMES
+        and spec.name != _active_llm_provider()
+    )
 
 
 def _is_present(env_key: str) -> bool:
@@ -931,9 +959,16 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
                    "N8N_BASE_URL"),
                   ("ODOO_API_KEY", "N8N_WEBHOOK_TOKEN"), True, probe="_probe_odoo"),
     # --- AI providers (no billable probe here) ---
+    # Anthropic and DeepSeek are alternative generation providers selected by
+    # the LLM_PROVIDER runtime switch; the inactive one classifies as DISABLED.
     ConnectorSpec("anthropic", "Anthropic (report generation)", "ai_provider",
                   (), ("ANTHROPIC_API_KEY",), True,
-                  note="Generation LLM. No billable probe; key-presence only."),
+                  note="Generation LLM. No billable probe; key-presence only. "
+                       "Active only when LLM_PROVIDER=anthropic."),
+    ConnectorSpec("deepseek", "DeepSeek (report generation)", "ai_provider",
+                  (), ("DEEPSEEK_API_KEY",), True,
+                  note="Generation LLM. No billable probe; key-presence only. "
+                       "Active only when LLM_PROVIDER=deepseek."),
     ConnectorSpec("voyage", "Voyage (embeddings)", "ai_provider",
                   (), ("VOYAGE_API_KEY",), True,
                   note="Embeddings. No billable probe; key-presence only."),
@@ -1012,7 +1047,19 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
     """Classify one connector into a truth state. Never raises."""
     # Disabled connectors are intentionally turned off: return DISABLED immediately
     # without checking credentials or running probes. They never block go-live.
-    if spec.disabled:
+    # A generation provider that is not the active LLM_PROVIDER is treated the
+    # same way — kept in the registry but disabled at runtime.
+    runtime_disabled = _inactive_generation_provider(spec)
+    if spec.disabled or runtime_disabled:
+        if runtime_disabled:
+            # No "=" and no 20+-char token runs: _sanitize_detail would
+            # otherwise redact the wording as a credential-shaped string.
+            disabled_evidence = (
+                "inactive generation provider; the LLM_PROVIDER runtime "
+                f"switch selects {_active_llm_provider()}"
+            )
+        else:
+            disabled_evidence = spec.note or "intentionally disabled"
         return ConnectorTruth(
             name=spec.name,
             display_name=spec.display_name,
@@ -1032,9 +1079,7 @@ def classify(spec: ConnectorSpec, *, run_probe: bool = True) -> ConnectorTruth:
             token_expires_at=None,
             last_error_safe=None,
             sample_count=None,
-            evidence=services_catalog._sanitize_detail(
-                spec.note or "intentionally disabled"
-            ),
+            evidence=services_catalog._sanitize_detail(disabled_evidence),
             required_for_go_live=spec.required_for_go_live,
             blocks_go_live=False,
         )
@@ -1195,10 +1240,20 @@ def _report_generation_status(
     ai: list[ConnectorTruth],
 ) -> tuple[Literal["READY", "DEGRADED", "BLOCKED"], str]:
     by_name = {t.name: t for t in ai}
-    anthropic = by_name.get("anthropic")
-    if anthropic is None or not anthropic.configured:
-        return "BLOCKED", "provider keys missing — ANTHROPIC_API_KEY not set"
-    missing = [t.display_name for t in ai if not t.configured]
+    active = _active_llm_provider()
+    generation = by_name.get(active)
+    if generation is None or not generation.configured:
+        return "BLOCKED", (
+            f"provider keys missing — {active.upper()}_API_KEY not set "
+            f"(LLM_PROVIDER={active})"
+        )
+    # Runtime-disabled generation providers are dormant by design and must not
+    # count as missing; embeddings/rerank providers still do.
+    missing = [
+        t.display_name
+        for t in ai
+        if not t.configured and t.state is not ConnectorState.DISABLED
+    ]
     if missing:
         return "DEGRADED", "secondary providers missing: " + ", ".join(missing)
     return "READY", "provider keys present (not yet live-verified)"

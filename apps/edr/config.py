@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     entra_client_secret: str | None = None
 
     # LLM providers
+    # Generation-provider runtime switch: "anthropic" | "deepseek".  The
+    # inactive provider stays installed and configured-but-dormant; only the
+    # active one is used by apps.edr.llm.call_llm and required for go-live.
+    llm_provider: str = "anthropic"
     anthropic_api_key: str | None = None
+    deepseek_api_key: str | None = None
+    deepseek_base_url: str = "https://api.deepseek.com"
     voyage_api_key: str | None = None
     cohere_api_key: str | None = None
 

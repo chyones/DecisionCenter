@@ -53,10 +53,10 @@ jobs:
           config_keys = {field.upper() for field in type(settings).model_fields}
           missing = sorted(set(env_keys) - config_keys)
           extra = sorted(config_keys - set(env_keys))
-          assert len(env_keys) == 40, len(env_keys)
+          assert len(env_keys) == 43, len(env_keys)
           assert not missing, missing
           assert not extra, extra
-          print("config coverage: 40/40")
+          print("config coverage: 43/43")
           PY
 
       - name: Documentation drift check
