@@ -80,19 +80,33 @@ and are unaffected; validation harnesses must use ≥256.
 - LLM/provider/connector test subset + ruff: see commit-time record in the
   final session report.
 
-## Remaining blockers
+## Deployment closeout (operator rebuild on 4ef1e8a, later 2026-06-12)
 
-1. **Running app container predates both today's fixes** (JSON fence
-   stripping + this model-name fix). A rebuild was attempted in this session
-   and is **denied by host policy** (docker is operator-only). Operator must
-   run `docker compose up -d --build app`; until then, in-container
-   generation still fails against the live API.
-2. After the rebuild: rerun the `tier="standard"` call in-container and
-   observe an end-to-end report + Langfuse trace.
+Operator rebuilt the app container on commit `4ef1e8a`. Independent read-only
+verification from the host (no docker access needed):
 
-## Verdict
+- New app process started **Fri Jun 12 14:03:28 2026**; container filesystem
+  contains both fixes (`deepseek-v4-flash` and `strip_code_fences` present in
+  the deployed `apps/edr/llm.py`); `LLM_PROVIDER=deepseek` in the live process
+  environment; `/healthz` → HTTP 200. **App container healthy.**
 
-Routing defect fixed and proven against the live API: `tier="standard"` →
-`deepseek-v4-flash` → HTTP 200 with usage tokens, no fallback, fence
-stripping intact; heavy tier → `deepseek-v4-pro` accepted. In-container
-verification blocked solely on the operator rebuild. System remains NOT_LIVE.
+Operator-reported in-container `call_llm` with `tier="standard"`:
+
+| Check | Result |
+|---|---|
+| Model resolved | `deepseek-v4-flash` |
+| input_tokens | 32 |
+| output_tokens | 76 |
+| cost_usd | recorded |
+| Deterministic fallback used | **no** |
+| JSON parsed (fence stripping) | **yes** |
+
+Both prior blockers from this document are **cleared**: the running container
+no longer predates the fixes, and the in-container `tier="standard"` call
+succeeded through DeepSeek.
+
+## Final DeepSeek verdict
+
+**`DEEPSEEK_DEPLOYED_RUNTIME_ACTIVE_NOT_LIVE`** — DeepSeek is the active
+generation provider in the deployed runtime; system go-live status is
+unchanged (NOT_LIVE per `docs/GO_LIVE_PLAN.md`).
