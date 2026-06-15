@@ -6,7 +6,10 @@
       "name": "Receive Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [260, 200],
+      "position": [
+        260,
+        200
+      ],
       "parameters": {
         "httpMethod": "POST",
         "path": "email-search",
@@ -20,7 +23,10 @@
       "name": "Enforce Mailbox Allowlist",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [380, 200],
+      "position": [
+        380,
+        200
+      ],
       "parameters": {
         "jsCode": "const body = $input.first().json.body || {};\nconst mailbox = (body.user_mailbox || '').toLowerCase();\nconst allowed = (body.allowed_mailboxes || []).map(m => String(m).toLowerCase());\nif (!mailbox) {\n  throw new Error('user_mailbox is required');\n}\nif (allowed.length === 0 || !allowed.includes(mailbox)) {\n  throw new Error('mailbox_not_in_allowlist: ' + mailbox);\n}\nreturn [{ json: $input.first().json }];"
       }
@@ -30,7 +36,10 @@
       "name": "Graph Mail Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 200],
+      "position": [
+        500,
+        200
+      ],
       "parameters": {
         "method": "GET",
         "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent($json.body.user_mailbox || '') + '/messages?$search=' + encodeURIComponent('\"' + ($json.body.query || '') + '\"') + '&$top=25' }}",
@@ -56,7 +65,10 @@
       "name": "Normalize Evidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [740, 200],
+      "position": [
+        740,
+        200
+      ],
       "parameters": {
         "jsCode": "const body = $input.first().json;\nconst values = Array.isArray(body.value) ? body.value : [];\nconst projectCode = $json.body?.project_code || null;\nconst allowedMailboxes = $json.body?.allowed_mailboxes || [];\n\nconst evidence = values.map((msg, index) => {\n  const sender = msg.sender?.emailAddress?.address || '';\n  const recipients = (msg.toRecipients || []).map(r => r.emailAddress?.address).filter(Boolean);\n  const mailbox = $json.body?.user_mailbox || '';\n  \n  const excerpt = (msg.bodyPreview || msg.subject || '').toString().substring(0, 500);\n  let hash;\n  try {\n    const crypto = require('crypto');\n    hash = crypto.createHash('sha256').update(msg.id + (msg.internetMessageId || '')).digest('hex');\n  } catch (e) {\n    hash = 'eml-' + (msg.id || index) + '-' + (msg.receivedDateTime || 'unknown');\n  }\n  \n  return {\n    evidence_id: 'eml-' + (msg.id || index),\n    source_type: 'email',\n    source_uri: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(mailbox) + '/messages/' + (msg.id || ''),\n    title: msg.subject || 'No subject',\n    project_code: projectCode,\n    contract_no: $json.body?.contract_no || null,\n    revision: null,\n    timestamp: msg.receivedDateTime || null,\n    excerpt: excerpt,\n    hash_sha256: hash,\n    confidence: 'medium',\n    tags: ['email', 'timeline'],\n    metadata: {\n      sender: sender,\n      recipients: recipients,\n      mailbox: mailbox,\n      has_attachments: msg.hasAttachments || false,\n      message_id: msg.internetMessageId || null\n    }\n  };\n});\n\nreturn [{ json: { evidence: evidence } }];"
       }
@@ -66,7 +78,10 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.2,
-      "position": [980, 200],
+      "position": [
+        980,
+        200
+      ],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
@@ -125,5 +140,6 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "staticData": null
+  "staticData": null,
+  "id": "f80ee218-ef6e-40c5-a229-bfe2d4f66755"
 }
