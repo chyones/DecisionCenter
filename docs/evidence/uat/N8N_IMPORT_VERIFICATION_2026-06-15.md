@@ -107,19 +107,70 @@ fallback_used: False
 expected — the in-process runner uses the Docker internal hostname `n8n:5678` which only
 resolves inside the compose network. Generation is DeepSeek-served regardless.
 
-## 7. Pending operator actions
+## 7. Second import attempt — HTTP 500 root cause found (2026-06-15)
+
+### What happened
+
+After the operator ran the second import (with `id` fields added to JSON), `updatedAt` changed
+to `2026-06-15 07:16:04` confirming the import took effect. However, the SharePoint webhook
+immediately began returning HTTP 500:
+
+```
+{"code":0,"message":"Cannot read properties of undefined (reading 'node')"}
+```
+
+This is n8n's unhandled-exception format, thrown BEFORE any execution record is created
+(confirmed via `execution_entity` — no post-import executions, newest was execId=375 at 06:35:43
+which predates the import at 07:16).
+
+### Root cause
+
+**The repo JSON files lacked the `credentials` field on the `Receive Request` webhook node.**
+
+The working `odoo_read` workflow (`Receive Request` node in `workflow_entity`) has:
+```json
+"credentials": {
+    "httpHeaderAuth": {
+        "id": "90d9168a-bd77-461f-a4dc-d104210f2f07",
+        "name": "DecisionCenter Webhook Header Auth"
+    }
+}
+```
+
+The imported SharePoint and email workflows had NO `credentials` field. With
+`authentication: headerAuth` set but no credential reference, n8n throws an unhandled error
+at webhook dispatch time (before execution starts).
+
+**SQLite verification** (cross-check):
+- All three workflows (`odoo_read`, `sharepoint_search`, `email_search`) use template node
+  IDs (`dddddddd-...`, `aaaaaaaa-...`, `bbbbbbbb-...`) — confirmed NOT the cause.
+- The two `webhook_entity` rows with `pathLength=None` (added by the import) are NOT in
+  n8n's in-memory routing table (probing their paths returns HTTP 404) — confirmed NOT the cause.
+- The credential record `90d9168a-bd77-461f-a4dc-d104210f2f07` (type `httpHeaderAuth`,
+  name "DecisionCenter Webhook Header Auth") exists in `credentials_entity` — usable by import.
+
+### Fix applied (2026-06-15)
+
+Added `credentials.httpHeaderAuth` to `Receive Request` in both JSON files:
+- `n8n/sharepoint_search.json`
+- `n8n/email_search.json`
+
+No other changes. Graph Search node (`authentication: none`, OData quoting fix) unchanged.
+
+## 8. Pending operator actions
 
 | # | Action | Command |
 |---|---|---|
-| 1 | Re-import fixed SharePoint workflow | `docker compose exec n8n n8n import:workflow --input=/workflows/sharepoint_search.json --separate` |
-| 2 | Re-import fixed email workflow | `docker compose exec n8n n8n import:workflow --input=/workflows/email_search.json --separate` |
+| 1 | Re-import fixed SharePoint workflow (3rd attempt) | `docker compose exec n8n n8n import:workflow --input=/workflows/sharepoint_search.json --separate` |
+| 2 | Re-import fixed email workflow (3rd attempt) | `docker compose exec n8n n8n import:workflow --input=/workflows/email_search.json --separate` |
 | 3 | Verify SharePoint webhook | Probe `sharepoint-search` with valid Graph Bearer token in body; expect non-empty `{"evidence":[...]}` |
-| 4 | Interactive Entra user token smoke | `python scripts/validate_entra_auth.py --base-url https://vantage.elrace.com --token <user-token>` |
-| 5 | Clean end-to-end deployed report | POST to real API, SharePoint+Odoo evidence, capture UAT_RUN_<date>.md |
-| 6 | Explicit go-live approval | Sign `SLICE7_GO_LIVE_READINESS_2026-06-15.md` approval block |
+| 4 | If still 500 after import: restart n8n | `docker compose restart n8n` (clears in-memory state, reloads from DB) |
+| 5 | Interactive Entra user token smoke | `python scripts/validate_entra_auth.py --base-url https://vantage.elrace.com --token <user-token>` |
+| 6 | Clean end-to-end deployed report | POST to real API, SharePoint+Odoo evidence, capture UAT_RUN_<date>.md |
+| 7 | Explicit go-live approval | Sign `SLICE7_GO_LIVE_READINESS_2026-06-15.md` approval block |
 
 ## Verdict
 
-`N8N_IMPORT_RETRY_REQUIRED_NOT_LIVE` — JSON IDs added to repo; re-import required before
-SharePoint evidence can be verified live. DeepSeek, Odoo connectivity, n8n health, and auth
-enforcement all confirmed. System remains **NOT_LIVE**.
+`N8N_CREDENTIAL_FIX_IMPORT_REQUIRED_NOT_LIVE` — credential reference restored in repo JSON;
+third import required. After import (or import + restart), SharePoint webhook should return
+HTTP 200 `{"evidence":[...]}`. System remains **NOT_LIVE**.

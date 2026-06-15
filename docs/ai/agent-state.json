@@ -1,43 +1,43 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "80ba1fe2830dcd34b89d86f67009ce4a332ee681",
+  "current_commit": "9dbc168c6a732807d3e477cd53eccebc1f0edb0b",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
-  "active_phase": "Phase 2D \u2014 Slice 7 approval-gated",
+  "active_phase": "Phase 2D — Slice 7 approval-gated",
   "phase_2c_closeout_date": "2026-05-24",
   "completed_phase_2a_slices": [
-    "Slice 1 \u2014 API client foundation and auth wiring",
-    "Slice 2 \u2014 Query Composer submit",
-    "Slice 3 \u2014 Reports List read-only listing",
-    "Slice 4 \u2014 Processing View status shell",
-    "Slice 5 \u2014 Report View and Evidence Panel",
-    "Slice 6 \u2014 Export Panel",
-    "Slice 7 \u2014 Upload Zone",
-    "Slice 8 \u2014 Routing integration and role guards",
-    "Slice 9 \u2014 Error handling and polish",
-    "Backend additions \u2014 read/status/cancel/upload endpoints (closes gap G12)",
+    "Slice 1 — API client foundation and auth wiring",
+    "Slice 2 — Query Composer submit",
+    "Slice 3 — Reports List read-only listing",
+    "Slice 4 — Processing View status shell",
+    "Slice 5 — Report View and Evidence Panel",
+    "Slice 6 — Export Panel",
+    "Slice 7 — Upload Zone",
+    "Slice 8 — Routing integration and role guards",
+    "Slice 9 — Error handling and polish",
+    "Backend additions — read/status/cancel/upload endpoints (closes gap G12)",
     "E2E unblock harness",
     "Manual QA blocker fixes and closeout"
   ],
   "phase_2a_validation_gate_status": "COMPLETE_U01_U16_PASSED",
   "completed_phase_2b_slices": [
-    "Slice 1 \u2014 Plan ratification and admin RBAC base",
-    "Slice 2 \u2014 Connectors & APIs (read + probe)",
-    "Slice 3 \u2014 System Health + cost monitor",
-    "Slice 4 \u2014 Audit Log screen",
-    "Slice 5 \u2014 Permissions & Roles (Entra Group Mapping)",
-    "Slice 6 \u2014 Project Source Mapping",
-    "Slice 7 \u2014 Approval Queue + admin override",
-    "Slice 8 \u2014 Dashboard",
-    "Slice 9 \u2014 Routing + Admin Nav",
-    "Slice 10 \u2014 Closeout + truth reconciliation"
+    "Slice 1 — Plan ratification and admin RBAC base",
+    "Slice 2 — Connectors & APIs (read + probe)",
+    "Slice 3 — System Health + cost monitor",
+    "Slice 4 — Audit Log screen",
+    "Slice 5 — Permissions & Roles (Entra Group Mapping)",
+    "Slice 6 — Project Source Mapping",
+    "Slice 7 — Approval Queue + admin override",
+    "Slice 8 — Dashboard",
+    "Slice 9 — Routing + Admin Nav",
+    "Slice 10 — Closeout + truth reconciliation"
   ],
   "completed_phase_2c_slices": [
-    "Slice 1 \u2014 Browser test harness and first hardening checks",
-    "Slice 2 \u2014 Performance and bundle-budget validation",
-    "Slice 3 \u2014 Golden-path acceptance automation",
-    "Slice 4 \u2014 Cross-browser expansion (Chromium, Firefox, WebKit) and closeout"
+    "Slice 1 — Browser test harness and first hardening checks",
+    "Slice 2 — Performance and bundle-budget validation",
+    "Slice 3 — Golden-path acceptance automation",
+    "Slice 4 — Cross-browser expansion (Chromium, Firefox, WebKit) and closeout"
   ],
   "phase_2c_test_evidence": {
     "total_playwright_tests": 54,
@@ -55,7 +55,7 @@
     "ci_slice4_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
     "ci_slice4_failure_cause": "documentation drift only (docs/ai/agent-state.json current_commit 4 commits behind HEAD); frontend CI job was green"
   },
-  "next_allowed_phase": "Run real live UAT on the target environment and capture redacted evidence (docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md) before Phase 2D Slice 7 \u2014 Go-Live Gate; Slice 7 remains blocked pending explicit user approval and does not start automatically.",
+  "next_allowed_phase": "Run real live UAT on the target environment and capture redacted evidence (docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md) before Phase 2D Slice 7 — Go-Live Gate; Slice 7 remains blocked pending explicit user approval and does not start automatically.",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
   "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
@@ -101,7 +101,7 @@
       "default Postgres/MinIO passwords",
       "real UAT flow not proven",
       "go-live approval not completed",
-      "n8n SharePoint/email fix in repo \u2014 operator import required (docker compose exec n8n n8n import:workflow)"
+      "n8n SharePoint/email fix in repo — operator import required (docker compose exec n8n n8n import:workflow)"
     ]
   },
   "latest_verified_ci": {
@@ -113,15 +113,15 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-12",
-    "context": "n8n Graph credential fix applied to repo JSON (sharepoint_search + email_search authentication:none, OData quote fix); live import pending one operator docker compose exec command. Email evidence descoped for go-live (group-mailbox design open). Full 18-node graph: 5/5 DeepSeek HTTP 200, tokens 1238/2367, cost USD 0.0046, no fallback. UAT_RUN_2026-06-12.md + GO_LIVE_BLOCKER_RESOLUTION + SLICE7_GO_LIVE_READINESS created. 112 tests pass, 1 skipped.",
-    "starting_head": "80ba1fe2830dcd34b89d86f67009ce4a332ee681",
+    "date": "2026-06-15",
+    "context": "n8n HTTP 500 root cause found: Receive Request webhook node missing credentials.httpHeaderAuth reference after import. Fix applied: credentials field added to Receive Request in sharepoint_search.json and email_search.json (credential id 90d9168a, name DecisionCenter Webhook Header Auth). Graph Search node authentication:none + OData quoting fix unchanged. Third import required. ai_context clean, doc_drift clean.",
+    "starting_head": "9dbc168c6a732807d3e477cd53eccebc1f0edb0b",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "n/a \u2014 no code changed",
-    "integration_backend": "112 passed, 1 skipped",
-    "doc_drift": "clean after anchor refresh",
+    "targeted_backend": "n8n workflow JSON config only",
+    "integration_backend": "check_ai_context clean; test_doc_drift 3/3 passed",
+    "doc_drift": "clean",
     "ruff": "not run (no code changed)",
-    "verdict": "N8N_FIX_IN_REPO_IMPORT_PENDING_NOT_LIVE"
+    "verdict": "N8N_CREDENTIAL_FIX_IMPORT_REQUIRED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -160,14 +160,14 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "1. Operator: docker compose exec n8n n8n import:workflow --input=/workflows/sharepoint_search.json --separate && docker compose exec n8n n8n import:workflow --input=/workflows/email_search.json --separate (both updated in repo at n8n/). 2. Run one end-to-end report via real deployed API with interactive Entra user token (python scripts/validate_entra_auth.py --base-url https://vantage.elrace.com --token <user-token>). 3. Capture new UAT_RUN_<date>.md with SharePoint evidence flowing. 4. Provide explicit Phase 2D go-live sign-off (SLICE7_GO_LIVE_READINESS approval block). Email group-mailbox retrieval is descoped for go-live \u2014 document as post-go-live work. Production remains NOT_LIVE.",
+  "next_action": "1. Operator: docker compose exec n8n n8n import:workflow --input=/workflows/sharepoint_search.json --separate && docker compose exec n8n n8n import:workflow --input=/workflows/email_search.json --separate. 2. If SharePoint webhook still returns 500 after import: docker compose restart n8n (clears broken in-memory state). 3. Probe sharepoint-search webhook with valid Graph Bearer token — expect HTTP 200 {evidence:[...]}. 4. Run one end-to-end report via real deployed API with interactive Entra user token. 5. Capture new UAT_RUN_<date>.md with SharePoint evidence flowing. 6. Provide explicit Phase 2D go-live sign-off (SLICE7_GO_LIVE_READINESS approval block). Email group-mailbox retrieval is descoped for go-live. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,
     "evidence_file": "docs/evidence/uat/UAT_RUN_2026-06-12.md",
     "evidence_dir": "docs/evidence/uat/",
     "status": "LIVE_UAT_PARTIAL_NOT_LIVE",
-    "reason": "UAT_RUN_2026-06-12.md exists; SharePoint evidence pending n8n operator import; email descoped for go-live (group-mailbox design decision)",
+    "reason": "UAT_RUN_2026-06-12.md exists; SharePoint n8n webhook returning HTTP 500 due to missing credentials.httpHeaderAuth on Receive Request node — fix in repo, third import + possible n8n restart required; email descoped for go-live (group-mailbox design decision)",
     "required_operator_prerequisites": [
       "real Entra tenant configured (ENTRA_CLIENT_ID + ENTRA_TENANT_ID)",
       "report-capable user real Entra access token",

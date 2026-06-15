@@ -16,6 +16,12 @@
         "responseMode": "responseNode",
         "authentication": "headerAuth",
         "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "90d9168a-bd77-461f-a4dc-d104210f2f07",
+          "name": "DecisionCenter Webhook Header Auth"
+        }
       }
     },
     {
@@ -141,5 +147,7 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "id": "f80ee218-ef6e-40c5-a229-bfe2d4f66755"
+  "id": "f80ee218-ef6e-40c5-a229-bfe2d4f66755",
+  "active": true,
+  "tags": []
 }
