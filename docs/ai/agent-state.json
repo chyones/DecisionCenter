@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "daf279af1b0195d8382cac5e63c6ae5586425e61",
+  "current_commit": "8896aa096db6567a10a73335742b7a758abdf66b",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -114,15 +114,19 @@
   },
   "latest_local_validation": {
     "date": "2026-06-15",
-    "context": "Odoo report-evidence fix: node_08_odoo.py and node_11_self_correct.py queried a nonexistent field (project_external_id) and nonexistent columns (budget, actual_cost) -> 0 Odoo items in every report. Added build_project_query() helper in connectors/odoo.py: query by real 'id' column (numeric project_external_id) with project-name fallback; valid fields [name,date_start,date,user_id,partner_id]. Both graph nodes use the helper. Live-proven this session: [['id','=',14602]] returns 1 item, old [['project_external_id','=','14602']] returns 0. Updated C-2 tests + added helper fallback test. Operator runbook written (GO_LIVE_RUNBOOK_2026-06-15.md).",
-    "starting_head": "daf279af1b0195d8382cac5e63c6ae5586425e61",
+    "context": "n8n SharePoint/email webhook HTTP 500 repaired SERVER-SIDE (no UI, no import, no restart). Root cause: Receive Request node missing node-level webhookId -> getNodeWebhookPath produced <workflowId>/<nodename>/<path>, registering a malformed webhook_entity row (NULL/NULL) and making getNodeWebhooks().find() return undefined -> 'reading node' 500 before execution. Fix via scripts/repair_n8n_webhooks.py: set node.webhookId (dc-sharepoint-search/dc-email-search), ensure headerAuth+credential bound, delete malformed rows. No restart needed because executeWebhook loads workflow nodes fresh from DB per request (only webhook_entity lookup is cached, already correct). DB backed up before write.",
+    "starting_head": "8896aa096db6567a10a73335742b7a758abdf66b",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "node_08_odoo.py, node_11_self_correct.py, connectors/odoo.py + test_phase1d_fixes.py",
-    "integration_backend": "focused: 36 passed (test_phase1d_fixes + test_phase1d_security + test_connectors); full suite run separately",
+    "targeted_backend": "live n8n SQLite (workflow_entity.nodes + webhook_entity) via scripts/repair_n8n_webhooks.py; repo n8n/*.json webhookId added",
+    "verification": "SharePoint webhook HTTP 200 200 items; full PRJ-001 graph: sharepoint_status ok(89), odoo_status ok(1), DeepSeek 4/4 200 no fallback, quality_gate passed; malformed webhook rows remaining 0",
+    "db_backups": [
+      "database.sqlite.backup-20260615T093947Z",
+      "database.sqlite.backup-20260615T095114Z"
+    ],
     "doc_drift": "clean",
+    "ai_context": "clean",
     "ruff": "clean on changed files",
-    "live_reprobe_note": "Odoo upstream (erp.elrace.com) intermittently slow at end of session; n8n /healthz=200 but odoo-read timed out. Corrected domain proven returning 1 item earlier same day; transient, not a code defect.",
-    "verdict": "ODOO_EVIDENCE_FIX_IN_REPO_REBUILD_REQUIRED_NOT_LIVE"
+    "verdict": "N8N_SHAREPOINT_WEBHOOK_REPAIRED_LIVE_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -161,7 +165,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "See docs/evidence/uat/GO_LIVE_RUNBOOK_2026-06-15.md. 1. docker compose up -d --build app (bakes Odoo evidence fix). 2. python scripts/bind_n8n_webhook_auth.py && docker compose restart n8n (fix SharePoint/email webhook 500). 3. python scripts/validate_entra_auth.py --base-url https://vantage.elrace.com --token <user token>. 4. One clean PRJ-001 report via deployed API with SharePoint+Odoo evidence -> UAT_RUN_2026-06-15.md. 5. Sign SLICE7_GO_LIVE_READINESS approval block. Email group-mailbox + Odoo financial/cost descoped for go-live. Production remains NOT_LIVE.",
+  "next_action": "See GO_LIVE_RUNBOOK_2026-06-15.md. Remaining for go-live: (1) deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token (scripts/validate_entra_auth.py) + approve/publish/download; (2) sign SLICE7_GO_LIVE_READINESS approval block. SharePoint+Odoo evidence + DeepSeek (no fallback) all verified live this session. Email/mail + Odoo financial/cost descoped. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,

@@ -22,7 +22,8 @@
           "id": "90d9168a-bd77-461f-a4dc-d104210f2f07",
           "name": "DecisionCenter Webhook Header Auth"
         }
-      }
+      },
+      "webhookId": "dc-email-search"
     },
     {
       "id": "bbbbbbbb-0000-0000-0000-000000000005",
