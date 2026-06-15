@@ -34,8 +34,7 @@
       "parameters": {
         "method": "GET",
         "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent($json.body.user_mailbox || '') + '/messages?$search=' + encodeURIComponent('\"' + ($json.body.query || '') + '\"') + '&$top=25' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

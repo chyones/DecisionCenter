@@ -23,9 +23,8 @@
       "position": [500, 200],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://graph.microsoft.com/v1.0/sites/' + $json.body.site_id + '/drives/' + $json.body.drive_id + '/root/search(q=' + encodeURIComponent($json.body.query || '') + ')' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/sites/' + $json.body.site_id + '/drives/' + $json.body.drive_id + '/root/search(q=' + encodeURIComponent(\"'\" + ($json.body.query || '') + \"'\") + ')' }}",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
