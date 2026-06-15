@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "9dbc168c6a732807d3e477cd53eccebc1f0edb0b",
+  "current_commit": "daf279af1b0195d8382cac5e63c6ae5586425e61",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -114,14 +114,15 @@
   },
   "latest_local_validation": {
     "date": "2026-06-15",
-    "context": "n8n HTTP 500 root cause found: Receive Request webhook node missing credentials.httpHeaderAuth reference after import. Fix applied: credentials field added to Receive Request in sharepoint_search.json and email_search.json (credential id 90d9168a, name DecisionCenter Webhook Header Auth). Graph Search node authentication:none + OData quoting fix unchanged. Third import required. ai_context clean, doc_drift clean.",
-    "starting_head": "9dbc168c6a732807d3e477cd53eccebc1f0edb0b",
+    "context": "Odoo report-evidence fix: node_08_odoo.py and node_11_self_correct.py queried a nonexistent field (project_external_id) and nonexistent columns (budget, actual_cost) -> 0 Odoo items in every report. Added build_project_query() helper in connectors/odoo.py: query by real 'id' column (numeric project_external_id) with project-name fallback; valid fields [name,date_start,date,user_id,partner_id]. Both graph nodes use the helper. Live-proven this session: [['id','=',14602]] returns 1 item, old [['project_external_id','=','14602']] returns 0. Updated C-2 tests + added helper fallback test. Operator runbook written (GO_LIVE_RUNBOOK_2026-06-15.md).",
+    "starting_head": "daf279af1b0195d8382cac5e63c6ae5586425e61",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "n8n workflow JSON config only",
-    "integration_backend": "check_ai_context clean; test_doc_drift 3/3 passed",
+    "targeted_backend": "node_08_odoo.py, node_11_self_correct.py, connectors/odoo.py + test_phase1d_fixes.py",
+    "integration_backend": "focused: 36 passed (test_phase1d_fixes + test_phase1d_security + test_connectors); full suite run separately",
     "doc_drift": "clean",
-    "ruff": "not run (no code changed)",
-    "verdict": "N8N_CREDENTIAL_FIX_IMPORT_REQUIRED_NOT_LIVE"
+    "ruff": "clean on changed files",
+    "live_reprobe_note": "Odoo upstream (erp.elrace.com) intermittently slow at end of session; n8n /healthz=200 but odoo-read timed out. Corrected domain proven returning 1 item earlier same day; transient, not a code defect.",
+    "verdict": "ODOO_EVIDENCE_FIX_IN_REPO_REBUILD_REQUIRED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -160,7 +161,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "1. Operator: docker compose exec n8n n8n import:workflow --input=/workflows/sharepoint_search.json --separate && docker compose exec n8n n8n import:workflow --input=/workflows/email_search.json --separate. 2. If SharePoint webhook still returns 500 after import: docker compose restart n8n (clears broken in-memory state). 3. Probe sharepoint-search webhook with valid Graph Bearer token — expect HTTP 200 {evidence:[...]}. 4. Run one end-to-end report via real deployed API with interactive Entra user token. 5. Capture new UAT_RUN_<date>.md with SharePoint evidence flowing. 6. Provide explicit Phase 2D go-live sign-off (SLICE7_GO_LIVE_READINESS approval block). Email group-mailbox retrieval is descoped for go-live. Production remains NOT_LIVE.",
+  "next_action": "See docs/evidence/uat/GO_LIVE_RUNBOOK_2026-06-15.md. 1. docker compose up -d --build app (bakes Odoo evidence fix). 2. python scripts/bind_n8n_webhook_auth.py && docker compose restart n8n (fix SharePoint/email webhook 500). 3. python scripts/validate_entra_auth.py --base-url https://vantage.elrace.com --token <user token>. 4. One clean PRJ-001 report via deployed API with SharePoint+Odoo evidence -> UAT_RUN_2026-06-15.md. 5. Sign SLICE7_GO_LIVE_READINESS approval block. Email group-mailbox + Odoo financial/cost descoped for go-live. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,

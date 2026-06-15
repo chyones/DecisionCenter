@@ -2,7 +2,8 @@
 
 Cover the four critical correctness fixes (Session 1):
 - C-1 Qdrant collection naming agrees between init script and runtime.
-- C-2 Odoo domain JSON is built via json.dumps (no f-string interpolation).
+- C-2 Odoo domain JSON is built via json.dumps (no f-string interpolation) and
+      queries real project.project columns.
 - C-8 Node 14 only exports when quality_gate == "passed".
 - L-5 EvidenceObject.metadata accepts list values (e.g. email recipients).
 """
@@ -15,6 +16,7 @@ import re
 
 import pytest
 
+from apps.edr.connectors.odoo import build_project_query
 from apps.edr.graph import node_08_odoo, node_14_compose_md
 from apps.edr.graph.state import DecisionState
 from apps.edr.retrieval.qdrant_store import EvidenceStore
@@ -41,7 +43,7 @@ def test_init_script_rejects_non_alphanumeric_project_code() -> None:
 
 
 # ---------------------------------------------------------------------------
-# C-2 — Odoo domain JSON construction
+# C-2 — Odoo domain JSON construction (injection-safe + real columns)
 # ---------------------------------------------------------------------------
 
 
@@ -75,16 +77,20 @@ def test_odoo_node_builds_domain_via_json_dumps(monkeypatch: pytest.MonkeyPatch)
 
     asyncio.run(node_08_odoo.run(state))
 
+    # With no mapped numeric external id, the node falls back to an exact name
+    # match — json.dumps keeps the hostile value safely contained as a single
+    # leaf (no breakout into extra clauses).
     parsed = json.loads(captured["domain"])
-    assert parsed == [["project_external_id", "=", hostile]]
+    assert parsed == [["name", "=", hostile]]
     fields = json.loads(captured["fields"])
-    assert "name" in fields and "budget" in fields
+    assert "name" in fields
+    assert "budget" not in fields and "actual_cost" not in fields
 
 
 def test_odoo_node_uses_verified_mapped_odoo_project_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Internal PRJ codes must not replace a verified Odoo project id."""
+    """A verified numeric Odoo id must be queried via the real ``id`` column."""
     captured: dict = {}
 
     async def fake_read_odoo(payload: dict) -> list:
@@ -102,6 +108,7 @@ def test_odoo_node_uses_verified_mapped_odoo_project_id(
                 "odoo": {
                     "project_model": "project.project",
                     "project_external_id": "14602",
+                    "project_name": "Construction of Civil Defense building in Al Marfa",
                 }
             }
 
@@ -118,8 +125,22 @@ def test_odoo_node_uses_verified_mapped_odoo_project_id(
 
     asyncio.run(node_08_odoo.run(state))
 
+    # 14602 is the project.project record id, queried via the real ``id`` column
+    # (not the nonexistent ``project_external_id`` field).
     parsed = json.loads(captured["domain"])
-    assert parsed == [["project_external_id", "=", "14602"]]
+    assert parsed == [["id", "=", 14602]]
+    fields = json.loads(captured["fields"])
+    assert "budget" not in fields and "actual_cost" not in fields
+
+
+def test_build_project_query_falls_back_to_name_when_no_numeric_id() -> None:
+    """Non-numeric external id falls back to an exact project-name match."""
+    domain, fields = build_project_query(
+        {"project_external_id": "not-a-number", "project_name": "Al Marfa CD"},
+        "PRJ-001",
+    )
+    assert json.loads(domain) == [["name", "=", "Al Marfa CD"]]
+    assert json.loads(fields) == ["name", "date_start", "date", "user_id", "partner_id"]
 
 
 # ---------------------------------------------------------------------------

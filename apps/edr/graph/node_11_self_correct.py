@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from apps.edr.connectors.odoo import read_odoo
+from apps.edr.connectors.odoo import build_project_query, read_odoo
 from apps.edr.connectors.sharepoint import search_sharepoint
 from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm
@@ -74,11 +74,7 @@ async def _try_retrieval(state: DecisionState, plan: dict) -> int:
         try:
             mapping = ProjectMapping.load().get(state.project_code)
             odoo_config = mapping.get("odoo", {})
-            import json as _json
-
-            odoo_project_id = odoo_config.get("project_external_id") or state.project_code
-            domain = _json.dumps([["project_external_id", "=", odoo_project_id]])
-            fields = _json.dumps(["name", "budget", "actual_cost"])
+            domain, fields = build_project_query(odoo_config, state.project_code)
             payload = {
                 "project_code": state.project_code,
                 "model": odoo_config.get("project_model", "project.project"),

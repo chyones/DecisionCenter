@@ -1,9 +1,7 @@
 """Node 8 - Odoo Facts Retrieval. Spec: Sections 4.4 and 16."""
 
-import json
-
 from apps.edr.config import settings
-from apps.edr.connectors.odoo import read_odoo
+from apps.edr.connectors.odoo import build_project_query, read_odoo
 from apps.edr.graph.state import DecisionState
 from apps.edr.rbac.project_mapping import ProjectMapping
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
@@ -22,11 +20,10 @@ async def run(state: DecisionState) -> DecisionState:
     try:
         mapping = ProjectMapping.load().get(state.project_code)
         odoo_config = mapping.get("odoo", {})
-        # Build the Odoo search domain via json.dumps so mapped Odoo ids or
-        # fallback project_code values cannot break out of the JSON literal.
-        odoo_project_id = odoo_config.get("project_external_id") or state.project_code
-        domain = json.dumps([["project_external_id", "=", odoo_project_id]])
-        fields = json.dumps(["name", "budget", "actual_cost"])
+        # Query project.project by record id (the mapped project_external_id is
+        # the numeric Odoo id), with a name-based fallback. Built via json.dumps
+        # so mapped values cannot break out of the JSON literal.
+        domain, fields = build_project_query(odoo_config, state.project_code)
         # Service-account credentials (database/username/api_key) live in n8n's
         # environment ($env.ODOO_*); they are not transmitted via the webhook
         # body. settings.odoo_url is left here only so callers/tests can audit
