@@ -11,6 +11,11 @@ from apps.edr.schemas.evidence import EvidenceObject
 # account.analytic.line) — requesting them makes search_read return nothing.
 PROJECT_FIELDS = ["name", "date_start", "date", "user_id", "partner_id"]
 
+# account.analytic.line columns proven to exist on the live Odoo instance.
+# These carry real posted cost lines (amount is negative for costs).
+COST_FIELDS = ["name", "amount", "date"]
+DEFAULT_COST_MODEL = "account.analytic.line"
+
 
 def build_project_query(odoo_config: dict[str, Any], project_code: str) -> tuple[str, str]:
     """Build the (domain, fields) JSON for a project.project lookup.
@@ -29,6 +34,24 @@ def build_project_query(odoo_config: dict[str, Any], project_code: str) -> tuple
         domain = json.dumps([["name", "=", name]])
     fields = json.dumps(PROJECT_FIELDS)
     return domain, fields
+
+
+def build_cost_query(odoo_config: dict[str, Any]) -> tuple[str, str, str] | None:
+    """Build the (model, domain, fields) JSON for the project's cost lines.
+
+    Returns ``None`` when the mapping has no verified analytic account, so the
+    caller records "financial data not available in verified Odoo evidence"
+    rather than inventing figures. Cost lives in ``account.analytic.line`` keyed
+    by the analytic account id — never as ``budget``/``actual_cost`` columns on
+    ``project.project`` (those do not exist).
+    """
+    analytic_id = odoo_config.get("analytic_account_id")
+    if analytic_id is None or not str(analytic_id).strip().isdigit():
+        return None
+    model = odoo_config.get("cost_model") or DEFAULT_COST_MODEL
+    domain = json.dumps([["account_id", "=", int(analytic_id)]])
+    fields = json.dumps(COST_FIELDS)
+    return model, domain, fields
 
 
 async def read_odoo(payload: dict[str, Any]) -> list[EvidenceObject]:

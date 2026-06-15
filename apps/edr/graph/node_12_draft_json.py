@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm, sanitize_evidence
 
@@ -249,6 +250,18 @@ async def run(state: DecisionState) -> DecisionState:
     report.setdefault("conflicts", [])
     report.setdefault("sources", [])
     report.setdefault("quality_gate_status", "not_run")
+
+    # Deterministic connector coverage (factual; never LLM-authored). Every
+    # enabled source is surfaced with attempted/count/status/reason so a source
+    # that returned zero evidence is visible, not hidden.
+    report["connector_coverage"] = coverage.report_section(state)
+
+    # Financial transparency: never invent figures. State explicitly when no
+    # verified Odoo cost evidence exists.
+    if not state.outputs.get("odoo_financial_available"):
+        fs = report.get("financial_snapshot")
+        if isinstance(fs, dict):
+            fs.setdefault("note", "financial data not available in verified Odoo evidence")
 
     state.report_json = report
     state.outputs["draft_report_status"] = "generated"

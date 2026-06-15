@@ -45,6 +45,19 @@ def _email_state(user_id: str, allowed: list[str]) -> DecisionState:
     return state
 
 
+def _patch_no_group_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force node_07 down the user/shared-mailbox allowlist path (no group)."""
+    class _M:
+        @staticmethod
+        def load() -> "_M":
+            return _M()
+
+        def get(self, project_code: str) -> dict:
+            return {"enabled_sources": ["email"]}
+
+    monkeypatch.setattr(node_07_email, "ProjectMapping", _M)
+
+
 def test_email_node_denies_when_allowlist_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     called = False
 
@@ -54,6 +67,7 @@ def test_email_node_denies_when_allowlist_is_empty(monkeypatch: pytest.MonkeyPat
         return []
 
     monkeypatch.setattr(node_07_email, "search_email", boom)
+    _patch_no_group_mapping(monkeypatch)
 
     state = _email_state("alice@example.com", [])
     result = asyncio.run(node_07_email.run(state))
@@ -73,6 +87,7 @@ def test_email_node_denies_when_user_mailbox_not_in_allowlist(
         return []
 
     monkeypatch.setattr(node_07_email, "search_email", boom)
+    _patch_no_group_mapping(monkeypatch)
 
     state = _email_state(
         "alice@example.com",
@@ -94,6 +109,7 @@ def test_email_node_proceeds_when_user_mailbox_in_allowlist(
         return []
 
     monkeypatch.setattr(node_07_email, "search_email", fake_search)
+    _patch_no_group_mapping(monkeypatch)
 
     state = _email_state(
         "project-prj-001@example.com",

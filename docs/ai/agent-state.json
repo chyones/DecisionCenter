@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "8896aa096db6567a10a73335742b7a758abdf66b",
+  "current_commit": "f63c31171b45308be55dfbdc8bfe9ccdc9687662",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -114,19 +114,15 @@
   },
   "latest_local_validation": {
     "date": "2026-06-15",
-    "context": "n8n SharePoint/email webhook HTTP 500 repaired SERVER-SIDE (no UI, no import, no restart). Root cause: Receive Request node missing node-level webhookId -> getNodeWebhookPath produced <workflowId>/<nodename>/<path>, registering a malformed webhook_entity row (NULL/NULL) and making getNodeWebhooks().find() return undefined -> 'reading node' 500 before execution. Fix via scripts/repair_n8n_webhooks.py: set node.webhookId (dc-sharepoint-search/dc-email-search), ensure headerAuth+credential bound, delete malformed rows. No restart needed because executeWebhook loads workflow nodes fresh from DB per request (only webhook_entity lookup is cached, already correct). DB backed up before write.",
-    "starting_head": "8896aa096db6567a10a73335742b7a758abdf66b",
+    "context": "Mandatory multi-source project evidence coverage (Odoo+SharePoint+Email). New coverage helper; node_08 adds real account.analytic.line cost lines (no invented budget/actual_cost); node_05 keyword fallback (project name) for generic queries; node_07 reads M365 group mailbox via /groups/{id}/conversations (proven 200); node_12 embeds connector_coverage + financial 'not available' note; node_13 adds evidence_completeness and blocks silent pass on connector error/non-attempt; markdown Connector Coverage section. Live PRJ-001 generic-query run: sharepoint 199 + email 2 + odoo 101, completeness full, gate passed, DeepSeek 4/4 no fallback.",
+    "starting_head": "f63c31171b45308be55dfbdc8bfe9ccdc9687662",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "live n8n SQLite (workflow_entity.nodes + webhook_entity) via scripts/repair_n8n_webhooks.py; repo n8n/*.json webhookId added",
-    "verification": "SharePoint webhook HTTP 200 200 items; full PRJ-001 graph: sharepoint_status ok(89), odoo_status ok(1), DeepSeek 4/4 200 no fallback, quality_gate passed; malformed webhook rows remaining 0",
-    "db_backups": [
-      "database.sqlite.backup-20260615T093947Z",
-      "database.sqlite.backup-20260615T095114Z"
-    ],
+    "targeted_backend": "graph nodes 05/07/08/12/13, connectors odoo/email, exporters/markdown, graph/coverage.py",
+    "tests": "test_multi_source_coverage.py 14 new; email security tests updated to user-mailbox path; full suite pending",
     "doc_drift": "clean",
     "ai_context": "clean",
     "ruff": "clean on changed files",
-    "verdict": "N8N_SHAREPOINT_WEBHOOK_REPAIRED_LIVE_NOT_LIVE"
+    "verdict": "MULTI_SOURCE_COVERAGE_IMPLEMENTED_VERIFIED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",

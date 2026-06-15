@@ -25,6 +25,7 @@ def to_markdown(report: dict) -> str:
         f"| Project | {project_code} |",
         f"| Language | {language} |",
         f"| Quality Gate | {qg_status} |",
+        f"| Evidence Completeness | {report.get('evidence_completeness', 'n/a')} |",
         f"| Generated | {generated_at} |",
         "",
         f"**Query:** {query}",
@@ -32,6 +33,9 @@ def to_markdown(report: dict) -> str:
         "---",
         "",
     ]
+
+    # 0. Connector Coverage — every enabled source, attempted/zero made visible
+    _coverage_section(lines, report)
 
     # 1. Executive Summary
     lines.append("## 1. Executive Summary")
@@ -75,6 +79,9 @@ def to_markdown(report: dict) -> str:
             lines.append(f"| Variance | {val_str}{formula_note} | — |")
     else:
         lines.append("_Financial data not available._")
+    if isinstance(fs, dict) and fs.get("note"):
+        lines.append("")
+        lines.append(f"> {fs['note']}.")
     lines.append("")
 
     # 3–7. Findings sections
@@ -196,4 +203,33 @@ def _findings_section(lines: list[str], heading: str, items: list) -> None:
                 lines.append(f"- {item}")
     else:
         lines.append("_Not available._")
+    lines.append("")
+
+
+def _coverage_section(lines: list[str], report: dict) -> None:
+    """Render the connector coverage table: every enabled source with its
+    attempted/evidence-count/status, so zero-evidence sources are never hidden."""
+    lines.append("## Connector Coverage")
+    lines.append("")
+    coverage_rows = report.get("connector_coverage", [])
+    if coverage_rows:
+        lines += [
+            "| Source | Enabled | Attempted | Evidence | Status | Reason |",
+            "|---|---|---|---|---|---|",
+        ]
+        for row in coverage_rows:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"| {row.get('source','—')} "
+                f"| {'yes' if row.get('enabled') else 'no'} "
+                f"| {'yes' if row.get('attempted') else 'no'} "
+                f"| {row.get('evidence_count', 0)} "
+                f"| {row.get('status','—')} "
+                f"| {row.get('reason','') or '—'} |"
+            )
+        lines.append("")
+        lines.append(f"**Evidence completeness:** {report.get('evidence_completeness', 'n/a')}")
+    else:
+        lines.append("_No connector coverage recorded._")
     lines.append("")

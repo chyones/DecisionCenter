@@ -5,6 +5,7 @@ Deterministic claim checker.  No LLM is used here.
 
 from __future__ import annotations
 
+from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
 from apps.edr.schemas.quality_gate import ClaimCheck, QualityGateResult
 
@@ -199,9 +200,28 @@ async def run(state: DecisionState) -> DecisionState:
             reason="No evidence retrieved and no claims generated.",
         ))
 
+    # --- Connector coverage: a project report must attempt every enabled
+    # source and must never silently pass when an enabled source erred or was
+    # not attempted. Benign "attempted, zero evidence" is allowed but recorded
+    # as partial completeness so it is visible, not hidden.
+    cov = coverage.summary(state)
+    completeness = cov["completeness"]
+    coverage_blocking = list(cov["connector_errors"]) + list(cov["not_attempted_sources"])
+    if coverage_blocking:
+        if verdict == "passed":
+            verdict = "needs_review"
+        all_checks.append(ClaimCheck(
+            claim_id="connector_coverage",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason=("Enabled source(s) not satisfied (errored or not attempted): "
+                    f"{coverage_blocking}."),
+        ))
+
     # Update report quality_gate_status
     if isinstance(report, dict):
         report["quality_gate_status"] = verdict
+        report["evidence_completeness"] = completeness
 
     qg_result = QualityGateResult(
         request_id=state.request_id,
@@ -211,6 +231,8 @@ async def run(state: DecisionState) -> DecisionState:
 
     state.outputs["quality_gate"] = verdict
     state.outputs["quality_gate_result"] = qg_result.model_dump()
+    state.outputs["evidence_completeness"] = completeness
+    state.outputs["connector_coverage"] = cov["sources"]
     state.outputs["quality_gate unsupported_count"] = len(unsupported)
     state.outputs["quality_gate needs_review_count"] = len(needs_review)
 
