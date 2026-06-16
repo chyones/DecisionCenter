@@ -16,9 +16,10 @@ Design notes
 - A handful of dependencies have a *real* live probe where reachability/data IS
   the proof: core infra (postgres/redis/qdrant/minio), n8n, and the public edge.
   For those a successful probe yields ``LIVE_OK``.
-- Dependencies we cannot validate without real credentials, a real login, or a
-  billable/leaky call (Entra auth and AI providers) are deliberately capped at
-  ``CONFIGURED_NOT_TESTED`` when configured and ``NOT_CONFIGURED`` when not.
+- Entra auth requires a real interactive user token and is capped at
+  ``CONFIGURED_NOT_TESTED`` until an operator validates via the admin endpoint.
+  AI providers: DeepSeek and Voyage have minimal live probes; Anthropic (inactive
+  provider) and Cohere (not on execution path) are key-presence only.
   SharePoint/email may move only to ``VERIFIED_FROM_EVIDENCE`` when current
   persisted source-mapping evidence proves the read succeeded; Odoo still needs
   its own live webhook probe for ``LIVE_OK``.
@@ -474,6 +475,161 @@ def _probe_odoo() -> ProbeFacts:
             f"Odoo webhook live: {len(evidence_list)} evidence item(s) returned "
             f"(source_type=odoo)"
         ),
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
+
+def _probe_deepseek() -> ProbeFacts:
+    """Minimal chat-completion probe for the active DeepSeek generation provider.
+
+    Sends a single 1-token request to verify the API key is accepted and the
+    endpoint is reachable.  Uses the cheapest model (deepseek-v4-flash).
+    Success => LIVE_OK; 401/403 => AUTH_FAILED; network error => NETWORK_FAILED.
+    """
+    import json as _json
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    ts = _now()
+    base = (settings.deepseek_base_url or "https://api.deepseek.com").rstrip("/")
+    key = settings.deepseek_api_key or ""
+    if not key:
+        return ProbeFacts(
+            data_source="none",
+            evidence="DEEPSEEK_API_KEY not set",
+            probed_at=ts,
+        )
+
+    url = f"{base}/chat/completions"
+    payload = _json.dumps({
+        "model": "deepseek-v4-flash",
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+    }).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+    try:
+        req = Request(url, data=payload, headers=headers, method="POST")
+        with urlopen(req, timeout=services_catalog.PROBE_TIMEOUT_SECONDS * 3) as resp:  # noqa: S310
+            status = resp.status
+            resp.read(1024)
+    except HTTPError as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        auth_failed = exc.code in (401, 403)
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=False if auth_failed else None,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"DeepSeek API HTTP {exc.code}: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+    except Exception as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        return ProbeFacts(
+            network_ok=False,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"DeepSeek API unreachable: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+
+    if status not in (200, 201):
+        return ProbeFacts(
+            network_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"DeepSeek API returned HTTP {status}",
+            last_error_safe=f"unexpected HTTP {status}",
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        live_data_ok=True,
+        data_source="live",
+        evidence="DeepSeek API accepted request (HTTP 200, 1-token probe)",
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
+def _probe_voyage() -> ProbeFacts:
+    """Minimal embeddings probe for the Voyage AI key.
+
+    Sends a single 1-character text to verify the key and endpoint work.
+    Success => LIVE_OK; 401/403 => AUTH_FAILED; network error => NETWORK_FAILED.
+    Voyage is on the supplementary Qdrant-indexing path (required_for_go_live=False);
+    a failure here does not block report generation.
+    """
+    import json as _json
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    ts = _now()
+    key = settings.voyage_api_key or ""
+    if not key:
+        return ProbeFacts(
+            data_source="none",
+            evidence="VOYAGE_API_KEY not set",
+            probed_at=ts,
+        )
+
+    url = "https://api.voyageai.com/v1/embeddings"
+    payload = _json.dumps({"input": ["p"], "model": "voyage-3-large"}).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+    try:
+        req = Request(url, data=payload, headers=headers, method="POST")
+        with urlopen(req, timeout=services_catalog.PROBE_TIMEOUT_SECONDS * 3) as resp:  # noqa: S310
+            status = resp.status
+            resp.read(1024)
+    except HTTPError as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        auth_failed = exc.code in (401, 403)
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=False if auth_failed else None,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Voyage AI HTTP {exc.code}: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+    except Exception as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        return ProbeFacts(
+            network_ok=False,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Voyage AI unreachable: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+
+    if status not in (200, 201):
+        return ProbeFacts(
+            network_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Voyage AI returned HTTP {status}",
+            last_error_safe=f"unexpected HTTP {status}",
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        live_data_ok=True,
+        data_source="live",
+        evidence="Voyage AI accepted request (HTTP 200, 1-text probe)",
         probed_at=ts,
         success_at=ts,
     )
@@ -958,7 +1114,7 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
                   ("ODOO_READ_WEBHOOK", "ODOO_URL", "ODOO_DATABASE", "ODOO_USERNAME",
                    "N8N_BASE_URL"),
                   ("ODOO_API_KEY", "N8N_WEBHOOK_TOKEN"), True, probe="_probe_odoo"),
-    # --- AI providers (no billable probe here) ---
+    # --- AI providers ---
     # Anthropic and DeepSeek are alternative generation providers selected by
     # the LLM_PROVIDER runtime switch; the inactive one classifies as DISABLED.
     ConnectorSpec("anthropic", "Anthropic (report generation)", "ai_provider",
@@ -967,14 +1123,21 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
                        "Active only when LLM_PROVIDER=anthropic."),
     ConnectorSpec("deepseek", "DeepSeek (report generation)", "ai_provider",
                   (), ("DEEPSEEK_API_KEY",), True,
-                  note="Generation LLM. No billable probe; key-presence only. "
-                       "Active only when LLM_PROVIDER=deepseek."),
+                  probe="_probe_deepseek",
+                  note="Active generation LLM (LLM_PROVIDER=deepseek). "
+                       "1-token probe verifies key and endpoint."),
+    # Voyage (embeddings) and Cohere (rerank) are on the supplementary
+    # Qdrant-indexing path. Errors are caught per-node and never block report
+    # generation, so required_for_go_live=False.
     ConnectorSpec("voyage", "Voyage (embeddings)", "ai_provider",
-                  (), ("VOYAGE_API_KEY",), True,
-                  note="Embeddings. No billable probe; key-presence only."),
+                  (), ("VOYAGE_API_KEY",), False,
+                  probe="_probe_voyage",
+                  note="Supplementary Qdrant indexing. Probe verifies key validity. "
+                       "Not on critical report path; does not block go-live."),
     ConnectorSpec("cohere", "Cohere (rerank)", "ai_provider",
-                  (), ("COHERE_API_KEY",), True,
-                  note="Rerank. No billable probe; key-presence only."),
+                  (), ("COHERE_API_KEY",), False,
+                  note="Rerank (not wired into the current graph). "
+                       "Does not block go-live."),
 )
 
 CONNECTOR_SPEC_BY_NAME: dict[str, ConnectorSpec] = {s.name: s for s in CONNECTOR_SPECS}
