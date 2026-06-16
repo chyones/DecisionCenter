@@ -86,4 +86,6 @@ export {
   type EmailGroupMember,
   type EmailGroupProjectResult,
   type EmailGroupEnrichmentResponse,
+  type OdooSourceMapEntry,
+  type OdooSourceMapResponse,
 } from './types';

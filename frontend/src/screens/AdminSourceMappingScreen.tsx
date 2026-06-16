@@ -26,8 +26,11 @@ import type {
   SourceMappingSummary,
   SourceMappingUpsertRequest,
   SourceMappingValidateResponse,
+  OdooSourceMapResponse,
   ValidationFieldError,
 } from '../api';
+
+import { OdooSourceMapPanel } from './OdooSourceMapPanel';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -809,6 +812,10 @@ export function AdminSourceMappingScreen() {
   const [odooSyncLoading, setOdooSyncLoading] = useState(false);
   const [showOdooSync, setShowOdooSync] = useState(false);
   const [odooSyncResult, setOdooSyncResult] = useState<OdooSharePointSyncResult | null>(null);
+  const [activeTab, setActiveTab] = useState<'mapping' | 'sourcemap'>('mapping');
+  const [sourceMap, setSourceMap] = useState<OdooSourceMapResponse | null>(null);
+  const [sourceMapLoading, setSourceMapLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const fetchMappings = useCallback(async () => {
     setLoading(true);
@@ -869,6 +876,8 @@ export function AdminSourceMappingScreen() {
     setSelectedCode(code);
     setIsAdding(false);
     setNewCodeInput('');
+    setActiveTab('mapping');
+    setSourceMap(null);
     void fetchDetail(code);
   };
 
@@ -879,6 +888,8 @@ export function AdminSourceMappingScreen() {
     setForm(emptyForm());
     setNewCodeInput('');
     setValidationErrors([]);
+    setActiveTab('mapping');
+    setSourceMap(null);
   };
 
   const updateForm = (patch: Partial<SourceMappingUpsertRequest>) => {
@@ -1087,6 +1098,48 @@ export function AdminSourceMappingScreen() {
     }
   };
 
+  const fetchSourceMap = useCallback(
+    async (code: string) => {
+      setSourceMapLoading(true);
+      try {
+        const data = await api.get<OdooSourceMapResponse>(
+          `/admin/source-mappings/${encodeURIComponent(code)}/odoo-source-map`,
+        );
+        setSourceMap(data);
+      } catch (err) {
+        const message = err instanceof ApiError ? err.message : 'Failed to load Odoo source map';
+        addToast('error', message, 'Source Map');
+      } finally {
+        setSourceMapLoading(false);
+      }
+    },
+    [api, addToast],
+  );
+
+  useEffect(() => {
+    if (activeTab === 'sourcemap' && selectedCode && !isAdding) {
+      void fetchSourceMap(selectedCode);
+    }
+  }, [activeTab, selectedCode, isAdding, fetchSourceMap]);
+
+  const handleScan = async () => {
+    if (!selectedCode) return;
+    setScanning(true);
+    try {
+      const data = await api.post<OdooSourceMapResponse>(
+        `/admin/source-mappings/${encodeURIComponent(selectedCode)}/odoo-source-map/scan`,
+        {},
+      );
+      setSourceMap(data);
+      addToast('success', 'Odoo source scan complete.', 'Source Map');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Odoo source scan failed';
+      addToast('error', message, 'Source Map');
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const localValidationErrors = collectLocalBlockers(form);
   const activeValidationErrors = [...validationErrors];
   localValidationErrors.forEach((err) => {
@@ -1182,6 +1235,38 @@ export function AdminSourceMappingScreen() {
 
           {editorVisible && (
             <div className="space-y-6">
+              {!isAdding && selectedCode && (
+                <div className="flex gap-1 border-b border-border" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'mapping'}
+                    onClick={() => setActiveTab('mapping')}
+                    className={`px-3 py-1.5 text-body ${activeTab === 'mapping' ? 'border-b-2 border-accent font-medium text-text-primary' : 'text-text-muted'}`}
+                  >
+                    Mapping
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'sourcemap'}
+                    onClick={() => setActiveTab('sourcemap')}
+                    className={`px-3 py-1.5 text-body ${activeTab === 'sourcemap' ? 'border-b-2 border-accent font-medium text-text-primary' : 'text-text-muted'}`}
+                  >
+                    Odoo Source Map
+                  </button>
+                </div>
+              )}
+
+              {activeTab === 'sourcemap' && !isAdding && selectedCode ? (
+                <OdooSourceMapPanel
+                  data={sourceMap}
+                  loading={sourceMapLoading}
+                  scanning={scanning}
+                  onScan={() => void handleScan()}
+                />
+              ) : (
+              <>
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1809,6 +1894,8 @@ export function AdminSourceMappingScreen() {
                   ))}
                 </div>
               </fieldset>
+              </>
+              )}
             </div>
           )}
         </div>

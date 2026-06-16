@@ -2530,6 +2530,102 @@ async def disable_source_mapping(
 
 
 # ---------------------------------------------------------------------------
+# Odoo Source Map (visibility)
+# GET  /admin/source-mappings/{code}/odoo-source-map  — generic map + runtime ids
+# POST /admin/source-mappings/{code}/odoo-source-map/scan — read-only count scan
+# Admin-only. Built from the proven Odoo source registry, never hardcoded.
+# ---------------------------------------------------------------------------
+
+from apps.edr.admin.odoo_source_map import (  # noqa: E402
+    OdooSourceMapResponse,
+    OdooSourceScanResult,
+    build_source_map,
+    scan_source_counts,
+)
+
+
+async def _load_odoo_map_context(code: str) -> tuple[dict, str, bool, list[str]]:
+    """Return (odoo_config, mapping_status, odoo_enabled, allowed_odoo_ids).
+
+    404 if the mapping does not exist. No project ids are hardcoded — values are
+    read from the saved mapping row at runtime.
+    """
+    pg = get_postgres_store()
+    await pg.init_schema()
+    row = await pg.get_source_mapping(code)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    detail = _row_to_source_mapping_detail(row)
+    odoo_config = detail.odoo.model_dump()
+    odoo_enabled = "odoo" in detail.enabled_sources
+    ext_id = str(odoo_config.get("project_external_id") or "").strip()
+    allowed_odoo_ids = [ext_id] if ext_id else []
+    return odoo_config, detail.mapping_status, odoo_enabled, allowed_odoo_ids
+
+
+@app.get("/admin/source-mappings/{code}/odoo-source-map")
+async def get_odoo_source_map(
+    code: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> OdooSourceMapResponse:
+    """Admin-only: the generic Odoo Source Map with this project's runtime ids.
+
+    Shows every registry source (where DecisionCenter will search in Odoo), the
+    proven project-link path, key fields, gap type, confidence, warnings, and the
+    denylisted/ambiguous paths that are never queried. Record counts are absent
+    until a scan is run.
+    """
+    _require_admin(claims)
+    odoo_config, mapping_status, odoo_enabled, _ = await _load_odoo_map_context(code)
+    return build_source_map(
+        project_code=code,
+        odoo_config=odoo_config,
+        mapping_status=mapping_status,
+        odoo_enabled=odoo_enabled,
+        extended_enabled=settings.odoo_extended_sources_enabled,
+    )
+
+
+@app.post("/admin/source-mappings/{code}/odoo-source-map/scan")
+async def scan_odoo_source_map(
+    code: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> OdooSourceMapResponse:
+    """Admin-only: run a read-only per-source record-count scan and return the map.
+
+    Reuses the same proven, denylist-safe queries the connector issues. No writes.
+    Counts are capped by the deployed Odoo read workflow's search_read limit.
+    """
+    claims = _require_admin(claims)
+    odoo_config, mapping_status, odoo_enabled, allowed_odoo_ids = (
+        await _load_odoo_map_context(code)
+    )
+    pg = get_postgres_store()
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.odoo_source_map_scan",
+        actor_hash=actor_hash,
+        project_code=code,
+        detail="read_only_count_scan",
+    )
+    scan: OdooSourceScanResult | None = None
+    if odoo_enabled:
+        scan = await scan_source_counts(
+            project_code=code,
+            odoo_config=odoo_config,
+            allowed_odoo_ids=allowed_odoo_ids,
+        )
+    return build_source_map(
+        project_code=code,
+        odoo_config=odoo_config,
+        mapping_status=mapping_status,
+        odoo_enabled=odoo_enabled,
+        extended_enabled=settings.odoo_extended_sources_enabled,
+        scan=scan,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Odoo + SharePoint Exact-Name Sync
 # POST /admin/source-mappings/sync-odoo-sharepoint
 # Admin-only. Read-only Odoo (XML-RPC). Read-only Microsoft Graph.

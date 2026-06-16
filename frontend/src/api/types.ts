@@ -758,3 +758,45 @@ export interface EmailGroupEnrichmentResponse {
   project_results: EmailGroupProjectResult[];
   summary: string;
 }
+
+// ---------------------------------------------------------------------------
+// Odoo Source Map (visibility) — GET/POST /admin/source-mappings/{code}/odoo-source-map
+// ---------------------------------------------------------------------------
+
+export interface OdooSourceMapEntry {
+  key: string;
+  group: string;
+  groups: string[];
+  source_name: string;
+  model: string;
+  link_path: string;
+  link_scope: string;
+  key_fields: string[];
+  confidence: string;
+  gap_type: string;
+  aggregation: string;
+  handled_inline: boolean;
+  warning: string;
+  mappable: boolean;
+  link_value: string | null;
+  last_scan_status: string;
+  record_count: number | null;
+  capped: boolean;
+}
+
+export interface OdooSourceMapResponse {
+  project_code: string;
+  generic: boolean;
+  odoo_enabled: boolean;
+  extended_enabled: boolean;
+  odoo_project_id: string | null;
+  analytic_account_id: string | null;
+  project_source_status: string;
+  groups: string[];
+  enabled_categories: string[];
+  sources: OdooSourceMapEntry[];
+  denylisted_paths: string[];
+  missing_sources: string[];
+  notes: string[];
+  last_scanned_at: string | null;
+}

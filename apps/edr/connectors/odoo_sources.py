@@ -18,6 +18,10 @@ Two project-scope keys are used to resolve the link value at query time:
 Several tempting fields returned whole unrelated tables during the audit. Those
 ambiguous paths are captured in ``DENYLISTED_PATHS`` and actively rejected by
 ``assert_path_allowed`` so they can never be used as a project filter.
+
+The registry is GENERIC: it carries no project-specific identifiers as logic.
+``example_ids`` are audit breadcrumbs only and are never used for querying. The
+runtime project/analytic ids come from each project's saved source mapping.
 """
 
 from __future__ import annotations
@@ -27,6 +31,42 @@ from dataclasses import dataclass, field
 
 class AmbiguousOdooPathError(ValueError):
     """Raised when a denylisted/ambiguous Odoo project-link path is requested."""
+
+
+# ---------------------------------------------------------------------------
+# Display groups — how the Source Map UI organises the sources. These are
+# presentation labels; a source may appear in more than one group.
+# ---------------------------------------------------------------------------
+
+GROUP_PROJECT_IDENTITY = "Project identity"
+GROUP_CONTRACT_VALUE = "Contract value"
+GROUP_ACTUAL_COST = "Actual cost"
+GROUP_ACCOUNTING = "Accounting / journal lines"
+GROUP_VENDOR_BILLS = "Vendor bills"
+GROUP_RFQ_PO = "RFQ / LPO / PO"
+GROUP_PURCHASE_LINES = "Purchase lines"
+GROUP_MATERIAL_REQUESTS = "Material requests"
+GROUP_STOCK = "Stock / deliveries"
+GROUP_HR_EXPENSES = "HR expenses"
+GROUP_PAYROLL = "Payroll"
+GROUP_MANPOWER = "Manpower / staff"
+GROUP_ATTACHMENTS = "Attachments"
+
+DISPLAY_GROUPS: tuple[str, ...] = (
+    GROUP_PROJECT_IDENTITY,
+    GROUP_CONTRACT_VALUE,
+    GROUP_ACTUAL_COST,
+    GROUP_ACCOUNTING,
+    GROUP_VENDOR_BILLS,
+    GROUP_RFQ_PO,
+    GROUP_PURCHASE_LINES,
+    GROUP_MATERIAL_REQUESTS,
+    GROUP_STOCK,
+    GROUP_HR_EXPENSES,
+    GROUP_PAYROLL,
+    GROUP_MANPOWER,
+    GROUP_ATTACHMENTS,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +94,11 @@ class OdooSource:
     # such sources are skipped by the extended loop to avoid duplicate evidence.
     handled_inline: bool = False
     example_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Display / Source-Map metadata (presentation only — no query effect).
+    display_name: str = ""
+    groups: tuple[str, ...] = ()
+    gap_type: str = "CONNECTOR MAPPING GAP"
+    warning: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +155,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         confidence="high",
         handled_inline=True,
         example_ids=("14602", "14601"),
+        display_name="Project identity / contract header",
+        groups=(GROUP_PROJECT_IDENTITY, GROUP_CONTRACT_VALUE),
+        gap_type="CONNECTOR FIELD GAP",
     ),
     OdooSource(
         key="analytic_identity",
@@ -125,6 +173,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Cost-center identity + high-level ledger balance; not detailed truth.",
         confidence="high",
         example_ids=("21963", "21960"),
+        display_name="Analytic project identity / cost center",
+        groups=(GROUP_PROJECT_IDENTITY,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     # --- Actual cost / accounting ----------------------------------------
     OdooSource(
@@ -142,6 +193,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         confidence="high",
         handled_inline=True,
         example_ids=("2177525", "2177524"),
+        display_name="Actual cost / analytic transactions",
+        groups=(GROUP_ACTUAL_COST,),
+        gap_type="CONNECTOR FIELD GAP",
     ),
     OdooSource(
         key="account_move_lines",
@@ -157,6 +211,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Accounting truth by account/date/vendor/product; sum balance.",
         confidence="high",
         example_ids=("1013469", "1013467"),
+        display_name="Journal items / invoice lines",
+        groups=(GROUP_ACCOUNTING,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="vendor_bills",
@@ -173,6 +230,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Vendor bill/invoice amount by move_type/state/payment_state.",
         confidence="high",
         example_ids=("106875", "106597"),
+        display_name="Vendor bills / journal entry headers",
+        groups=(GROUP_VENDOR_BILLS,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     # --- Purchase pipeline (RFQ / LPO / PO) ------------------------------
     OdooSource(
@@ -191,6 +251,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Committed cost by state; separate RFQ vs PO via state/refs.",
         confidence="high",
         example_ids=("40181", "40155"),
+        display_name="RFQ / LPO / PO header pipeline",
+        groups=(GROUP_RFQ_PO,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="purchase_order_lines",
@@ -207,6 +270,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Committed cost = sum open/confirmed line price_subtotal.",
         confidence="high",
         example_ids=("112580", "112579"),
+        display_name="PO line commitments / materials",
+        groups=(GROUP_PURCHASE_LINES,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     # --- Material / site requests ----------------------------------------
     OdooSource(
@@ -223,6 +289,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Count requests by state/type; sum cost packages only if validated.",
         confidence="high",
         example_ids=("38055", "38053"),
+        display_name="Material / site request header",
+        groups=(GROUP_MATERIAL_REQUESTS,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="material_request_lines",
@@ -237,6 +306,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum quantities by product/vendor/request type.",
         confidence="high",
         example_ids=("105769", "105767"),
+        display_name="Material request lines",
+        groups=(GROUP_MATERIAL_REQUESTS,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="mr_analysis_links",
@@ -249,6 +321,14 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Relationship index MR → LPOs/invoices/PDC/payments/attachments.",
         confidence="high",
         example_ids=("88172", "88170"),
+        display_name="MR → LPO/invoice/payment/document links",
+        groups=(GROUP_MATERIAL_REQUESTS,),
+        gap_type="CONNECTOR MAPPING GAP",
+        warning=(
+            "Live scan via the deployed workflow returned 0 for a validation "
+            "sample (audit found records via direct JSON-RPC). Re-verify after "
+            "deploying the structured workflow; possible service-account record rules."
+        ),
     ),
     # --- Stock receipts / issues -----------------------------------------
     OdooSource(
@@ -265,6 +345,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Count by state/type; join stock.move for quantities.",
         confidence="high",
         example_ids=("42385", "40679"),
+        display_name="Stock receipts / deliveries",
+        groups=(GROUP_STOCK,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="stock_moves",
@@ -281,6 +364,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum quantities by product/state/location; not a financial amount.",
         confidence="high",
         example_ids=("99864", "99832"),
+        display_name="Stock move quantities",
+        groups=(GROUP_STOCK,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     # --- HR expenses / payroll / manpower --------------------------------
     OdooSource(
@@ -298,6 +384,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum total_amount by employee/product/type/state/date.",
         confidence="high",
         example_ids=("134325", "134320"),
+        display_name="HR expenses / petty cash",
+        groups=(GROUP_HR_EXPENSES,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="payroll_headers",
@@ -312,6 +401,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Payroll by payslip period/state; detail via lines/allocation.",
         confidence="high",
         example_ids=("176293", "176289"),
+        display_name="Payroll header (payslip)",
+        groups=(GROUP_PAYROLL,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="payroll_lines",
@@ -325,6 +417,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum total by salary rule/category/period/employee.",
         confidence="high",
         example_ids=("5836533", "5836532"),
+        display_name="Payroll lines",
+        groups=(GROUP_PAYROLL,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="payroll_cost_allocation",
@@ -338,6 +433,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum amount by project/employee/period.",
         confidence="high",
         example_ids=("946267", "946261"),
+        display_name="Payroll cost allocation",
+        groups=(GROUP_PAYROLL,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="payslip_inputs",
@@ -350,6 +448,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum input amounts by code/type/period.",
         confidence="high",
         example_ids=("3100166", "3100165"),
+        display_name="Payslip inputs / allowances / deductions",
+        groups=(GROUP_PAYROLL,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="worked_days",
@@ -363,6 +464,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Sum days/hours/amount by project/period/code.",
         confidence="high",
         example_ids=("1055436", "1055435"),
+        display_name="Payslip worked days / manpower days",
+        groups=(GROUP_PAYROLL, GROUP_MANPOWER),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="staff_employees",
@@ -375,6 +479,13 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Count employees by project/job/department; not a ledger.",
         confidence="medium",
         example_ids=("5662", "5657"),
+        display_name="Current project manpower (employees)",
+        groups=(GROUP_MANPOWER,),
+        gap_type="CONNECTOR MAPPING GAP",
+        warning=(
+            "Live scan returned 0 for validation samples; hr.employee.project_id "
+            "may be non-stored/computed. Medium confidence — re-verify."
+        ),
     ),
     OdooSource(
         key="staff_list",
@@ -386,6 +497,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="Count staff by project/category.",
         confidence="medium",
         example_ids=("50017", "49534"),
+        display_name="Staff list / manpower listing",
+        groups=(GROUP_MANPOWER,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     # --- Documents -------------------------------------------------------
     OdooSource(
@@ -401,6 +515,9 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="List project attachment records by type.",
         confidence="high",
         example_ids=("56966", "56962"),
+        display_name="Project document records",
+        groups=(GROUP_ATTACHMENTS,),
+        gap_type="CONNECTOR MAPPING GAP",
     ),
     OdooSource(
         key="po_rfq_attachments",
@@ -414,6 +531,14 @@ ODOO_SOURCES: tuple[OdooSource, ...] = (
         aggregation="List supporting files for PO/RFQ records.",
         confidence="high",
         example_ids=("810057", "810048"),
+        display_name="PO/RFQ supporting files",
+        groups=(GROUP_ATTACHMENTS,),
+        gap_type="CONNECTOR MAPPING GAP",
+        warning=(
+            "Live scan via the deployed workflow returned 0 for a validation "
+            "sample (audit found records via direct JSON-RPC). Re-verify after "
+            "deploying the structured workflow."
+        ),
     ),
 )
 
@@ -438,3 +563,37 @@ def source_by_key(key: str) -> OdooSource | None:
         if s.key == key:
             return s
     return None
+
+
+def denylisted_path_strings() -> list[str]:
+    """Denylisted paths as ``model.path`` strings, sorted for stable display."""
+    return sorted(f"{model}.{path}" for model, path in DENYLISTED_PATHS)
+
+
+def source_map_entries() -> list[dict]:
+    """Generic Source-Map view of the registry (no project values).
+
+    Pure presentation projection used by the admin Source Map API/UI. Carries no
+    runtime/project-specific ids — those are layered on per project by the caller.
+    """
+    entries: list[dict] = []
+    for s in ODOO_SOURCES:
+        entries.append(
+            {
+                "key": s.key,
+                "category": s.category,
+                "source_name": s.display_name or s.key,
+                "model": s.model,
+                "link_path": s.link_path,
+                "link_scope": s.link_scope,
+                "key_fields": list(s.fields),
+                "confidence": s.confidence,
+                "gap_type": s.gap_type,
+                "aggregation": s.aggregation,
+                "handled_inline": s.handled_inline,
+                "group": (s.groups[0] if s.groups else "Other"),
+                "groups": list(s.groups),
+                "warning": s.warning,
+            }
+        )
+    return entries
