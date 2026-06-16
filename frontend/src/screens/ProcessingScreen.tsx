@@ -56,7 +56,6 @@ const NODES: NodeStep[] = [
   { id: 'node_03_scope', label: 'Determining scope' },
   { id: 'node_04_plan', label: 'Planning retrieval' },
   { id: 'node_05_sharepoint', label: 'Searching SharePoint' },
-  { id: 'node_06_owncloud', label: 'Searching ownCloud' },
   { id: 'node_07_email', label: 'Searching email' },
   { id: 'node_08_odoo', label: 'Reading Odoo records' },
   { id: 'node_09_normalize', label: 'Organizing evidence' },
@@ -81,7 +80,10 @@ function formatElapsed(seconds: number): string {
   return `${m}:${s}`;
 }
 
-function getStateBanner(state: ProcessingState): {
+function getStateBanner(
+  state: ProcessingState,
+  qgFailureReason?: string | null,
+): {
   text: string;
   tone: 'success' | 'warning' | 'error' | 'info';
   icon: React.ReactNode;
@@ -99,12 +101,17 @@ function getStateBanner(state: ProcessingState): {
         tone: 'warning',
         icon: <AlertTriangle className="h-4 w-4" />,
       };
-    case 'quality_gate_failed':
+    case 'quality_gate_failed': {
+      const text =
+        qgFailureReason === 'evidence'
+          ? 'Evidence insufficient — report cannot be generated.'
+          : 'Analysis incomplete — report blocked by quality gate.';
       return {
-        text: 'Evidence insufficient — report cannot be generated.',
+        text,
         tone: 'error',
         icon: <AlertCircle className="h-4 w-4" />,
       };
+    }
     case 'awaiting_reviewer':
       return {
         text: 'Report submitted for review. You will be notified when a decision is made.',
@@ -240,10 +247,10 @@ export function ProcessingScreen() {
     if (state === 'cancelled') return -1;
     if (state === 'rbac_denied') return -1;
     if (state === 'timed_out') return DEMO_ACTIVE_INDEX;
-    if (state === 'quality_gate_failed') return 12; // up to Drafting report
-    if (state === 'awaiting_reviewer') return 15; // up to Saving to staging
-    if (state === 'quality_gate_needs_review') return 13;
-    if (state === 'quality_gate_passed') return 13;
+    if (state === 'quality_gate_failed') return 11; // up to Drafting report (node_12, index 11 after removing ownCloud)
+    if (state === 'awaiting_reviewer') return 14; // up to Saving to staging
+    if (state === 'quality_gate_needs_review') return 12;
+    if (state === 'quality_gate_passed') return 12;
     if (state === 'self_correct_retry') return 10;
     return DEMO_ACTIVE_INDEX;
   }, [state]);
@@ -255,7 +262,7 @@ export function ProcessingScreen() {
     return Math.round(((activeIndex + 1) / NODES.length) * 100);
   }, [state, activeIndex]);
 
-  const banner = getStateBanner(state);
+  const banner = getStateBanner(state, status?.qg_failure_reason);
   const cancelAllowed = status
     ? status.state === 'staging' || status.state === 'needs_review'
     : state === 'running' || state === 'self_correct_retry';

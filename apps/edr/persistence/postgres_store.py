@@ -154,6 +154,12 @@ class PostgresStore:
                 ADD COLUMN IF NOT EXISTS microsoft JSONB NOT NULL DEFAULT '{}'
                 """
             )
+            await conn.execute(
+                """
+                ALTER TABLE audit_log
+                ADD COLUMN IF NOT EXISTS qg_failure_reason TEXT
+                """
+            )
             await self._seed_source_mappings(conn)
             await self._migrate_project_names(conn)
             await self._migrate_verified_prj_source_mappings(conn)
@@ -171,6 +177,7 @@ class PostgresStore:
         artifact_keys: list[str],
         review_state: str = "staging",
         requires_approval: bool = True,
+        qg_failure_reason: str | None = None,
     ) -> None:
         """Insert or update an audit row for the given request."""
         pool = await self._get_pool()
@@ -180,8 +187,8 @@ class PostgresStore:
                 INSERT INTO audit_log (
                     request_id, user_id_hash, project_code, query,
                     quality_gate_status, token_counts, cost_total_usd, artifact_keys,
-                    review_state, requires_approval
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    review_state, requires_approval, qg_failure_reason
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (request_id) DO UPDATE SET
                     user_id_hash = EXCLUDED.user_id_hash,
                     project_code = EXCLUDED.project_code,
@@ -192,6 +199,7 @@ class PostgresStore:
                     artifact_keys = EXCLUDED.artifact_keys,
                     review_state = EXCLUDED.review_state,
                     requires_approval = EXCLUDED.requires_approval,
+                    qg_failure_reason = EXCLUDED.qg_failure_reason,
                     updated_at = NOW()
                 """,
                 request_id,
@@ -204,6 +212,7 @@ class PostgresStore:
                 json.dumps(artifact_keys),
                 review_state,
                 requires_approval,
+                qg_failure_reason,
             )
 
     async def get_audit(self, request_id: str) -> dict[str, Any] | None:

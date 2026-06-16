@@ -116,6 +116,7 @@ class ReportStatusResponse(BaseModel):
     current_node: int
     is_terminal: bool
     updated_at: datetime | None
+    qg_failure_reason: str | None = None
 
 
 class CancelReportResponse(BaseModel):
@@ -853,6 +854,7 @@ async def get_report_status(
         current_node=NODE_COUNT,
         is_terminal=True,
         updated_at=audit.get("updated_at"),
+        qg_failure_reason=audit.get("qg_failure_reason"),
     )
 
 

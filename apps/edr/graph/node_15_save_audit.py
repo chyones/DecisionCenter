@@ -39,11 +39,29 @@ def _requires_approval(state: DecisionState) -> bool:
     return True
 
 
+def _compute_qg_failure_reason(state: DecisionState, quality_gate_status: str | None) -> str | None:
+    """Compute the failure reason for a failed quality gate.
+
+    Distinguishes between evidence insufficiency (no connectors returned any
+    evidence) and analytical incompleteness (evidence existed but the LLM
+    failed to produce the required sections, e.g. executive_summary).
+
+    Returns 'evidence' or 'analytical', or None when the gate did not fail.
+    """
+    if quality_gate_status != "failed":
+        return None
+    evidence_completeness = state.outputs.get("evidence_completeness", "unknown")
+    if evidence_completeness == "none_enabled":
+        return "evidence"
+    return "analytical"
+
+
 async def run(state: DecisionState) -> DecisionState:
     request_id = state.request_id
     user_id_hash = hash_user_id(state.user_id)
     quality_gate_status = state.outputs.get("quality_gate", "needs_review")
     requires_approval = _requires_approval(state)
+    qg_failure_reason = _compute_qg_failure_reason(state, quality_gate_status)
     persistence_errors: list[str] = []
 
     # ------------------------------------------------------------------
@@ -189,6 +207,7 @@ async def run(state: DecisionState) -> DecisionState:
             cost_total_usd=cost_total_usd,
             artifact_keys=artifact_keys,
             requires_approval=requires_approval,
+            qg_failure_reason=qg_failure_reason,
         )
     except Exception as exc:
         _record_persistence_error(persistence_errors, "postgres_audit", exc)
@@ -200,6 +219,7 @@ async def run(state: DecisionState) -> DecisionState:
     state.outputs["artifact_keys"] = artifact_keys
     state.outputs["audit_user_id_hash"] = user_id_hash
     state.outputs["requires_approval"] = requires_approval
+    state.outputs["qg_failure_reason"] = qg_failure_reason
     if persistence_errors:
         state.outputs["audit_errors"] = persistence_errors
     return state.mark("node_15_save_audit")

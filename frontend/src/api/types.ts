@@ -113,6 +113,7 @@ export interface ReportStatusResponse {
   current_node: number;
   is_terminal: boolean;
   updated_at: string | null;
+  qg_failure_reason: string | null;
 }
 
 export interface CancelReportResponse {
