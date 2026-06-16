@@ -13,10 +13,45 @@ from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm, sanitize_evidence
 
 
-def _build_prompt(state: DecisionState) -> str:
+async def _apply_rerank(
+    state: DecisionState, evidence: list[dict]
+) -> tuple[list[dict], str]:
+    """Rerank evidence with Cohere before LLM drafting; returns (evidence, status).
+
+    Falls back to the original list on any error — rerank is enhancement-only.
+    state.evidence is never modified here; only the prompt list is changed.
+    """
+    from apps.edr.config import settings
+
+    key = getattr(settings, "cohere_api_key", None)
+    if not key:
+        return evidence, "skipped_no_key"
+    if not evidence:
+        return evidence, "skipped_empty"
+
+    try:
+        from apps.edr.retrieval.hybrid_search import SearchHit
+        from apps.edr.retrieval.rerank import Reranker
+
+        hits = [
+            SearchHit(
+                evidence_id=e.get("evidence_id", ""),
+                score=float(e.get("confidence_score") or 0.0),
+                payload=e,
+            )
+            for e in evidence
+        ]
+        ranked_hits = await Reranker(api_key=key).rerank(state.query, hits)
+        ranked = [h.payload for h in ranked_hits]
+        return ranked, f"ok_top_{len(ranked)}"
+    except Exception as exc:
+        return evidence, f"fallback:{type(exc).__name__}"
+
+
+def _build_prompt(state: DecisionState, evidence: list[dict]) -> str:
     # Sanitize every evidence excerpt before it reaches the LLM
     safe_evidence: list[dict] = []
-    for ev in state.evidence:
+    for ev in evidence:
         excerpt = ev.get("excerpt", "")
         safe_excerpt, _ = sanitize_evidence(excerpt)
         safe_ev = dict(ev)
@@ -191,7 +226,12 @@ def is_financial_query(query: str) -> bool:
 
 
 async def run(state: DecisionState) -> DecisionState:
-    prompt = _build_prompt(state)
+    # Rerank evidence with Cohere before feeding the LLM.
+    # state.evidence is preserved intact for coverage/sufficiency reporting.
+    prompt_evidence, rerank_status = await _apply_rerank(state, state.evidence)
+    state.outputs["cohere_rerank_status"] = rerank_status
+
+    prompt = _build_prompt(state, prompt_evidence)
     result = await call_llm(
         prompt=prompt,
         tier="heavy",

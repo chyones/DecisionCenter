@@ -18,8 +18,8 @@ Design notes
   For those a successful probe yields ``LIVE_OK``.
 - Entra auth requires a real interactive user token and is capped at
   ``CONFIGURED_NOT_TESTED`` until an operator validates via the admin endpoint.
-  AI providers: DeepSeek and Voyage have minimal live probes; Anthropic (inactive
-  provider) and Cohere (not on execution path) are key-presence only.
+  AI providers: DeepSeek, Voyage, and Cohere have minimal live probes; Anthropic
+  (inactive provider) is key-presence only.
   SharePoint/email may move only to ``VERIFIED_FROM_EVIDENCE`` when current
   persisted source-mapping evidence proves the read succeeded; Odoo still needs
   its own live webhook probe for ``LIVE_OK``.
@@ -635,6 +635,87 @@ def _probe_voyage() -> ProbeFacts:
     )
 
 
+
+def _probe_cohere() -> ProbeFacts:
+    """Minimal rerank probe for the Cohere API key.
+
+    Posts a single-document rerank request to verify the key and endpoint.
+    Success => LIVE_OK; 401/403 => AUTH_FAILED; network error => NETWORK_FAILED.
+    Cohere is on the evidence-rerank path (node_12); errors fall back to
+    original evidence order and never block report generation.
+    """
+    import json as _json
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    ts = _now()
+    key = settings.cohere_api_key or ""
+    if not key:
+        return ProbeFacts(
+            data_source="none",
+            evidence="COHERE_API_KEY not set",
+            probed_at=ts,
+        )
+
+    url = "https://api.cohere.com/v1/rerank"
+    payload = _json.dumps({
+        "model": "rerank-v3.5",
+        "query": "ping",
+        "documents": ["ping"],
+        "top_n": 1,
+    }).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+    try:
+        req = Request(url, data=payload, headers=headers, method="POST")
+        with urlopen(req, timeout=services_catalog.PROBE_TIMEOUT_SECONDS * 3) as resp:  # noqa: S310
+            status = resp.status
+            resp.read(1024)
+    except HTTPError as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        auth_failed = exc.code in (401, 403)
+        return ProbeFacts(
+            network_ok=True,
+            auth_ok=False if auth_failed else None,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Cohere API HTTP {exc.code}: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+    except Exception as exc:
+        detail = services_catalog._detail_for_exception(exc, None)
+        return ProbeFacts(
+            network_ok=False,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Cohere API unreachable: {detail}",
+            last_error_safe=detail,
+            probed_at=ts,
+        )
+
+    if status not in (200, 201):
+        return ProbeFacts(
+            network_ok=True,
+            live_data_ok=False,
+            data_source="live",
+            evidence=f"Cohere API returned HTTP {status}",
+            last_error_safe=f"unexpected HTTP {status}",
+            probed_at=ts,
+        )
+    return ProbeFacts(
+        network_ok=True,
+        auth_ok=True,
+        live_data_ok=True,
+        data_source="live",
+        evidence="Cohere API accepted rerank request (HTTP 200, 1-document probe)",
+        probed_at=ts,
+        success_at=ts,
+    )
+
+
 def _probe_public_edge() -> ProbeFacts:
     """Probe the public HTTPS edge end-to-end: Cloudflare Tunnel → Caddy → app.
 
@@ -1136,8 +1217,9 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
                        "Not on critical report path; does not block go-live."),
     ConnectorSpec("cohere", "Cohere (rerank)", "ai_provider",
                   (), ("COHERE_API_KEY",), False,
-                  note="Rerank (not wired into the current graph). "
-                       "Does not block go-live."),
+                  probe="_probe_cohere",
+                  note="Evidence rerank in node_12 (graceful fallback on failure). "
+                       "Not on critical path; does not block go-live."),
 )
 
 CONNECTOR_SPEC_BY_NAME: dict[str, ConnectorSpec] = {s.name: s for s in CONNECTOR_SPECS}
