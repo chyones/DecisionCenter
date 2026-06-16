@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     odoo_database: str | None = None
     odoo_username: str | None = None
     odoo_api_key: str | None = None
+    # Extended multi-source Odoo retrieval (node_08). Off by default so the
+    # narrow project+cost flow is unchanged until an operator opts in AND the
+    # n8n odoo_read workflow returns structured fields. Read-only either way.
+    odoo_extended_sources_enabled: bool = False
+    odoo_extended_include_medium: bool = True
 
     # Observability and budget
     langfuse_public_key: str | None = None

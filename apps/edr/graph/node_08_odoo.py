@@ -6,10 +6,22 @@ declares a verified analytic account, the real posted cost lines
 project.project columns (budget/actual_cost) and are NEVER invented — if no
 verified cost evidence exists, that is recorded so the report can state
 "financial data not available in verified Odoo evidence".
+
+When extended multi-source retrieval is enabled (``odoo_extended_sources_enabled``
+or per-mapping ``odoo.extended_sources``), the node also reads the high-confidence
+project sources proven by the 2026-06-16 source-mapping audit (purchase orders,
+material requests, stock, vendor bills, payroll/manpower, attachments, …) using
+ONLY the proven project-link paths in ``apps/edr/connectors/odoo_sources.py``.
+All queries are read-only and ambiguous/denylisted paths can never be issued.
 """
 
 from apps.edr.config import settings
-from apps.edr.connectors.odoo import build_cost_query, build_project_query, read_odoo
+from apps.edr.connectors.odoo import (
+    build_all_source_queries,
+    build_cost_query,
+    build_project_query,
+    read_odoo,
+)
 from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
 from apps.edr.rbac.project_mapping import ProjectMapping
@@ -20,6 +32,76 @@ from apps.edr.retrieval.qdrant_store import EvidenceStore
 
 def _enabled(mapping: dict) -> bool:
     return "odoo" in set(mapping.get("enabled_sources", []))
+
+
+def _extended_enabled(odoo_config: dict) -> bool:
+    """Extended retrieval runs when the global flag OR the mapping opts in."""
+    return bool(
+        settings.odoo_extended_sources_enabled
+        or odoo_config.get("extended_sources")
+    )
+
+
+async def _retrieve_extended_sources(
+    state: DecisionState, odoo_config: dict
+) -> int:
+    """Read every proven, mappable Odoo source and tag the evidence.
+
+    Returns the number of evidence items added. Each source is isolated: one
+    failing/empty source never aborts the others (read-only, graceful). Per
+    source results are recorded in ``state.outputs`` for the report/operator.
+    """
+    specs = build_all_source_queries(
+        odoo_config, include_medium=settings.odoo_extended_include_medium
+    )
+    counts: dict[str, int] = {}
+    statuses: dict[str, str] = {}
+    added = 0
+
+    for spec in specs:
+        key = spec["key"]
+        query = spec["query"]
+        if query is None:
+            statuses[key] = "unmapped"  # project mapping lacks the needed id
+            counts[key] = 0
+            continue
+        model, domain, fields, limit = query
+        payload = {
+            "project_code": state.project_code,
+            "model": model,
+            "domain": domain,
+            "fields": fields,
+            "limit": limit,
+            "allowed_odoo_ids": state.allowed_odoo_ids,
+        }
+        try:
+            evidence = await read_odoo(payload)
+        except Exception as exc:  # one bad source must not drop the rest
+            statuses[key] = f"error: {type(exc).__name__}"
+            counts[key] = 0
+            continue
+
+        for ev in evidence:
+            row = ev.model_dump()
+            meta = row.get("metadata") or {}
+            meta["odoo_source_key"] = key
+            meta["odoo_category"] = spec["category"]
+            meta["odoo_confidence"] = spec["confidence"]
+            row["metadata"] = meta
+            tags = list(row.get("tags") or [])
+            if spec["category"] not in tags:
+                tags.append(spec["category"])
+            row["tags"] = tags
+            state.evidence.append(row)
+
+        counts[key] = len(evidence)
+        statuses[key] = "ok" if evidence else "empty"
+        added += len(evidence)
+
+    state.outputs["odoo_source_counts"] = counts
+    state.outputs["odoo_source_status"] = statuses
+    state.outputs["odoo_extended_total"] = added
+    return added
 
 
 async def run(state: DecisionState) -> DecisionState:
@@ -78,6 +160,18 @@ async def run(state: DecisionState) -> DecisionState:
                 state.outputs["odoo_cost_status"] = f"error: {exc}"
         else:
             state.outputs["odoo_cost_status"] = "no_verified_analytic_account"
+
+        # 3) Extended proven sources (purchase/MR/stock/accounting/payroll/docs).
+        #    Opt-in; read-only; proven link paths only; never weakens financials.
+        if _extended_enabled(odoo_config):
+            try:
+                added += await _retrieve_extended_sources(state, odoo_config)
+            except Exception as exc:
+                state.outputs["odoo_extended_status"] = f"error: {type(exc).__name__}"
+            else:
+                state.outputs["odoo_extended_status"] = "ok"
+        else:
+            state.outputs["odoo_extended_status"] = "disabled"
 
         state.outputs["odoo_status"] = f"ok ({added} items)"
         state.outputs["odoo_financial_available"] = financial_available
