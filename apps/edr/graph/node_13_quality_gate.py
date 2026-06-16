@@ -75,7 +75,7 @@ def _check_financials(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
             continue
         status = node.get("status", "not_available")
         if status == "not_available":
-            continue  # explicitly missing is acceptable
+            continue
         eid = node.get("evidence_id")
         if not eid:
             checks.append(ClaimCheck(
@@ -109,7 +109,6 @@ def _check_financials(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
 
 
 def _check_sources(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
-    """Verify the Sources section lists every cited source."""
     checks: list[ClaimCheck] = []
     sources = report.get("sources", [])
     if not isinstance(sources, list):
@@ -119,41 +118,10 @@ def _check_sources(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
             evidence_ids=[],
             reason="Sources section is missing or not a list.",
         ))
-        return checks
-
-    # Build set of all cited evidence_ids across the report
-    cited: set[str] = set()
-    for section, item in _collect_claims(report):
-        cited.update(item.get("evidence_ids", []))
-    fs = report.get("financial_snapshot") or {}
-    if isinstance(fs, dict):
-        for field in ("budget", "actual_cost"):
-            node = fs.get(field)
-            if isinstance(node, dict):
-                eid = node.get("evidence_id")
-                if eid:
-                    cited.add(eid)
-        variance = fs.get("variance")
-        if isinstance(variance, dict):
-            cited.update(variance.get("evidence_ids", []))
-
-    # Map source_id to source entry
-    source_ids = set()
-    for idx, src in enumerate(sources):
-        if isinstance(src, dict):
-            sid = src.get("source_id")
-            if sid:
-                source_ids.add(sid)
-
-    # We can't strictly map evidence_id to source_id without more metadata,
-    # so we do a loose check: every cited evidence_id should appear in at least
-    # one source reference.  For now we treat this as a warning (needs_review)
-    # rather than a hard failure because the source_id format may differ.
     return checks
 
 
 def _check_conflicts(report: dict) -> list[ClaimCheck]:
-    """Verify detected conflicts appear in the Conflicts section."""
     checks: list[ClaimCheck] = []
     conflicts = report.get("conflicts", [])
     if not isinstance(conflicts, list):
@@ -166,6 +134,88 @@ def _check_conflicts(report: dict) -> list[ClaimCheck]:
     return checks
 
 
+def _check_executive_summary(report: dict, evidence: list[dict]) -> list[ClaimCheck]:
+    """Fail if executive_summary is an explicit empty list when evidence was retrieved.
+
+    An absent key (report produced by a test stub) is not checked.
+    Only an explicitly empty list [] with non-empty evidence is a violation.
+    """
+    checks: list[ClaimCheck] = []
+    es = report.get("executive_summary")
+    if isinstance(es, list) and len(es) == 0 and evidence:
+        checks.append(ClaimCheck(
+            claim_id="executive_summary",
+            verdict="unsupported",
+            evidence_ids=[],
+            reason=(
+                "Executive summary is empty despite retrieved evidence. "
+                "A report with evidence must include a synthesized executive summary."
+            ),
+        ))
+    return checks
+
+
+def _compute_analytical_completeness(report: dict) -> dict:
+    """Compute per-section analytical completeness as metadata.
+
+    This does not affect the QG verdict; it is surfaced as
+    report['analytical_completeness'] and state.outputs['analytical_completeness']
+    so the UI and operators can see exactly which sections were populated.
+    """
+    section_specs: list[tuple[str, str, str]] = [
+        # (key, priority, type)
+        ("executive_summary", "critical", "list"),
+        ("key_findings", "important", "list"),
+        ("delay_analysis", "contextual", "list"),
+        ("root_causes", "contextual", "list"),
+        ("contractual_implications", "contextual", "list"),
+        ("recommended_actions", "important", "list"),
+    ]
+    fs = report.get("financial_snapshot") or {}
+    financial_specs: list[tuple[str, str]] = [
+        ("budget", "critical"),
+        ("actual_cost", "important"),
+    ]
+
+    sections: dict[str, dict] = {}
+    for key, priority, _ in section_specs:
+        data = report.get(key, [])
+        status = "populated" if isinstance(data, list) and data else "empty"
+        sections[key] = {"status": status, "priority": priority}
+
+    for field, priority in financial_specs:
+        node = fs.get(field) if isinstance(fs, dict) else None
+        status = (
+            "available"
+            if isinstance(node, dict) and node.get("status") == "available"
+            else "not_available"
+        )
+        sections[f"financial_{field}"] = {"status": status, "priority": priority}
+
+    critical_empty = [
+        s for s, v in sections.items()
+        if v["priority"] == "critical" and v["status"] in ("empty", "not_available")
+    ]
+    important_empty = [
+        s for s, v in sections.items()
+        if v["priority"] == "important" and v["status"] in ("empty", "not_available")
+    ]
+
+    if critical_empty:
+        overall = "incomplete"
+    elif important_empty:
+        overall = "partial"
+    else:
+        overall = "complete"
+
+    return {
+        "overall": overall,
+        "sections": sections,
+        "critical_empty": critical_empty,
+        "important_empty": important_empty,
+    }
+
+
 async def run(state: DecisionState) -> DecisionState:
     report = state.report_json or {}
     evidence = state.evidence
@@ -175,10 +225,10 @@ async def run(state: DecisionState) -> DecisionState:
     financial_checks = _check_financials(report, evidence_ids)
     source_checks = _check_sources(report, evidence_ids)
     conflict_checks = _check_conflicts(report)
+    summary_checks = _check_executive_summary(report, evidence)
 
-    all_checks = claim_checks + financial_checks + source_checks + conflict_checks
+    all_checks = claim_checks + financial_checks + source_checks + conflict_checks + summary_checks
 
-    # Determine verdict
     unsupported = [c for c in all_checks if c.verdict == "unsupported"]
     needs_review = [c for c in all_checks if c.verdict == "needs_review"]
 
@@ -189,7 +239,7 @@ async def run(state: DecisionState) -> DecisionState:
     else:
         verdict = "passed"
 
-    # If there are no claims at all and no evidence, the report is empty — fail.
+    # No claims at all and no evidence → empty report
     claims = _collect_claims(report)
     if not claims and not evidence:
         verdict = "failed"
@@ -200,10 +250,7 @@ async def run(state: DecisionState) -> DecisionState:
             reason="No evidence retrieved and no claims generated.",
         ))
 
-    # --- Connector coverage: a project report must attempt every enabled
-    # source and must never silently pass when an enabled source erred or was
-    # not attempted. Benign "attempted, zero evidence" is allowed but recorded
-    # as partial completeness so it is visible, not hidden.
+    # Connector coverage: enabled sources must be attempted; errors are not silent passes.
     cov = coverage.summary(state)
     completeness = cov["completeness"]
     coverage_blocking = list(cov["connector_errors"]) + list(cov["not_attempted_sources"])
@@ -214,14 +261,20 @@ async def run(state: DecisionState) -> DecisionState:
             claim_id="connector_coverage",
             verdict="needs_review",
             evidence_ids=[],
-            reason=("Enabled source(s) not satisfied (errored or not attempted): "
-                    f"{coverage_blocking}."),
+            reason=(
+                "Enabled source(s) not satisfied (errored or not attempted): "
+                f"{coverage_blocking}."
+            ),
         ))
 
-    # Update report quality_gate_status
+    # Analytical completeness metadata (does not change verdict)
+    analytical = _compute_analytical_completeness(report)
+
+    # Embed both completeness measures in the report
     if isinstance(report, dict):
         report["quality_gate_status"] = verdict
         report["evidence_completeness"] = completeness
+        report["analytical_completeness"] = analytical["overall"]
 
     qg_result = QualityGateResult(
         request_id=state.request_id,
@@ -232,6 +285,7 @@ async def run(state: DecisionState) -> DecisionState:
     state.outputs["quality_gate"] = verdict
     state.outputs["quality_gate_result"] = qg_result.model_dump()
     state.outputs["evidence_completeness"] = completeness
+    state.outputs["analytical_completeness"] = analytical
     state.outputs["connector_coverage"] = cov["sources"]
     state.outputs["quality_gate unsupported_count"] = len(unsupported)
     state.outputs["quality_gate needs_review_count"] = len(needs_review)

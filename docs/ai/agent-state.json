@@ -1,43 +1,43 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "f63c31171b45308be55dfbdc8bfe9ccdc9687662",
+  "current_commit": "f2aa0073772673e72790db66103021c9461638fe",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
-  "active_phase": "Phase 2D — Slice 7 approval-gated",
+  "active_phase": "Phase 2D \u2014 Slice 7 approval-gated",
   "phase_2c_closeout_date": "2026-05-24",
   "completed_phase_2a_slices": [
-    "Slice 1 — API client foundation and auth wiring",
-    "Slice 2 — Query Composer submit",
-    "Slice 3 — Reports List read-only listing",
-    "Slice 4 — Processing View status shell",
-    "Slice 5 — Report View and Evidence Panel",
-    "Slice 6 — Export Panel",
-    "Slice 7 — Upload Zone",
-    "Slice 8 — Routing integration and role guards",
-    "Slice 9 — Error handling and polish",
-    "Backend additions — read/status/cancel/upload endpoints (closes gap G12)",
+    "Slice 1 \u2014 API client foundation and auth wiring",
+    "Slice 2 \u2014 Query Composer submit",
+    "Slice 3 \u2014 Reports List read-only listing",
+    "Slice 4 \u2014 Processing View status shell",
+    "Slice 5 \u2014 Report View and Evidence Panel",
+    "Slice 6 \u2014 Export Panel",
+    "Slice 7 \u2014 Upload Zone",
+    "Slice 8 \u2014 Routing integration and role guards",
+    "Slice 9 \u2014 Error handling and polish",
+    "Backend additions \u2014 read/status/cancel/upload endpoints (closes gap G12)",
     "E2E unblock harness",
     "Manual QA blocker fixes and closeout"
   ],
   "phase_2a_validation_gate_status": "COMPLETE_U01_U16_PASSED",
   "completed_phase_2b_slices": [
-    "Slice 1 — Plan ratification and admin RBAC base",
-    "Slice 2 — Connectors & APIs (read + probe)",
-    "Slice 3 — System Health + cost monitor",
-    "Slice 4 — Audit Log screen",
-    "Slice 5 — Permissions & Roles (Entra Group Mapping)",
-    "Slice 6 — Project Source Mapping",
-    "Slice 7 — Approval Queue + admin override",
-    "Slice 8 — Dashboard",
-    "Slice 9 — Routing + Admin Nav",
-    "Slice 10 — Closeout + truth reconciliation"
+    "Slice 1 \u2014 Plan ratification and admin RBAC base",
+    "Slice 2 \u2014 Connectors & APIs (read + probe)",
+    "Slice 3 \u2014 System Health + cost monitor",
+    "Slice 4 \u2014 Audit Log screen",
+    "Slice 5 \u2014 Permissions & Roles (Entra Group Mapping)",
+    "Slice 6 \u2014 Project Source Mapping",
+    "Slice 7 \u2014 Approval Queue + admin override",
+    "Slice 8 \u2014 Dashboard",
+    "Slice 9 \u2014 Routing + Admin Nav",
+    "Slice 10 \u2014 Closeout + truth reconciliation"
   ],
   "completed_phase_2c_slices": [
-    "Slice 1 — Browser test harness and first hardening checks",
-    "Slice 2 — Performance and bundle-budget validation",
-    "Slice 3 — Golden-path acceptance automation",
-    "Slice 4 — Cross-browser expansion (Chromium, Firefox, WebKit) and closeout"
+    "Slice 1 \u2014 Browser test harness and first hardening checks",
+    "Slice 2 \u2014 Performance and bundle-budget validation",
+    "Slice 3 \u2014 Golden-path acceptance automation",
+    "Slice 4 \u2014 Cross-browser expansion (Chromium, Firefox, WebKit) and closeout"
   ],
   "phase_2c_test_evidence": {
     "total_playwright_tests": 54,
@@ -55,7 +55,7 @@
     "ci_slice4_commit": "770e62e8ed33bc1f7f86818296566cde652b9228",
     "ci_slice4_failure_cause": "documentation drift only (docs/ai/agent-state.json current_commit 4 commits behind HEAD); frontend CI job was green"
   },
-  "next_allowed_phase": "Run real live UAT on the target environment and capture redacted evidence (docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md) before Phase 2D Slice 7 — Go-Live Gate; Slice 7 remains blocked pending explicit user approval and does not start automatically.",
+  "next_allowed_phase": "Run real live UAT on the target environment and capture redacted evidence (docs/evidence/uat/UAT_RUN_<YYYY-MM-DD>.md) before Phase 2D Slice 7 \u2014 Go-Live Gate; Slice 7 remains blocked pending explicit user approval and does not start automatically.",
   "requires_explicit_user_approval_for_phase_2d": true,
   "phase_2d_slice_1_status": "IMPLEMENTED_NOT_LIVE",
   "phase_2d_slice_2_status": "IMPLEMENTED_NOT_LIVE",
@@ -101,7 +101,7 @@
       "default Postgres/MinIO passwords",
       "real UAT flow not proven",
       "go-live approval not completed",
-      "n8n SharePoint/email fix in repo — operator import required (docker compose exec n8n n8n import:workflow)"
+      "n8n SharePoint/email fix in repo \u2014 operator import required (docker compose exec n8n n8n import:workflow)"
     ]
   },
   "latest_verified_ci": {
@@ -113,16 +113,16 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-15",
-    "context": "Mandatory multi-source project evidence coverage (Odoo+SharePoint+Email). New coverage helper; node_08 adds real account.analytic.line cost lines (no invented budget/actual_cost); node_05 keyword fallback (project name) for generic queries; node_07 reads M365 group mailbox via /groups/{id}/conversations (proven 200); node_12 embeds connector_coverage + financial 'not available' note; node_13 adds evidence_completeness and blocks silent pass on connector error/non-attempt; markdown Connector Coverage section. Live PRJ-001 generic-query run: sharepoint 199 + email 2 + odoo 101, completeness full, gate passed, DeepSeek 4/4 no fallback.",
-    "starting_head": "f63c31171b45308be55dfbdc8bfe9ccdc9687662",
+    "date": "2026-06-16",
+    "context": "Report quality improvements: node_09 title-based dedup (reduces SP duplication); node_12 source-aware rerank (Odoo+email always included), structured evidence sections, deterministic Odoo financial extraction, post-LLM missing_data enforcement; node_13 executive_summary non-empty check + analytical_completeness metadata; goldenset updated to include executive_summary in pass tests; QG now fails on empty executive_summary with evidence.",
+    "starting_head": "f2aa0073772673e72790db66103021c9461638fe",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "graph nodes 05/07/08/12/13, connectors odoo/email, exporters/markdown, graph/coverage.py",
-    "tests": "test_multi_source_coverage.py 14 new; email security tests updated to user-mailbox path; full suite pending",
+    "targeted_backend": "graph nodes 09/12/13, goldenset",
+    "tests": "38 passed (smoke + phase1e + multi_source_coverage)",
     "doc_drift": "clean",
     "ai_context": "clean",
     "ruff": "clean on changed files",
-    "verdict": "MULTI_SOURCE_COVERAGE_IMPLEMENTED_VERIFIED_NOT_LIVE"
+    "verdict": "REPORT_QUALITY_IMPLEMENTED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -168,7 +168,7 @@
     "evidence_file": "docs/evidence/uat/UAT_RUN_2026-06-12.md",
     "evidence_dir": "docs/evidence/uat/",
     "status": "LIVE_UAT_PARTIAL_NOT_LIVE",
-    "reason": "UAT_RUN_2026-06-12.md exists; SharePoint n8n webhook returning HTTP 500 due to missing credentials.httpHeaderAuth on Receive Request node — fix in repo, third import + possible n8n restart required; email descoped for go-live (group-mailbox design decision)",
+    "reason": "UAT_RUN_2026-06-12.md exists; SharePoint n8n webhook returning HTTP 500 due to missing credentials.httpHeaderAuth on Receive Request node \u2014 fix in repo, third import + possible n8n restart required; email descoped for go-live (group-mailbox design decision)",
     "required_operator_prerequisites": [
       "real Entra tenant configured (ENTRA_CLIENT_ID + ENTRA_TENANT_ID)",
       "report-capable user real Entra access token",
