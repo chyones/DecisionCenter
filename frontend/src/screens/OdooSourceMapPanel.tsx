@@ -3,20 +3,27 @@
  * searches inside Odoo for a project.
  *
  * Presentational: all data arrives via props so it can be unit-tested without
- * the API. The container (AdminSourceMappingScreen) fetches the generic map and
- * runs the read-only scan.
+ * the API. The container (AdminSourceMappingScreen) starts a batched scan
+ * session, polls it, and feeds each live snapshot back in as `data`.
  *
  * Shows, per project: Odoo project id, analytic account id, project source
  * status, enabled categories, and every registry source (name, model, link
- * path, key fields, gap type, confidence, last scan status, record count,
- * warnings). Denylisted/ambiguous paths and gaps are surfaced explicitly.
+ * path, key fields, gap type, confidence, live scan status, count/total,
+ * duration, error, warnings). While a scan runs it shows source-by-source
+ * progress and partial results; failed sources can be retried without
+ * re-scanning everything.
  */
 import { Button, StatusPill } from '../components';
 import type { OdooSourceMapResponse } from '../api';
 import {
   confidencePill,
+  durationLabel,
+  failedSourceCount,
   groupSourcesByDisplayGroup,
+  isScanActive,
   recordCountLabel,
+  scanProgressLabel,
+  scanProgressPercent,
   scanStatusPill,
 } from './odooSourceMap';
 
@@ -24,10 +31,19 @@ export interface OdooSourceMapPanelProps {
   data: OdooSourceMapResponse | null;
   loading: boolean;
   scanning: boolean;
+  retrying?: boolean;
   onScan: () => void;
+  onRetryFailed?: () => void;
 }
 
-export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSourceMapPanelProps) {
+export function OdooSourceMapPanel({
+  data,
+  loading,
+  scanning,
+  retrying = false,
+  onScan,
+  onRetryFailed,
+}: OdooSourceMapPanelProps) {
   if (loading && !data) {
     return <p className="text-body text-text-muted">Loading Odoo source map…</p>;
   }
@@ -36,6 +52,10 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
   }
 
   const groups = groupSourcesByDisplayGroup(data);
+  const active = isScanActive(data);
+  const failedCount = failedSourceCount(data);
+  const progress = data.scan_progress;
+  const pct = scanProgressPercent(progress);
 
   return (
     <div className="space-y-6" data-testid="odoo-source-map">
@@ -74,15 +94,64 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
             <span>{data.sources.length} sources</span>
           </div>
         </div>
-        <Button
-          variant="secondary"
-          onClick={onScan}
-          isLoading={scanning}
-          disabled={!data.odoo_enabled}
-        >
-          Scan Odoo Sources
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {failedCount > 0 && onRetryFailed && (
+            <Button
+              variant="secondary"
+              onClick={onRetryFailed}
+              isLoading={retrying}
+              disabled={active || scanning}
+            >
+              Retry failed ({failedCount})
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            onClick={onScan}
+            isLoading={scanning || active}
+            disabled={!data.odoo_enabled}
+          >
+            {active ? 'Scanning…' : 'Scan Odoo Sources'}
+          </Button>
+        </div>
       </div>
+
+      {/* Live scan progress */}
+      {data.scan_session_id && progress && (
+        <div
+          className="rounded-sm border border-border bg-surface-base p-3"
+          data-testid="scan-progress"
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-label font-medium text-text-secondary">
+              Scan progress
+            </span>
+            <span className="font-mono text-caption text-text-muted">
+              {scanProgressLabel(progress)}
+              {data.scan_count_supported === false ? ' · counts capped' : ''}
+              {data.scan_count_supported ? ' · exact totals' : ''}
+            </span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded bg-surface-overlay">
+            <div
+              className={`h-full transition-all ${
+                data.scan_state === 'failed'
+                  ? 'bg-error'
+                  : data.scan_state === 'partial'
+                    ? 'bg-warning'
+                    : 'bg-accent'
+              }`}
+              style={{ width: `${pct}%` }}
+              data-testid="scan-progress-bar"
+            />
+          </div>
+          <p className="mt-1 text-caption text-text-muted">
+            {active
+              ? 'Scanning in safe batches — this view updates as each source completes.'
+              : `Scan ${data.scan_state ?? 'finished'}.`}
+          </p>
+        </div>
+      )}
 
       {/* Generic notices */}
       <div className="rounded-sm border border-border bg-surface-base p-3">
@@ -94,8 +163,7 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
         </ul>
         {data.last_scanned_at && (
           <p className="mt-2 text-caption text-text-muted">
-            Last scan: {new Date(data.last_scanned_at).toLocaleString()} (counts capped by the
-            deployed Odoo read workflow)
+            Last scan: {new Date(data.last_scanned_at).toLocaleString()}
           </p>
         )}
       </div>
@@ -141,6 +209,7 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
               {g.sources.map((s) => {
                 const scan = scanStatusPill(s.last_scan_status);
                 const conf = confidencePill(s.confidence);
+                const dur = durationLabel(s.duration_ms);
                 return (
                   <div key={`${g.group}:${s.key}`} className="px-3 py-2" data-testid={`source-row-${s.key}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -159,13 +228,23 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
                           label={s.mappable ? `→ ${s.link_value}` : 'not mappable'}
                         />
                         <StatusPill status={scan.status} label={scan.label} />
-                        <span className="rounded bg-surface-overlay px-2 py-0.5 font-mono text-caption text-text-secondary">
+                        <span
+                          className="rounded bg-surface-overlay px-2 py-0.5 font-mono text-caption text-text-secondary"
+                          data-testid={`source-count-${s.key}`}
+                        >
                           {recordCountLabel(s)} records
                         </span>
+                        {dur && (
+                          <span className="font-mono text-caption text-text-muted">{dur}</span>
+                        )}
                       </div>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-muted">
                       <span className="rounded bg-surface-overlay px-1.5 py-0.5">{s.gap_type}</span>
+                      {s.complete && s.total != null && (
+                        <span className="text-success">exact total: {s.total}</span>
+                      )}
+                      {s.pages_done > 0 && <span>{s.pages_done} batch(es)</span>}
                       <span>
                         Key fields:{' '}
                         <span className="font-mono text-text-secondary">
@@ -174,6 +253,11 @@ export function OdooSourceMapPanel({ data, loading, scanning, onScan }: OdooSour
                         </span>
                       </span>
                     </div>
+                    {s.error && (
+                      <p className="mt-1 text-caption text-error" data-testid={`source-error-${s.key}`}>
+                        ✕ {s.error}
+                      </p>
+                    )}
                     {s.warning && (
                       <p className="mt-1 text-caption text-warning">⚠ {s.warning}</p>
                     )}

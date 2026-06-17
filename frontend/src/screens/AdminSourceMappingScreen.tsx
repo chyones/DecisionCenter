@@ -7,7 +7,7 @@
  *
  * Locked spec: `docs/design/UI_CONTRACT_v1.md` §3.4.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button, ConfirmDialog, StatusPill, useToasts } from '../components';
 import { useApi } from '../api';
@@ -816,6 +816,9 @@ export function AdminSourceMappingScreen() {
   const [sourceMap, setSourceMap] = useState<OdooSourceMapResponse | null>(null);
   const [sourceMapLoading, setSourceMapLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const selectedCodeRef = useRef<string | null>(null);
+  selectedCodeRef.current = selectedCode;
 
   const fetchMappings = useCallback(async () => {
     setLoading(true);
@@ -1122,21 +1125,85 @@ export function AdminSourceMappingScreen() {
     }
   }, [activeTab, selectedCode, isAdding, fetchSourceMap]);
 
+  // Poll a running scan session until it reaches a terminal state. Each poll
+  // returns the full source-map snapshot so the panel updates source-by-source.
+  const pollScan = useCallback(
+    async (code: string, sessionId: string): Promise<OdooSourceMapResponse | null> => {
+      const deadline = Date.now() + 15 * 60 * 1000; // safety cap; covers a slow full scan (22 sources x per-source timeout)
+      let last: OdooSourceMapResponse | null = null;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (selectedCodeRef.current !== code) return last; // user switched project
+        let snap: OdooSourceMapResponse;
+        try {
+          snap = await api.get<OdooSourceMapResponse>(
+            `/admin/source-mappings/${encodeURIComponent(code)}/odoo-source-map/scan/${encodeURIComponent(sessionId)}`,
+          );
+        } catch {
+          continue; // transient poll error — keep trying until the deadline
+        }
+        if (selectedCodeRef.current !== code) return last;
+        last = snap;
+        setSourceMap(snap);
+        if (snap.scan_state !== 'pending' && snap.scan_state !== 'running') return snap;
+      }
+      return last;
+    },
+    [api],
+  );
+
+  const finishToast = (snap: OdooSourceMapResponse | null) => {
+    const state = snap?.scan_state;
+    if (state === 'completed') {
+      addToast('success', 'Odoo source scan complete.', 'Source Map');
+    } else if (state === 'partial') {
+      addToast('warning', 'Scan finished with partial/failed sources — retry available.', 'Source Map');
+    } else if (state === 'failed') {
+      addToast('error', 'Scan failed for all sources.', 'Source Map');
+    }
+  };
+
   const handleScan = async () => {
     if (!selectedCode) return;
+    const code = selectedCode;
     setScanning(true);
     try {
-      const data = await api.post<OdooSourceMapResponse>(
-        `/admin/source-mappings/${encodeURIComponent(selectedCode)}/odoo-source-map/scan`,
+      const started = await api.post<OdooSourceMapResponse>(
+        `/admin/source-mappings/${encodeURIComponent(code)}/odoo-source-map/scan`,
         {},
       );
-      setSourceMap(data);
-      addToast('success', 'Odoo source scan complete.', 'Source Map');
+      setSourceMap(started);
+      if (!started.odoo_enabled || !started.scan_session_id) {
+        return; // nothing to scan (Odoo disabled) — map already rendered
+      }
+      const final = await pollScan(code, started.scan_session_id);
+      finishToast(final ?? started);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Odoo source scan failed';
       addToast('error', message, 'Source Map');
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    if (!selectedCode || !sourceMap?.scan_session_id) return;
+    const code = selectedCode;
+    const sessionId = sourceMap.scan_session_id;
+    setRetrying(true);
+    try {
+      const started = await api.post<OdooSourceMapResponse>(
+        `/admin/source-mappings/${encodeURIComponent(code)}/odoo-source-map/scan/${encodeURIComponent(sessionId)}/retry?mode=failed`,
+        {},
+      );
+      setSourceMap(started);
+      const final = await pollScan(code, started.scan_session_id ?? sessionId);
+      finishToast(final ?? started);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Retry failed';
+      addToast('error', message, 'Source Map');
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -1263,7 +1330,9 @@ export function AdminSourceMappingScreen() {
                   data={sourceMap}
                   loading={sourceMapLoading}
                   scanning={scanning}
+                  retrying={retrying}
                   onScan={() => void handleScan()}
+                  onRetryFailed={() => void handleRetryFailed()}
                 />
               ) : (
               <>

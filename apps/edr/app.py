@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import os
@@ -2538,10 +2539,9 @@ async def disable_source_mapping(
 
 from apps.edr.admin.odoo_source_map import (  # noqa: E402
     OdooSourceMapResponse,
-    OdooSourceScanResult,
     build_source_map,
-    scan_source_counts,
 )
+from apps.edr.admin import odoo_scan_session as scan_engine  # noqa: E402
 
 
 async def _load_odoo_map_context(code: str) -> tuple[dict, str, bool, list[str]]:
@@ -2563,6 +2563,80 @@ async def _load_odoo_map_context(code: str) -> tuple[dict, str, bool, list[str]]
     return odoo_config, detail.mapping_status, odoo_enabled, allowed_odoo_ids
 
 
+# ---------------------------------------------------------------------------
+# Batched scan session plumbing. The scan runs in a background asyncio task so
+# the POST endpoint returns instantly and never holds the reverse proxy open
+# while Odoo is queried (the old single-request scan could exceed the 120s proxy
+# timeout). Progress is flushed to Postgres after every source so the UI can poll
+# live, and a failed/partial source can be retried or resumed.
+# ---------------------------------------------------------------------------
+
+
+def _scan_cfg() -> "scan_engine.ScanConfig":
+    return scan_engine.ScanConfig.from_settings(settings)
+
+
+async def _persist_scan(snapshot: dict) -> None:
+    pg = get_postgres_store()
+    await pg.save_scan_session(
+        session_id=snapshot["session_id"],
+        project_code=snapshot["project_code"],
+        state=snapshot["state"],
+        snapshot=snapshot,
+    )
+
+
+#: Strong references to in-flight scan tasks. asyncio keeps only *weak*
+#: references to tasks created with create_task, so without holding a strong
+#: reference a long-running background scan can be garbage-collected mid-run.
+_SCAN_TASKS: set[asyncio.Task] = set()
+
+
+def _launch_scan_task(
+    session: "scan_engine.ScanSession",
+    *,
+    odoo_config: dict,
+    allowed_odoo_ids: list[str],
+    sources: list,
+) -> None:
+    """Register the session and run it to completion in a background task."""
+    scan_engine.register(session)
+
+    async def _runner() -> None:
+        try:
+            await scan_engine.run_scan_session(
+                session,
+                odoo_config=odoo_config,
+                allowed_odoo_ids=allowed_odoo_ids,
+                sources=sources,
+                cfg=_scan_cfg(),
+                on_progress=_persist_scan,
+            )
+        except Exception:  # noqa: BLE001 — never let a scan crash the worker
+            session.state = scan_engine.S_FAILED
+            session.summary = "Scan task crashed unexpectedly."
+            try:
+                await _persist_scan(session.snapshot())
+            except Exception:  # noqa: BLE001
+                pass
+
+    task = asyncio.create_task(_runner())
+    _SCAN_TASKS.add(task)
+    task.add_done_callback(_SCAN_TASKS.discard)
+
+
+async def _resolve_scan_snapshot(code: str, session_id: str) -> dict | None:
+    """Live in-process snapshot if present, else the durable Postgres copy."""
+    live = scan_engine.get_active(session_id)
+    if live is not None and live.project_code == code:
+        return live.snapshot()
+    pg = get_postgres_store()
+    snap = await pg.get_scan_session(session_id)
+    if snap is None or snap.get("project_code") != code:
+        return None
+    return snap
+
+
 @app.get("/admin/source-mappings/{code}/odoo-source-map")
 async def get_odoo_source_map(
     code: str,
@@ -2572,17 +2646,29 @@ async def get_odoo_source_map(
 
     Shows every registry source (where DecisionCenter will search in Odoo), the
     proven project-link path, key fields, gap type, confidence, warnings, and the
-    denylisted/ambiguous paths that are never queried. Record counts are absent
-    until a scan is run.
+    denylisted/ambiguous paths that are never queried. Merges the latest scan for
+    this project (live session if one is running, else the last saved snapshot) so
+    counts/statuses persist across reloads.
     """
     _require_admin(claims)
     odoo_config, mapping_status, odoo_enabled, _ = await _load_odoo_map_context(code)
+    session: dict | None = None
+    live = scan_engine.active_running_for_project(code)
+    if live is not None:
+        session = live.snapshot()
+    else:
+        pg = get_postgres_store()
+        try:
+            session = await pg.get_latest_scan_session(code)
+        except Exception:  # noqa: BLE001 — map must render even if history read fails
+            session = None
     return build_source_map(
         project_code=code,
         odoo_config=odoo_config,
         mapping_status=mapping_status,
         odoo_enabled=odoo_enabled,
         extended_enabled=settings.odoo_extended_sources_enabled,
+        session=session,
     )
 
 
@@ -2591,10 +2677,14 @@ async def scan_odoo_source_map(
     code: str,
     claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
 ) -> OdooSourceMapResponse:
-    """Admin-only: run a read-only per-source record-count scan and return the map.
+    """Admin-only: START a read-only batched scan session and return immediately.
 
-    Reuses the same proven, denylist-safe queries the connector issues. No writes.
-    Counts are capped by the deployed Odoo read workflow's search_read limit.
+    The scan does NOT run inline — it is processed source-by-source in small
+    batches by a background session (see apps.edr.admin.odoo_scan_session). The
+    response carries the initial snapshot (all sources ``pending``) plus the
+    ``scan_session_id`` the UI then polls via GET …/scan/{session_id}. This makes
+    a scan impossible to time out at the reverse proxy regardless of source count.
+    No writes to Odoo, ever; queries are project-scoped + denylist-safe.
     """
     claims = _require_admin(claims)
     odoo_config, mapping_status, odoo_enabled, allowed_odoo_ids = (
@@ -2606,22 +2696,135 @@ async def scan_odoo_source_map(
         event_type="admin.odoo_source_map_scan",
         actor_hash=actor_hash,
         project_code=code,
-        detail="read_only_count_scan",
+        detail="batched_read_only_scan_started",
     )
-    scan: OdooSourceScanResult | None = None
+
+    session_snapshot: dict | None = None
     if odoo_enabled:
-        scan = await scan_source_counts(
-            project_code=code,
-            odoo_config=odoo_config,
-            allowed_odoo_ids=allowed_odoo_ids,
-        )
+        existing = scan_engine.active_running_for_project(code)
+        if existing is not None:
+            session_snapshot = existing.snapshot()  # idempotent: reuse running scan
+        else:
+            session = scan_engine.init_full_session(code)
+            await _persist_scan(session.snapshot())
+            _launch_scan_task(
+                session,
+                odoo_config=odoo_config,
+                allowed_odoo_ids=allowed_odoo_ids,
+                sources=scan_engine.sources_for_keys(scan_engine.all_source_keys()),
+            )
+            session_snapshot = session.snapshot()
+
     return build_source_map(
         project_code=code,
         odoo_config=odoo_config,
         mapping_status=mapping_status,
         odoo_enabled=odoo_enabled,
         extended_enabled=settings.odoo_extended_sources_enabled,
-        scan=scan,
+        session=session_snapshot,
+    )
+
+
+@app.get("/admin/source-mappings/{code}/odoo-source-map/scan/{session_id}")
+async def get_odoo_scan_status(
+    code: str,
+    session_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+) -> OdooSourceMapResponse:
+    """Admin-only: poll live progress + partial results of a scan session."""
+    _require_admin(claims)
+    odoo_config, mapping_status, odoo_enabled, _ = await _load_odoo_map_context(code)
+    snapshot = await _resolve_scan_snapshot(code, session_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    return build_source_map(
+        project_code=code,
+        odoo_config=odoo_config,
+        mapping_status=mapping_status,
+        odoo_enabled=odoo_enabled,
+        extended_enabled=settings.odoo_extended_sources_enabled,
+        session=snapshot,
+    )
+
+
+@app.post("/admin/source-mappings/{code}/odoo-source-map/scan/{session_id}/retry")
+async def retry_odoo_scan(
+    code: str,
+    session_id: str,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    mode: str = "failed",
+) -> OdooSourceMapResponse:
+    """Admin-only: re-run only failed sources (``mode=failed``) or resume all
+    incomplete sources (``mode=incomplete``) within an existing scan session.
+
+    Already-completed sources are left untouched — the scan never restarts from
+    zero. Returns immediately; poll the same session id for progress.
+    """
+    claims = _require_admin(claims)
+    odoo_config, mapping_status, odoo_enabled, allowed_odoo_ids = (
+        await _load_odoo_map_context(code)
+    )
+
+    live = scan_engine.get_active(session_id)
+    if (
+        live is not None
+        and live.project_code == code
+        and live.state in (scan_engine.S_PENDING, scan_engine.S_RUNNING)
+    ):
+        return build_source_map(
+            project_code=code, odoo_config=odoo_config, mapping_status=mapping_status,
+            odoo_enabled=odoo_enabled,
+            extended_enabled=settings.odoo_extended_sources_enabled,
+            session=live.snapshot(),
+        )
+
+    if live is not None and live.project_code == code:
+        session = live
+    else:
+        snap = await _resolve_scan_snapshot(code, session_id)
+        if snap is None:
+            raise HTTPException(status_code=404, detail="Scan session not found")
+        session = scan_engine.ScanSession.from_snapshot(snap)
+
+    keys = scan_engine.select_retry_keys(session, mode=mode)
+    if not keys:
+        return build_source_map(
+            project_code=code, odoo_config=odoo_config, mapping_status=mapping_status,
+            odoo_enabled=odoo_enabled,
+            extended_enabled=settings.odoo_extended_sources_enabled,
+            session=session.snapshot(),
+        )
+
+    for k in keys:
+        prev = session.sources.get(k)
+        session.sources[k] = scan_engine.SourceScanState(
+            key=k,
+            status=scan_engine.PENDING,
+            pages_done=prev.pages_done if prev else 0,
+            next_offset=prev.next_offset if prev else 0,
+        )
+    session.state = scan_engine.S_RUNNING
+
+    pg = get_postgres_store()
+    actor_hash = hash_user_id(claims.user_id) if claims else ""
+    await pg.insert_admin_event(
+        event_type="admin.odoo_source_map_scan",
+        actor_hash=actor_hash,
+        project_code=code,
+        detail=f"scan_retry:{mode}:{len(keys)}",
+    )
+
+    _launch_scan_task(
+        session,
+        odoo_config=odoo_config,
+        allowed_odoo_ids=allowed_odoo_ids,
+        sources=scan_engine.sources_for_keys(keys),
+    )
+    return build_source_map(
+        project_code=code, odoo_config=odoo_config, mapping_status=mapping_status,
+        odoo_enabled=odoo_enabled,
+        extended_enabled=settings.odoo_extended_sources_enabled,
+        session=session.snapshot(),
     )
 
 
