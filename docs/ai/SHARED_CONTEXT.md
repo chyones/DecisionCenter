@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `662cf469e4e190856531c64f19cd3509336cfc7d` (PR #5 branch validation anchor; GitHub `main` base is `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40`, and the report timeout guard remains stacked after the CI config coverage branch)
+- Current verified commit (anchor): `792dda930e63260c803082cfe810ced893734760` (timeout guard branch validation anchor; GitHub `main` base is PR #5 merge `41e01b62a267fd871369d3a399eef85993b289b5`)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -24,8 +24,8 @@
 Supersedes the git-hygiene note below. The Odoo Source Map automatic batched deep
 scan was merged to `main` via PR #3 (merge `6f3d310`) with pre-merge review fixes
 (strong ref to the background scan task; UI poll window 5m -> 15m). The repo is now
-on `main` at PR #4 merge HEAD `85675b9`, and two stacked fix branches are active:
-`fix/ci-odoo-config-coverage` first, then `fix/report-sync-timeout-guard`. Read
+on `main` at PR #5 merge HEAD `41e01b6`; the remaining fix branch is
+`fix/report-sync-timeout-guard`. Read
 generation / AI providers / SharePoint / Email / the generic Odoo registry were
 NOT changed by the batched scan. Production remains `NOT_LIVE`; operator deploy (rebuild
 app + frontend, redeploy n8n `odoo_read` for exact `search_count`) is still
@@ -37,7 +37,15 @@ mailbox allowlist cases. They now use synthetic project code
 `PRJ-MAILBOX-ONLY`, so node_07_email exercises the explicit mailbox allowlist /
 RBAC path instead of PRJ-001's real group-mailbox mapping path. Validation:
 config coverage `51/51`, goldenset `64/64`, and the exact previously failing
-pytest `test_runner_threshold_exit_non_zero` passed. No deployment occurred.
+pytest `test_runner_threshold_exit_non_zero` passed. PR #5 merged to `main` as
+`41e01b6`; no deployment occurred.
+
+The rebased `fix/report-sync-timeout-guard` branch wraps synchronous
+`/reports/staging` workflow execution with `asyncio.wait_for` and returns a
+controlled HTTP 504 at 90 seconds, below the typical 100-second edge/proxy
+read-timeout budget. Local validation: timeout guard pytest `2 passed`, smoke
+`2 passed`, config coverage `51/51`, Ruff, compileall, doc drift, AI context,
+and `git diff --check` clean. Production remains `NOT_LIVE`.
 
 ## 2026-06-17 Git Hygiene Context
 
