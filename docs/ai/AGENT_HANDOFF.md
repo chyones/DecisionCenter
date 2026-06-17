@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `662cf469e4e190856531c64f19cd3509336cfc7d` (PR #5 branch validation anchor; GitHub `main` base is `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40`, latest prior CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `792dda930e63260c803082cfe810ced893734760` (timeout guard branch validation anchor; GitHub `main` base is PR #5 merge `41e01b62a267fd871369d3a399eef85993b289b5`, latest prior CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -24,8 +24,8 @@ This supersedes the git-hygiene note below. The Odoo Source Map **automatic
 batched deep scan** was completed and **merged to `main` via PR #3** (merge commit
 `6f3d310`); pre-merge review fixes were applied (strong reference to the background
 scan `asyncio.Task`; UI progress poll window widened 5m -> 15m). The repo later
-advanced to PR #4 merge HEAD `85675b9`, and two stacked fix branches are active:
-`fix/ci-odoo-config-coverage` first, then `fix/report-sync-timeout-guard`.
+advanced to PR #5 merge HEAD `41e01b6`; the remaining fix branch is
+`fix/report-sync-timeout-guard`.
 
 - What the feature does: per-source isolated scan; `search_count` for exact
   totals; bounded offset-paged sample (never a full-table read); strict
@@ -46,7 +46,14 @@ advanced to PR #4 merge HEAD `85675b9`, and two stacked fix branches are active:
   synthetic `PRJ-MAILBOX-ONLY` so they verify explicit allowlist/RBAC behavior,
   not PRJ-001's real group-mailbox mapping path. Local validation: config
   coverage `51/51`, goldenset `64/64`, and the exact previously failing pytest
-  `test_runner_threshold_exit_non_zero` passed. No deployment occurred.
+  `test_runner_threshold_exit_non_zero` passed. PR #5 merged to `main` as
+  `41e01b6`; no deployment occurred.
+- The rebased `fix/report-sync-timeout-guard` branch wraps synchronous
+  `/reports/staging` workflow execution with `asyncio.wait_for` and returns a
+  controlled HTTP 504 at 90 seconds, below the typical 100-second edge/proxy
+  read-timeout budget. Local validation: timeout guard pytest `2 passed`, smoke
+  `2 passed`, config coverage `51/51`, Ruff, compileall, doc drift, AI context,
+  and `git diff --check` clean. Production remains `NOT_LIVE`.
 
 ## 2026-06-17 Git Hygiene And Governance Anchor Refresh
 

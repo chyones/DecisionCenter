@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "662cf469e4e190856531c64f19cd3509336cfc7d",
+  "current_commit": "792dda930e63260c803082cfe810ced893734760",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -131,9 +131,9 @@
   },
   "latest_local_validation": {
     "date": "2026-06-17",
-    "context": "CI config coverage fix prepared on branch fix/ci-odoo-config-coverage after main advanced to PR #4 merge commit 85675b9. PR #5 initially exposed a separate goldenset scope regression: mailbox allowlist cases used PRJ-001, whose real project mapping takes the group-mailbox path before the explicit allowlist path. The goldenset mailbox-only cases now use synthetic PRJ-MAILBOX-ONLY so they validate the intended allowlist/RBAC behavior. The Odoo Source Map batched scan is merged to main but not deployed; the report-timeout branch remains stacked after this config-coverage branch. No deploy was performed in this validation step.",
-    "head": "662cf469e4e190856531c64f19cd3509336cfc7d",
-    "branches": "origin/main plus fix/ci-odoo-config-coverage and fix/report-sync-timeout-guard",
+    "context": "PR #5 (fix/ci-odoo-config-coverage) merged to main as 41e01b6 after GitHub Actions run 27687951906 passed backend evaluation and frontend UI tests. The report-timeout branch was rebased onto that main and now contains only the synchronous /reports/staging timeout guard: run_workflow is wrapped in asyncio.wait_for and returns a controlled HTTP 504 at 90s, below the typical 100s edge/proxy read-timeout budget. No deploy was performed in this validation step.",
+    "head": "792dda930e63260c803082cfe810ced893734760",
+    "branches": "origin/main plus rebased fix/report-sync-timeout-guard",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -142,10 +142,10 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "config coverage main failure reproduced; branch config coverage 51/51; ruff clean; compileall clean; doc_drift clean; ai_context clean; smoke 2 passed; hardening integration 21 passed; frontend lint/build/vitest passed (22 tests); goldenset eval 64/64 passed; exact CI-failing pytest test_runner_threshold_exit_non_zero passed (1 passed, 50 warnings)",
+    "tests": "timeout guard pytest 2 passed; smoke 2 passed; config coverage 51/51; ruff clean; compileall clean; doc_drift clean; ai_context clean; git diff --check clean",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "verdict": "CI_CONFIG_COVERAGE_PR_READY_AFTER_GOLDENSET_SCOPE_FIX_NOT_LIVE"
+    "verdict": "REPORT_SYNC_TIMEOUT_GUARD_READY_FOR_PR_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -184,7 +184,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Push the updated PR #5 fix/ci-odoo-config-coverage branch, wait for GitHub Actions, then merge it before rebasing and landing fix/report-sync-timeout-guard. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
+  "next_action": "Push the rebased fix/report-sync-timeout-guard branch, open/refresh its PR, wait for GitHub Actions, then merge it before any operator deploy. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,

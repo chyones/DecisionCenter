@@ -592,6 +592,14 @@ def _derive_status(outputs: dict[str, object]) -> str:
     return "in_progress"
 
 
+# Synchronous report generation runs the whole pipeline (retrieval -> rerank ->
+# AI draft -> export of every requested format) inside this request. Bound it
+# below the reverse-proxy/edge read timeout so a slow run returns a controlled
+# 504 JSON instead of an opaque proxy timeout. Cloudflare's default edge budget
+# is roughly 100s, so keep this comfortably below that ceiling.
+REPORT_SYNC_TIMEOUT_S = 90.0
+
+
 @app.post("/reports/staging")
 async def stage_report(
     request: ReportRequest,
@@ -629,7 +637,20 @@ async def stage_report(
         output_formats=list(request.output_formats),
     )
     try:
-        result = await run_workflow(state)
+        result = await asyncio.wait_for(
+            run_workflow(state), timeout=REPORT_SYNC_TIMEOUT_S
+        )
+    except asyncio.TimeoutError:
+        # Controlled error returned BEFORE the proxy/edge timeout fires.
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Report generation exceeded the synchronous request budget "
+                f"({REPORT_SYNC_TIMEOUT_S:g}s). Retry with a narrower question or "
+                "fewer output formats; very large multi-source reports may need "
+                "the async generation path."
+            ),
+        )
     except RbacDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
 
