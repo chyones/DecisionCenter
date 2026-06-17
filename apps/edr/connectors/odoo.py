@@ -124,10 +124,42 @@ def build_all_source_queries(
 
 
 async def read_odoo(payload: dict[str, Any]) -> list[EvidenceObject]:
-    """Call the n8n Odoo read webhook and validate the response."""
+    """Call the n8n Odoo read webhook and validate the response.
+
+    The payload may carry an optional ``offset`` (for paged sampling). Workflows
+    that predate offset support simply ignore it and return the first page —
+    callers that need true pagination detect that via :func:`count_odoo`.
+    """
     client = N8NWebhookClient(settings.n8n_base_url, settings.n8n_webhook_token)
     response = await client.post(settings.odoo_read_webhook, payload)
     return validate_evidence_payload(response)
+
+
+async def count_odoo(payload: dict[str, Any]) -> int | None:
+    """Return an exact ``search_count`` total for a scoped query, or ``None``.
+
+    Sends ``operation: "count"`` to the Odoo read webhook. The enhanced workflow
+    answers ``{"count": N}``; an older workflow ignores the flag and answers with
+    ``{"evidence": [...]}`` — in that case we return ``None`` so the caller knows
+    exact totals are unavailable and must fall back to a capped single page.
+
+    Read-only and project-scoped: ``payload["domain"]`` is the same scoped leaf
+    the read uses; count never widens the filter.
+    """
+    client = N8NWebhookClient(settings.n8n_base_url, settings.n8n_webhook_token)
+    body = {**payload, "operation": "count"}
+    response = await client.post(settings.odoo_read_webhook, body)
+    if isinstance(response, dict):
+        if response.get("error"):
+            raise RuntimeError(str(response["error"]))
+        value = response.get("count")
+        if isinstance(value, bool):  # guard: bool is an int subclass
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+            return int(value)
+    return None  # legacy workflow / no count → totals unavailable
 
 
 __all__ = [
@@ -140,4 +172,5 @@ __all__ = [
     "build_source_query",
     "build_all_source_queries",
     "read_odoo",
+    "count_odoo",
 ]

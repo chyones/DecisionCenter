@@ -160,6 +160,24 @@ class PostgresStore:
                 ADD COLUMN IF NOT EXISTS qg_failure_reason TEXT
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS odoo_scan_sessions (
+                    session_id   TEXT PRIMARY KEY,
+                    project_code TEXT NOT NULL,
+                    state        TEXT NOT NULL,
+                    snapshot     JSONB NOT NULL,
+                    created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS odoo_scan_sessions_project_idx
+                    ON odoo_scan_sessions (project_code, updated_at DESC)
+                """
+            )
             await self._seed_source_mappings(conn)
             await self._migrate_project_names(conn)
             await self._migrate_verified_prj_source_mappings(conn)
@@ -1219,6 +1237,72 @@ class PostgresStore:
                 detail,
             )
             return int(row["id"]) if row else 0
+
+    async def save_scan_session(
+        self,
+        *,
+        session_id: str,
+        project_code: str,
+        state: str,
+        snapshot: dict,
+    ) -> None:
+        """Persist a batched Odoo Source Map scan snapshot (idempotent upsert).
+
+        Durable copy of the in-process session so the UI can poll/resume/retry
+        even across a worker restart. Read-only with respect to Odoo.
+        """
+        import json as _json
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO odoo_scan_sessions (session_id, project_code, state, snapshot)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (session_id) DO UPDATE SET
+                    project_code = EXCLUDED.project_code,
+                    state        = EXCLUDED.state,
+                    snapshot     = EXCLUDED.snapshot,
+                    updated_at   = NOW()
+                """,
+                session_id,
+                project_code,
+                state,
+                _json.dumps(snapshot),
+            )
+
+    async def get_scan_session(self, session_id: str) -> dict[str, Any] | None:
+        import json as _json
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT snapshot FROM odoo_scan_sessions WHERE session_id = $1",
+                session_id,
+            )
+            if row is None:
+                return None
+            snap = row["snapshot"]
+            return snap if isinstance(snap, dict) else _json.loads(snap)
+
+    async def get_latest_scan_session(self, project_code: str) -> dict[str, Any] | None:
+        import json as _json
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT snapshot FROM odoo_scan_sessions
+                WHERE project_code = $1
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                project_code,
+            )
+            if row is None:
+                return None
+            snap = row["snapshot"]
+            return snap if isinstance(snap, dict) else _json.loads(snap)
 
 
 _postgres_store: PostgresStore | None = None

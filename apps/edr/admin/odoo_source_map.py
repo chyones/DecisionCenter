@@ -8,9 +8,10 @@ This module never hardcodes project ids. PRJ-001 / PRJ-002 are audit validation
 samples only and carry no special logic here — the same code path runs for any
 project that has an Odoo project id and an analytic account id.
 
-The optional scan is strictly read-only: it reuses the same proven, denylist-safe
-queries the connector issues and reports per-source record counts. It is fully
-independent of report generation.
+The optional scan is strictly read-only. The live, batched, resumable scan is
+driven by :mod:`apps.edr.admin.odoo_scan_session`; this module owns the response
+models and merges a scan snapshot (or the legacy single-shot result) onto the
+generic map. It is fully independent of report generation.
 """
 
 from __future__ import annotations
@@ -56,6 +57,13 @@ class OdooSourceMapEntry(BaseModel):
     last_scan_status: str
     record_count: int | None
     capped: bool
+    # Rich batched-scan fields (None/0 until a session scan touches the source):
+    total: int | None = None
+    complete: bool = False
+    error: str | None = None
+    duration_ms: int | None = None
+    scanned_at: str | None = None
+    pages_done: int = 0
 
 
 class OdooSourceMapResponse(BaseModel):
@@ -74,9 +82,16 @@ class OdooSourceMapResponse(BaseModel):
     missing_sources: list[str]
     notes: list[str]
     last_scanned_at: str | None
+    # Live batched-scan session metadata (None when no scan session is involved):
+    scan_session_id: str | None = None
+    scan_state: str | None = None
+    scan_progress: dict[str, int] | None = None
+    scan_count_supported: bool | None = None
 
 
 class OdooSourceScanResult(BaseModel):
+    """Legacy single-shot scan result (kept for the synchronous helper + tests)."""
+
     model_config = {"extra": "forbid"}
     project_code: str
     scanned_at: str
@@ -110,9 +125,10 @@ GENERIC_NOTES: tuple[str, ...] = (
     "source mapping.",
     "PRJ-001 and PRJ-002 are audit validation samples only — they are not fixed "
     "logic. Any project with an Odoo project id and an analytic account id works.",
-    "Record counts appear only after a read-only scan and are capped by the "
-    "deployed Odoo read workflow (search_read limit). True totals require the "
-    "structured workflow and an uncapped count.",
+    "Counts appear after a read-only scan. The scan runs automatically in small "
+    "batches: exact totals via Odoo search_count where the workflow supports it, "
+    "otherwise a capped single page. Heavy sources are sampled in small pages — "
+    "a whole table is never read in one call.",
     "Denylisted/ambiguous Odoo paths are never queried.",
     "Not a go-live signal.",
 )
@@ -123,6 +139,57 @@ GENERIC_NOTES: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
+def _entry_scan_fields(
+    key: str,
+    *,
+    scan: OdooSourceScanResult | None,
+    session: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Resolve the per-source scan fields from a session snapshot or legacy scan."""
+    if session is not None:
+        st = (session.get("sources") or {}).get(key)
+        if not st:
+            return {
+                "last_scan_status": "not_scanned", "record_count": None,
+                "capped": False, "total": None, "complete": False,
+                "error": None, "duration_ms": None, "scanned_at": None,
+                "pages_done": 0,
+            }
+        return {
+            "last_scan_status": st.get("status", "not_scanned"),
+            "record_count": st.get("count"),
+            "capped": bool(st.get("capped", False)),
+            "total": st.get("total"),
+            "complete": bool(st.get("complete", False)),
+            "error": st.get("error"),
+            "duration_ms": st.get("duration_ms"),
+            "scanned_at": st.get("last_scanned_at"),
+            "pages_done": int(st.get("pages_done", 0) or 0),
+        }
+
+    if scan is not None:
+        record_count = scan.counts.get(key)
+        return {
+            "last_scan_status": scan.statuses.get(key, "not_scanned"),
+            "record_count": record_count,
+            "capped": record_count is not None and record_count >= scan.capped_at,
+            "total": None,
+            "complete": record_count is not None and not (
+                record_count >= scan.capped_at
+            ),
+            "error": None,
+            "duration_ms": None,
+            "scanned_at": scan.scanned_at,
+            "pages_done": 0,
+        }
+
+    return {
+        "last_scan_status": "not_scanned", "record_count": None, "capped": False,
+        "total": None, "complete": False, "error": None, "duration_ms": None,
+        "scanned_at": None, "pages_done": 0,
+    }
+
+
 def build_source_map(
     *,
     project_code: str,
@@ -131,8 +198,13 @@ def build_source_map(
     odoo_enabled: bool,
     extended_enabled: bool,
     scan: OdooSourceScanResult | None = None,
+    session: dict[str, Any] | None = None,
 ) -> OdooSourceMapResponse:
-    """Compose the per-project Source Map from the generic registry + runtime ids."""
+    """Compose the per-project Source Map from the generic registry + runtime ids.
+
+    ``session`` is a batched-scan snapshot (preferred). ``scan`` is the legacy
+    single-shot result, kept for backwards compatibility.
+    """
     project_id = _numeric(odoo_config.get("project_external_id"))
     analytic_id = _numeric(odoo_config.get("analytic_account_id"))
 
@@ -141,21 +213,15 @@ def build_source_map(
     enabled_categories: set[str] = set()
     missing_sources: list[str] = []
 
-    counts = scan.counts if scan else {}
-    statuses = scan.statuses if scan else {}
-
     for g in generic:
         scope = g["link_scope"]
         link_value = _link_value_for(scope, project_id, analytic_id)
         mappable = bool(odoo_enabled and link_value is not None)
 
-        warnings = g["warning"]
         if not mappable:
             missing_sources.append(g["key"])
 
-        record_count = counts.get(g["key"])
-        last_scan_status = statuses.get(g["key"], "not_scanned")
-        capped = record_count is not None and record_count >= 100
+        sf = _entry_scan_fields(g["key"], scan=scan, session=session)
 
         if mappable:
             for grp in g["groups"]:
@@ -175,12 +241,10 @@ def build_source_map(
                 gap_type=g["gap_type"],
                 aggregation=g["aggregation"],
                 handled_inline=g["handled_inline"],
-                warning=warnings,
+                warning=g["warning"],
                 mappable=mappable,
                 link_value=link_value,
-                last_scan_status=last_scan_status,
-                record_count=record_count,
-                capped=capped,
+                **sf,
             )
         )
 
@@ -199,6 +263,19 @@ def build_source_map(
 
     ordered_categories = [g for g in DISPLAY_GROUPS if g in enabled_categories]
 
+    if session is not None:
+        last_scanned_at = session.get("scanned_at") or session.get("updated_at")
+        scan_session_id = session.get("session_id")
+        scan_state = session.get("state")
+        scan_progress = session.get("progress")
+        scan_count_supported = session.get("count_supported")
+    else:
+        last_scanned_at = scan.scanned_at if scan else None
+        scan_session_id = None
+        scan_state = None
+        scan_progress = None
+        scan_count_supported = None
+
     return OdooSourceMapResponse(
         project_code=project_code,
         generic=True,
@@ -213,12 +290,20 @@ def build_source_map(
         denylisted_paths=denylisted_path_strings(),
         missing_sources=missing_sources,
         notes=notes,
-        last_scanned_at=scan.scanned_at if scan else None,
+        last_scanned_at=last_scanned_at,
+        scan_session_id=scan_session_id,
+        scan_state=scan_state,
+        scan_progress=scan_progress,
+        scan_count_supported=scan_count_supported,
     )
 
 
 # ---------------------------------------------------------------------------
-# Scan (read-only, live)
+# Scan (read-only, live) — legacy single-shot helper.
+#
+# The production path is the batched session engine in odoo_scan_session.py.
+# This synchronous helper is retained for callers/tests that want a one-shot,
+# best-effort count of every source in a single await.
 # ---------------------------------------------------------------------------
 
 

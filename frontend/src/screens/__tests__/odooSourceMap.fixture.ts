@@ -37,6 +37,12 @@ function entry(over: Partial<OdooSourceMapEntry>): OdooSourceMapEntry {
     last_scan_status: 'not_scanned',
     record_count: null,
     capped: false,
+    total: null,
+    complete: false,
+    error: null,
+    duration_ms: null,
+    scanned_at: null,
+    pages_done: 0,
     ...over,
   };
 }
@@ -88,6 +94,10 @@ export function makeSourceMap(over: Partial<OdooSourceMapResponse> = {}): OdooSo
       'PRJ-001 and PRJ-002 are audit validation samples only — they are not fixed logic.',
     ],
     last_scanned_at: null,
+    scan_session_id: null,
+    scan_state: null,
+    scan_progress: null,
+    scan_count_supported: null,
     ...over,
   };
 }

@@ -65,6 +65,17 @@ class Settings(BaseSettings):
     odoo_extended_sources_enabled: bool = False
     odoo_extended_include_medium: bool = True
 
+    # Odoo Source Map batched scan (admin-only, read-only). These bound the
+    # automatic per-source/per-batch scanning so a scan can never hit the
+    # reverse-proxy timeout: the scan runs in a background session and each
+    # webcall is strictly time-boxed. Tuned conservatively; safe to raise.
+    odoo_scan_page_size: int = Field(default=100, ge=1, le=100)
+    odoo_scan_sample_target: int = Field(default=300, ge=1, le=5000)
+    odoo_scan_max_pages_per_source: int = Field(default=50, ge=1, le=1000)
+    odoo_scan_batch_timeout_s: float = Field(default=20.0, gt=0, le=120)
+    odoo_scan_source_timeout_s: float = Field(default=45.0, gt=0, le=300)
+    odoo_scan_poll_hint_ms: int = Field(default=1500, ge=250, le=30000)
+
     # Observability and budget
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None

@@ -763,6 +763,20 @@ export interface EmailGroupEnrichmentResponse {
 // Odoo Source Map (visibility) — GET/POST /admin/source-mappings/{code}/odoo-source-map
 // ---------------------------------------------------------------------------
 
+export interface OdooScanProgress {
+  total: number;
+  done: number;
+  pending: number;
+  running: number;
+  completed: number;
+  partial: number;
+  capped: number;
+  empty: number;
+  failed: number;
+  timeout: number;
+  unmapped: number;
+}
+
 export interface OdooSourceMapEntry {
   key: string;
   group: string;
@@ -782,6 +796,13 @@ export interface OdooSourceMapEntry {
   last_scan_status: string;
   record_count: number | null;
   capped: boolean;
+  // Rich batched-scan fields (defaults until a session scan touches the source):
+  total: number | null;
+  complete: boolean;
+  error: string | null;
+  duration_ms: number | null;
+  scanned_at: string | null;
+  pages_done: number;
 }
 
 export interface OdooSourceMapResponse {
@@ -799,4 +820,9 @@ export interface OdooSourceMapResponse {
   missing_sources: string[];
   notes: string[];
   last_scanned_at: string | null;
+  // Live batched-scan session metadata (null when no scan session is involved):
+  scan_session_id: string | null;
+  scan_state: string | null;
+  scan_progress: OdooScanProgress | null;
+  scan_count_supported: boolean | null;
 }

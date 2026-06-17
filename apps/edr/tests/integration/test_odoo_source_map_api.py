@@ -260,47 +260,76 @@ def test_endpoints_require_admin(role: Role) -> None:
 
 
 @pytest.mark.anyio
-async def test_scan_endpoint_runs_scan_and_audits() -> None:
-    from apps.edr.app import scan_odoo_source_map
+async def test_scan_endpoint_starts_session_and_audits() -> None:
+    """POST /scan now STARTS a background batched session and returns at once.
+
+    The response carries a scan_session_id and the initial (all-pending) snapshot
+    — it must NOT block while Odoo is queried (that is what avoids the 120s proxy
+    timeout). The actual scanning happens in a background task we stub here.
+    """
+    from apps.edr import app as appmod
 
     claims = JWTClaims(user_id="admin", role="admin")
     pg = _mock_pg(_fake_row())
+    pg.save_scan_session = AsyncMock(return_value=None)
 
-    async def fake_read(payload: dict) -> list:
-        return list(range(7))
+    launched: dict = {}
+
+    def fake_launch(session, **kwargs):
+        launched["session"] = session
+        launched["kwargs"] = kwargs  # do NOT run the real background task
 
     with (
         patch("apps.edr.app.get_postgres_store", return_value=pg),
-        patch("apps.edr.admin.odoo_source_map.read_odoo", fake_read),
+        patch("apps.edr.app._launch_scan_task", fake_launch),
     ):
-        resp = await scan_odoo_source_map(ARB_CODE, claims)
+        resp = await appmod.scan_odoo_source_map(ARB_CODE, claims)
 
-    # Audit event emitted before the read-only scan.
-    pg.insert_admin_event.assert_awaited()
-    assert resp.last_scanned_at is not None
-    by_key = {s.key: s for s in resp.sources}
-    assert by_key["material_requests"].record_count == 7
+    pg.insert_admin_event.assert_awaited()           # audit event emitted
+    assert resp.scan_session_id is not None          # session started
+    assert resp.scan_state in ("pending", "running")
+    assert launched.get("session") is not None        # background task launched
+    # Returned immediately: every source is queued, none has a count yet.
+    assert all(s.record_count is None for s in resp.sources)
+    assert all(
+        s.last_scan_status in ("pending", "running") for s in resp.sources
+    )
 
 
 @pytest.mark.anyio
 async def test_scan_endpoint_skips_scan_when_odoo_disabled() -> None:
-    from apps.edr.app import scan_odoo_source_map
+    from apps.edr import app as appmod
 
     claims = JWTClaims(user_id="admin", role="admin")
     pg = _mock_pg(_fake_row(enabled=["sharepoint"]))  # odoo not enabled
+    pg.save_scan_session = AsyncMock(return_value=None)
 
-    called = {"read": False}
+    launched = {"called": False}
 
-    async def fake_read(payload: dict) -> list:
-        called["read"] = True
-        return []
+    def fake_launch(session, **kwargs):
+        launched["called"] = True
 
     with (
         patch("apps.edr.app.get_postgres_store", return_value=pg),
-        patch("apps.edr.admin.odoo_source_map.read_odoo", fake_read),
+        patch("apps.edr.app._launch_scan_task", fake_launch),
     ):
-        resp = await scan_odoo_source_map(ARB_CODE, claims)
+        resp = await appmod.scan_odoo_source_map(ARB_CODE, claims)
 
-    assert called["read"] is False  # no live calls when odoo disabled
+    assert launched["called"] is False     # no scan session when odoo disabled
+    assert resp.scan_session_id is None
     assert resp.last_scanned_at is None
     assert all(s.mappable is False for s in resp.sources)
+
+
+@pytest.mark.anyio
+async def test_scan_status_endpoint_404_for_unknown_session() -> None:
+    from apps.edr import app as appmod
+
+    claims = JWTClaims(user_id="admin", role="admin")
+    pg = _mock_pg(_fake_row())
+    pg.get_scan_session = AsyncMock(return_value=None)
+
+    with patch("apps.edr.app.get_postgres_store", return_value=pg):
+        with pytest.raises(HTTPException) as exc:
+            await appmod.get_odoo_scan_status(ARB_CODE, "no-such-session", claims)
+    assert exc.value.status_code == 404
