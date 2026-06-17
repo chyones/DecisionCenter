@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "744b98e5993739fb63ac1c9cdbd62c4ae4d4e507",
+  "current_commit": "7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -81,10 +81,27 @@
   "requires_explicit_user_approval_for_phase_2c": false,
   "latest_report": "docs/execution/PHASE_2D_SLICE_6_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
+  "latest_feature": {
+    "name": "Odoo Source Map — automatic batched deep scan",
+    "status": "MERGED_TO_MAIN_NOT_LIVE",
+    "merged_pr": "#3 feat/odoo-source-map-batched-scan -> main",
+    "merge_commit": "6f3d3101f65a8e1a9bc78c5de790692647ac5b59",
+    "summary": "Replaced the single synchronous Odoo Source Map scan (could exceed the 120s reverse-proxy timeout) with a background, resumable, batched scan session: per-source isolation, search_count for exact totals, bounded offset-paged sample (never a full-table read), strict per-batch/per-source timeouts, retry/resume, and DB-persisted progress polled by the UI.",
+    "evidence": [
+      "docs/evidence/uat/ODOO_SCAN_BATCHED_2026-06-17.md",
+      "docs/evidence/uat/ODOO_SCAN_BATCHED_PHASE_CLOSE_2026-06-17.md"
+    ],
+    "review_fixes": [
+      "hold a strong reference to the background scan asyncio.Task (asyncio keeps only weak refs) — apps/edr/app.py _SCAN_TASKS",
+      "widen the UI live-progress poll window 5m -> 15m for slow degraded scans"
+    ],
+    "not_changed": "report generation, AI providers, SharePoint, Email, generic Odoo source registry",
+    "operator_steps_pending": "rebuild app + frontend dist together; redeploy the n8n odoo_read workflow to enable exact search_count totals (until deployed the scan reports capped counts but still has no 120s timeout). Do NOT rebuild frontend alone — it would call endpoints the running app lacks."
+  },
   "latest_read_only_audit": {
     "date": "2026-06-10",
     "audited_head": "2c5a6d11eb34106b392e283df9e40d5e67cf2694",
-    "report_file": "FULL_SYSTEM_AUDIT_REPORT.md",
+    "report_file": "FULL_SYSTEM_AUDIT_REPORT.md (archived, now git-ignored at repo root)",
     "overall_rating": "not re-rated",
     "final_recommendation": "GOVERNANCE_BLOCKED_NOT_LIVE",
     "go_live_ready": false,
@@ -114,15 +131,20 @@
   },
   "latest_local_validation": {
     "date": "2026-06-17",
-    "context": "Git hygiene and governance anchor refresh on feat/odoo-source-map-batched-scan: root-level untracked audit/report artifacts were moved intact to /root/DecisionCenter-untracked-archive/2026-06-17; no code, deployment, runtime, or production-state changes.",
-    "starting_head": "744b98e5993739fb63ac1c9cdbd62c4ae4d4e507",
+    "context": "Odoo Source Map automatic batched deep scan completed and MERGED to main via PR #3 (merge commit 6f3d310). Pre-merge review fixes applied. Repo then consolidated for clean continuity: the docs(ai) git-hygiene context was preserved into main, .gitignore now ignores root-level generated reports (Audit.md, FULL_SYSTEM_AUDIT_REPORT.md, executive-decision-report.md), and ALL feature branches were deleted (local + remote) leaving only main. A fresh local-only working branch work/next was created off main for the next task. No deploy was performed; the running app is still the pre-merge build.",
+    "head": "7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321",
+    "branches": "only main remains on local and origin",
+    "recovery_shas": {
+      "odoo-source-map-batched-scan": "136522d",
+      "connector-status-truth": "ba27557",
+      "owner-operator-model": "24f32c4",
+      "entra-auth-version-agnostic": "d49e51b",
+      "pre_cleanup_main_pr3_merge": "6f3d310"
+    },
     "production_status": "NOT_LIVE",
-    "targeted_docs": "docs/ai governance context only",
-    "tests": "check_doc_drift, check_ai_context, agent_postflight --allow-no-evidence",
-    "doc_drift": "clean",
-    "ai_context": "clean",
-    "postflight": "clean",
-    "verdict": "GIT_HYGIENE_REFRESH_NOT_LIVE"
+    "tests": "odoo scan/session + source-map API: 36 passed; ruff clean; frontend tsc + eslint clean, vitest 22 passed; full non-live suite 824 passed / 1 pre-existing offline-DNS failure (test_evaluation::test_runner_threshold_exit_non_zero, unrelated)",
+    "doc_drift": "refreshed in this session",
+    "verdict": "ODOO_SOURCE_MAP_BATCHED_SCAN_MERGED_REPO_CONSOLIDATED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -161,7 +183,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "See GO_LIVE_RUNBOOK_2026-06-15.md. Remaining for go-live: (1) deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token (scripts/validate_entra_auth.py) + approve/publish/download; (2) sign SLICE7_GO_LIVE_READINESS approval block. SharePoint+Odoo evidence + DeepSeek (no fallback) all verified live this session. Email/mail + Odoo financial/cost descoped. Production remains NOT_LIVE.",
+  "next_action": "Repo is consolidated to main (HEAD 7f9f2e6); only main remains; a local work/next branch is ready for the next task. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,

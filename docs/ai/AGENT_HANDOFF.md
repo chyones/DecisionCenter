@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `744b98e5993739fb63ac1c9cdbd62c4ae4d4e507` (verified starting HEAD of the 2026-06-17 git hygiene session; latest CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321` (main; after the Odoo Source Map batched-scan merge + repo consolidation; latest CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,32 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged + Repo Consolidated To Main
+
+This supersedes the git-hygiene note below. The Odoo Source Map **automatic
+batched deep scan** was completed and **merged to `main` via PR #3** (merge commit
+`6f3d310`); pre-merge review fixes were applied (strong reference to the background
+scan `asyncio.Task`; UI progress poll window widened 5m -> 15m). The repo was then
+**consolidated to only `main`** (HEAD `7f9f2e6`): the `docs(ai)` context was
+preserved into `main`, `.gitignore` now ignores root-level generated reports, and
+**all feature branches were deleted** (local + remote). A fresh local-only
+`work/next` branch was created off `main` for the next task.
+
+- What the feature does: per-source isolated scan; `search_count` for exact
+  totals; bounded offset-paged sample (never a full-table read); strict
+  per-batch/per-source timeouts; retry/resume; DB-persisted progress polled by the
+  UI — so the scan can no longer hit the 120s reverse-proxy timeout.
+- Not changed: report generation, AI providers, SharePoint, Email, the generic
+  Odoo source registry.
+- Evidence: `docs/evidence/uat/ODOO_SCAN_BATCHED_2026-06-17.md` and
+  `docs/evidence/uat/ODOO_SCAN_BATCHED_PHASE_CLOSE_2026-06-17.md`.
+- **Production: NOT_LIVE.** Operator deploy still pending — rebuild `app` + frontend
+  `dist` together, then redeploy the n8n `odoo_read` workflow to unlock exact
+  `search_count` totals (until then the scan reports capped counts, still no
+  timeout). Do NOT rebuild the frontend alone.
+- Recovery SHAs (deleted branches): odoo `136522d`, connector-truth `ba27557`,
+  owner-operator `24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
 
 ## 2026-06-17 Git Hygiene And Governance Anchor Refresh
 

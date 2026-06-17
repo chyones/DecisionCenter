@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `744b98e5993739fb63ac1c9cdbd62c4ae4d4e507`
+- Current verified commit (anchor): `7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321` (main; Odoo Source Map batched scan merged + repo consolidated)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,20 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged; Only main Remains
+
+Supersedes the git-hygiene note below. The Odoo Source Map automatic batched deep
+scan was merged to `main` via PR #3 (merge `6f3d310`) with pre-merge review fixes
+(strong ref to the background scan task; UI poll window 5m -> 15m). The repo is now
+consolidated to **only `main`** at HEAD `7f9f2e6`: docs(ai) preserved into main,
+`.gitignore` ignores root-level generated reports, all feature branches deleted
+(local + remote), and a local-only `work/next` branch exists off main for the next
+task. Read generation / AI providers / SharePoint / Email / the generic Odoo
+registry were NOT changed. Production remains `NOT_LIVE`; operator deploy (rebuild
+app + frontend, redeploy n8n `odoo_read` for exact `search_count`) is still
+pending. Recovery SHAs: odoo `136522d`, connector-truth `ba27557`, owner-operator
+`24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
 
 ## 2026-06-17 Git Hygiene Context
 
