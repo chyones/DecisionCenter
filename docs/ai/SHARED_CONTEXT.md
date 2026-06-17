@@ -32,6 +32,13 @@ app + frontend, redeploy n8n `odoo_read` for exact `search_count`) is still
 pending. Recovery SHAs: odoo `136522d`, connector-truth `ba27557`, owner-operator
 `24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
 
+PR #5 (`fix/ci-odoo-config-coverage`) also corrected goldenset scope for three
+mailbox allowlist cases. They now use synthetic project code
+`PRJ-MAILBOX-ONLY`, so node_07_email exercises the explicit mailbox allowlist /
+RBAC path instead of PRJ-001's real group-mailbox mapping path. Validation:
+config coverage `51/51`, goldenset `64/64`, and the exact previously failing
+pytest `test_runner_threshold_exit_non_zero` passed. No deployment occurred.
+
 ## 2026-06-17 Git Hygiene Context
 
 Repo hygiene was performed on branch `feat/odoo-source-map-batched-scan`.
