@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40` (GitHub `main` HEAD after PR #4 continuity-anchor merge; stacked fix branches exist for CI config coverage and report timeout guard)
+- Current verified commit (anchor): `662cf469e4e190856531c64f19cd3509336cfc7d` (PR #5 branch validation anchor; GitHub `main` base is `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40`, and the report timeout guard remains stacked after the CI config coverage branch)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24

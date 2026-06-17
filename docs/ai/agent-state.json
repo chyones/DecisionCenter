@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "85675b9702aa2fdcbe5d38fa3aefc20d618ccd40",
+  "current_commit": "662cf469e4e190856531c64f19cd3509336cfc7d",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -132,7 +132,7 @@
   "latest_local_validation": {
     "date": "2026-06-17",
     "context": "CI config coverage fix prepared on branch fix/ci-odoo-config-coverage after main advanced to PR #4 merge commit 85675b9. PR #5 initially exposed a separate goldenset scope regression: mailbox allowlist cases used PRJ-001, whose real project mapping takes the group-mailbox path before the explicit allowlist path. The goldenset mailbox-only cases now use synthetic PRJ-MAILBOX-ONLY so they validate the intended allowlist/RBAC behavior. The Odoo Source Map batched scan is merged to main but not deployed; the report-timeout branch remains stacked after this config-coverage branch. No deploy was performed in this validation step.",
-    "head": "85675b9702aa2fdcbe5d38fa3aefc20d618ccd40",
+    "head": "662cf469e4e190856531c64f19cd3509336cfc7d",
     "branches": "origin/main plus fix/ci-odoo-config-coverage and fix/report-sync-timeout-guard",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
