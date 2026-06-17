@@ -29,3 +29,8 @@ docker-compose.override.yml
 backups/
 *.sql
 *.tar.gz
+
+# Generated audit / decision reports (operator/AI output, never committed)
+/Audit.md
+/FULL_SYSTEM_AUDIT_REPORT.md
+/executive-decision-report.md

@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `2c5a6d11eb34106b392e283df9e40d5e67cf2694` (verified starting HEAD of the 2026-06-11 remediation session; latest CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `744b98e5993739fb63ac1c9cdbd62c4ae4d4e507` (verified starting HEAD of the 2026-06-17 git hygiene session; latest CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,22 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-06-17 Git Hygiene And Governance Anchor Refresh
+
+This session cleaned repo state without deploying and without touching `main`.
+On branch `feat/odoo-source-map-batched-scan`, `git pull --ff-only` was already
+up to date and the branch was even with
+`origin/feat/odoo-source-map-batched-scan` at starting HEAD
+`744b98e5993739fb63ac1c9cdbd62c4ae4d4e507`. `origin/main` was one commit ahead
+and was intentionally not merged or rebased.
+
+The root-level untracked files `Audit.md`, `FULL_SYSTEM_AUDIT_REPORT.md`, and
+`executive-decision-report.md` were inspected and moved intact to
+`/root/DecisionCenter-untracked-archive/2026-06-17/`; nothing was deleted.
+Only docs/ai governance context was refreshed. No code, `.env`, deployment,
+runtime, n8n, or production-state change occurred. Production remains
+`NOT_LIVE`; Slice 7 remains approval-gated.
 
 ## 2026-06-11 Entra Revalidation Non-Root Runtime Fix
 

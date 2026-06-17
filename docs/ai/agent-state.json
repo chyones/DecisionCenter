@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "2cafa4d44c8911027ca40516ec8c8b1a08236eb1",
+  "current_commit": "744b98e5993739fb63ac1c9cdbd62c4ae4d4e507",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -113,16 +113,16 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-16",
-    "context": "Report quality improvements: node_09 title-based dedup (reduces SP duplication); node_12 source-aware rerank (Odoo+email always included), structured evidence sections, deterministic Odoo financial extraction, post-LLM missing_data enforcement; node_13 executive_summary non-empty check + analytical_completeness metadata; goldenset updated to include executive_summary in pass tests; QG now fails on empty executive_summary with evidence.",
-    "starting_head": "f2aa0073772673e72790db66103021c9461638fe",
+    "date": "2026-06-17",
+    "context": "Git hygiene and governance anchor refresh on feat/odoo-source-map-batched-scan: root-level untracked audit/report artifacts were moved intact to /root/DecisionCenter-untracked-archive/2026-06-17; no code, deployment, runtime, or production-state changes.",
+    "starting_head": "744b98e5993739fb63ac1c9cdbd62c4ae4d4e507",
     "production_status": "NOT_LIVE",
-    "targeted_backend": "graph nodes 09/12/13, goldenset",
-    "tests": "38 passed (smoke + phase1e + multi_source_coverage)",
+    "targeted_docs": "docs/ai governance context only",
+    "tests": "check_doc_drift, check_ai_context, agent_postflight --allow-no-evidence",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "ruff": "clean on changed files",
-    "verdict": "REPORT_QUALITY_IMPLEMENTED_NOT_LIVE"
+    "postflight": "clean",
+    "verdict": "GIT_HYGIENE_REFRESH_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",

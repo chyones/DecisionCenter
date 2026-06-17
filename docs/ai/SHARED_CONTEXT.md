@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `2c5a6d11eb34106b392e283df9e40d5e67cf2694`
+- Current verified commit (anchor): `744b98e5993739fb63ac1c9cdbd62c4ae4d4e507`
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,21 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-17 Git Hygiene Context
+
+Repo hygiene was performed on branch `feat/odoo-source-map-batched-scan`.
+The branch was clean after `git pull --ff-only` and even with
+`origin/feat/odoo-source-map-batched-scan` at starting HEAD
+`744b98e5993739fb63ac1c9cdbd62c4ae4d4e507`; `origin/main` was one commit
+ahead and was not merged, rebased, or touched.
+
+Root-level untracked artifacts were inspected and moved intact, not deleted, to
+`/root/DecisionCenter-untracked-archive/2026-06-17/`:
+`Audit.md`, `FULL_SYSTEM_AUDIT_REPORT.md`, and
+`executive-decision-report.md`. No `.env`, code, deployment, runtime, or
+production-state changes were made. Production remains `NOT_LIVE`, and Phase
+2D Slice 7 remains blocked pending explicit user approval.
 
 ## 2026-06-11 Audit Remediation Context
 
