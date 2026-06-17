@@ -2586,6 +2586,12 @@ async def _persist_scan(snapshot: dict) -> None:
     )
 
 
+#: Strong references to in-flight scan tasks. asyncio keeps only *weak*
+#: references to tasks created with create_task, so without holding a strong
+#: reference a long-running background scan can be garbage-collected mid-run.
+_SCAN_TASKS: set[asyncio.Task] = set()
+
+
 def _launch_scan_task(
     session: "scan_engine.ScanSession",
     *,
@@ -2614,7 +2620,9 @@ def _launch_scan_task(
             except Exception:  # noqa: BLE001
                 pass
 
-    asyncio.create_task(_runner())
+    task = asyncio.create_task(_runner())
+    _SCAN_TASKS.add(task)
+    task.add_done_callback(_SCAN_TASKS.discard)
 
 
 async def _resolve_scan_snapshot(code: str, session_id: str) -> dict | None:

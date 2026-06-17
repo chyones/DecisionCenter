@@ -322,6 +322,30 @@ async def test_scan_endpoint_skips_scan_when_odoo_disabled() -> None:
 
 
 @pytest.mark.anyio
+async def test_launch_scan_task_holds_strong_reference_until_done() -> None:
+    """The background scan task must be strongly referenced so asyncio (which keeps
+    only weak refs to tasks) cannot garbage-collect a long scan mid-run."""
+    import asyncio
+
+    from apps.edr import app as appmod
+
+    sess = appmod.scan_engine.init_full_session("ZED-REF")
+
+    async def fake_run(session, **kwargs):  # no DB, no network
+        await asyncio.sleep(0)
+        return session
+
+    with patch.object(appmod.scan_engine, "run_scan_session", fake_run):
+        appmod._launch_scan_task(sess, odoo_config={}, allowed_odoo_ids=[], sources=[])
+        assert len(appmod._SCAN_TASKS) == 1            # strong ref held while running
+        for _ in range(20):
+            if not appmod._SCAN_TASKS:
+                break
+            await asyncio.sleep(0.01)
+    assert len(appmod._SCAN_TASKS) == 0                # discarded once complete
+
+
+@pytest.mark.anyio
 async def test_scan_status_endpoint_404_for_unknown_session() -> None:
     from apps.edr import app as appmod
 

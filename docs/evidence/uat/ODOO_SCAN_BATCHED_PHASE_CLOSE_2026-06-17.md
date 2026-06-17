@@ -51,6 +51,25 @@ never queried; no PRJ-001/PRJ-002 hardcoding. Read-only with respect to Odoo.
 Report generation, AI providers, SharePoint, Email, and the generic Odoo source
 registry were **not** changed.
 
+## Review blockers fixed (pre-merge review)
+1. **Background scan task could be garbage-collected mid-run.** `asyncio.create_task`
+   was called without retaining the returned task; asyncio keeps only *weak*
+   references to tasks, so a long scan could be cancelled by GC. Fixed in
+   `apps/edr/app.py`: tasks are held in a module-level `_SCAN_TASKS` set and
+   removed via `add_done_callback`. Locked by
+   `test_launch_scan_task_holds_strong_reference_until_done`.
+2. **UI poll could give up before a realistic slow scan finished.** The poll
+   deadline in `AdminSourceMappingScreen.tsx` was 5 min; a full 22-source scan at
+   production timeouts can run longer in degraded (no-`search_count`) mode. Raised
+   to 15 min (server-side scan + persistence are unaffected; reload still merges
+   the latest snapshot regardless).
+
+Reviewed and found acceptable (no change needed): the n8n read response now
+carries a `meta` field, but `validate_evidence_payload` ignores unknown keys, so
+the shared read path used by report generation is unaffected; all Odoo queries
+remain project/analytic-scoped and denylist-checked; the `odoo_scan_sessions`
+table is created idempotently.
+
 ## Tests run (this phase close)
 - Backend engine `test_odoo_scan_session.py` — **14 passed**.
 - Source-map API `test_odoo_source_map_api.py` — **passed** (async-start contract,

@@ -1129,7 +1129,7 @@ export function AdminSourceMappingScreen() {
   // returns the full source-map snapshot so the panel updates source-by-source.
   const pollScan = useCallback(
     async (code: string, sessionId: string): Promise<OdooSourceMapResponse | null> => {
-      const deadline = Date.now() + 5 * 60 * 1000; // safety cap; scans finish well before
+      const deadline = Date.now() + 15 * 60 * 1000; // safety cap; covers a slow full scan (22 sources x per-source timeout)
       let last: OdooSourceMapResponse | null = null;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
