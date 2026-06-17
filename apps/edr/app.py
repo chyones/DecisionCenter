@@ -595,9 +595,9 @@ def _derive_status(outputs: dict[str, object]) -> str:
 # Synchronous report generation runs the whole pipeline (retrieval -> rerank ->
 # AI draft -> export of every requested format) inside this request. Bound it
 # below the reverse-proxy/edge read timeout so a slow run returns a controlled
-# 504 JSON instead of an opaque proxy timeout. NOTE: a Cloudflare-fronted deploy
-# has a ~100s edge default (524) — lower this if 524s are seen in front of the app.
-REPORT_SYNC_TIMEOUT_S = 110.0
+# 504 JSON instead of an opaque proxy timeout. Cloudflare's default edge budget
+# is roughly 100s, so keep this comfortably below that ceiling.
+REPORT_SYNC_TIMEOUT_S = 90.0
 
 
 @app.post("/reports/staging")
