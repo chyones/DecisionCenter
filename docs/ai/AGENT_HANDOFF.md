@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321` (main; after the Odoo Source Map batched-scan merge + repo consolidation; latest CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `a6a8226b497cce36952b5cad9d0edbd82eb2d354` (GitHub `main` HEAD; Odoo Source Map batched-scan merge + repo consolidation + continuity-doc refresh; latest CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
