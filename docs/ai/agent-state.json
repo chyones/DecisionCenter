@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "a6a8226b497cce36952b5cad9d0edbd82eb2d354",
+  "current_commit": "662cf469e4e190856531c64f19cd3509336cfc7d",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -131,9 +131,9 @@
   },
   "latest_local_validation": {
     "date": "2026-06-17",
-    "context": "Odoo Source Map automatic batched deep scan completed and MERGED to main via PR #3 (merge commit 6f3d310). Pre-merge review fixes applied. Repo then consolidated for clean continuity: the docs(ai) git-hygiene context was preserved into main, .gitignore now ignores root-level generated reports (Audit.md, FULL_SYSTEM_AUDIT_REPORT.md, executive-decision-report.md), and ALL feature branches were deleted (local + remote) leaving only main. A fresh local-only working branch work/next was created off main for the next task. No deploy was performed; the running app is still the pre-merge build.",
-    "head": "a6a8226b497cce36952b5cad9d0edbd82eb2d354",
-    "branches": "only main remains on local and origin",
+    "context": "CI config coverage fix prepared on branch fix/ci-odoo-config-coverage after main advanced to PR #4 merge commit 85675b9. PR #5 initially exposed a separate goldenset scope regression: mailbox allowlist cases used PRJ-001, whose real project mapping takes the group-mailbox path before the explicit allowlist path. The goldenset mailbox-only cases now use synthetic PRJ-MAILBOX-ONLY so they validate the intended allowlist/RBAC behavior. The Odoo Source Map batched scan is merged to main but not deployed; the report-timeout branch remains stacked after this config-coverage branch. No deploy was performed in this validation step.",
+    "head": "662cf469e4e190856531c64f19cd3509336cfc7d",
+    "branches": "origin/main plus fix/ci-odoo-config-coverage and fix/report-sync-timeout-guard",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -142,9 +142,10 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "odoo scan/session + source-map API: 36 passed; ruff clean; frontend tsc + eslint clean, vitest 22 passed; full non-live suite 824 passed / 1 pre-existing offline-DNS failure (test_evaluation::test_runner_threshold_exit_non_zero, unrelated)",
-    "doc_drift": "refreshed in this session",
-    "verdict": "ODOO_SOURCE_MAP_BATCHED_SCAN_MERGED_REPO_CONSOLIDATED_NOT_LIVE"
+    "tests": "config coverage main failure reproduced; branch config coverage 51/51; ruff clean; compileall clean; doc_drift clean; ai_context clean; smoke 2 passed; hardening integration 21 passed; frontend lint/build/vitest passed (22 tests); goldenset eval 64/64 passed; exact CI-failing pytest test_runner_threshold_exit_non_zero passed (1 passed, 50 warnings)",
+    "doc_drift": "clean",
+    "ai_context": "clean",
+    "verdict": "CI_CONFIG_COVERAGE_PR_READY_AFTER_GOLDENSET_SCOPE_FIX_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -183,7 +184,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Repo is consolidated to main (HEAD 7f9f2e6); only main remains; a local work/next branch is ready for the next task. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
+  "next_action": "Push the updated PR #5 fix/ci-odoo-config-coverage branch, wait for GitHub Actions, then merge it before rebasing and landing fix/report-sync-timeout-guard. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,

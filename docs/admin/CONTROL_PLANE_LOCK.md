@@ -22,8 +22,8 @@ application features and does not define an Admin UI.
 
 | Area | Authoritative Decision | Evidence |
 |---|---|---|
-| Environment baseline | `.env.example` has 43 keys (40 original + `LLM_PROVIDER`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL` added 2026-06-12); planning docs that said 50 were stale | `.env.example` |
-| Config coverage | `apps/edr/config.py` loads all 43 keys from `.env.example` | `apps/edr/config.py` |
+| Environment baseline | `.env.example` has 51 keys (43 prior baseline + 8 Odoo extended-sources / Source Map scan keys added 2026-06-17); planning docs that said 50 were stale | `.env.example` |
+| Config coverage | `apps/edr/config.py` loads all 51 keys from `.env.example` | `apps/edr/config.py` |
 | Phase sequence | Phase 1A is Infrastructure Foundation before product/node logic | `docs/execution/IMPLEMENTATION_PHASES.md` |
 | RBAC model | Use the 9 canonical spec roles | `docs/security/rbac_matrix.md` |
 | n8n status | Four workflow JSON files contain real 4–5 node pipelines and require n8n Header Auth | `n8n/*.json` |
@@ -36,7 +36,7 @@ application features and does not define an Admin UI.
 ## Authoritative Environment Baseline
 
 The authoritative env baseline is the current `.env.example` file. It contains exactly
-these 43 keys:
+these 51 keys:
 
 | Group | Keys |
 |---|---|
@@ -47,9 +47,10 @@ these 43 keys:
 | Connector layer | `N8N_BASE_URL`, `N8N_WEBHOOK_TOKEN`, `N8N_TIMEOUT`, `SHAREPOINT_SEARCH_WEBHOOK`, `OWNCLOUD_LIST_WEBHOOK`, `EMAIL_SEARCH_WEBHOOK`, `ODOO_READ_WEBHOOK` |
 | ownCloud | `OWNCLOUD_USERNAME`, `OWNCLOUD_PASSWORD` |
 | Odoo | `ODOO_URL`, `ODOO_DATABASE`, `ODOO_USERNAME`, `ODOO_API_KEY` |
+| Odoo extended / Source Map scan | `ODOO_EXTENDED_SOURCES_ENABLED`, `ODOO_EXTENDED_INCLUDE_MEDIUM`, `ODOO_SCAN_PAGE_SIZE`, `ODOO_SCAN_SAMPLE_TARGET`, `ODOO_SCAN_MAX_PAGES_PER_SOURCE`, `ODOO_SCAN_BATCH_TIMEOUT_S`, `ODOO_SCAN_SOURCE_TIMEOUT_S`, `ODOO_SCAN_POLL_HINT_MS` |
 | Observability and budget | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`, `DAILY_COST_CAP_USD`, `MONTHLY_COST_TARGET_USD` |
 
-`apps/edr/config.py` loads these 43 fields and CI asserts the count.
+`apps/edr/config.py` loads these 51 fields and CI asserts the count.
 
 ## Phase 1D-Fixup (Closed before Phase 1E)
 
@@ -91,14 +92,14 @@ exercised by tests.
 
 These hold for every phase, including the next one:
 
-- Documentation must agree on the 43-key environment baseline.
+- Documentation must agree on the 51-key environment baseline.
 - Documentation must agree that Phases 1A–1H plus the Phase 1D-fixup are complete.
 - RBAC documentation must use the 9 canonical roles from the locked spec.
 - n8n workflows must declare `authentication=headerAuth` and read service-account
   credentials from environment variables.
 - Service-account credentials must never be logged or transmitted via the
   webhook body.
-- CI must enforce: ruff, compileall, config coverage (43 keys), doc-drift
+- CI must enforce: ruff, compileall, config coverage (51 keys), doc-drift
   check (including the anchor-currency invariant), AI-context check, smoke
   tests, integration tests, the evaluation suite (`make eval` thresholds),
   frontend lint and build, and `pip-audit` (non-blocking; see triage below).

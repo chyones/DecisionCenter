@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `a6a8226b497cce36952b5cad9d0edbd82eb2d354` (GitHub `main` HEAD; Odoo Source Map batched scan merged + repo consolidated + continuity refresh)
+- Current verified commit (anchor): `662cf469e4e190856531c64f19cd3509336cfc7d` (PR #5 branch validation anchor; GitHub `main` base is `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40`, and the report timeout guard remains stacked after the CI config coverage branch)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -19,19 +19,25 @@
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence MISSING (no docs/evidence/uat/UAT_RUN file); operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
 
-## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged; Only main Remains
+## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged; Stacked Fix Branches Active
 
 Supersedes the git-hygiene note below. The Odoo Source Map automatic batched deep
 scan was merged to `main` via PR #3 (merge `6f3d310`) with pre-merge review fixes
 (strong ref to the background scan task; UI poll window 5m -> 15m). The repo is now
-consolidated to **only `main`** at HEAD `7f9f2e6`: docs(ai) preserved into main,
-`.gitignore` ignores root-level generated reports, all feature branches deleted
-(local + remote), and a local-only `work/next` branch exists off main for the next
-task. Read generation / AI providers / SharePoint / Email / the generic Odoo
-registry were NOT changed. Production remains `NOT_LIVE`; operator deploy (rebuild
+on `main` at PR #4 merge HEAD `85675b9`, and two stacked fix branches are active:
+`fix/ci-odoo-config-coverage` first, then `fix/report-sync-timeout-guard`. Read
+generation / AI providers / SharePoint / Email / the generic Odoo registry were
+NOT changed by the batched scan. Production remains `NOT_LIVE`; operator deploy (rebuild
 app + frontend, redeploy n8n `odoo_read` for exact `search_count`) is still
 pending. Recovery SHAs: odoo `136522d`, connector-truth `ba27557`, owner-operator
 `24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
+
+PR #5 (`fix/ci-odoo-config-coverage`) also corrected goldenset scope for three
+mailbox allowlist cases. They now use synthetic project code
+`PRJ-MAILBOX-ONLY`, so node_07_email exercises the explicit mailbox allowlist /
+RBAC path instead of PRJ-001's real group-mailbox mapping path. Validation:
+config coverage `51/51`, goldenset `64/64`, and the exact previously failing
+pytest `test_runner_threshold_exit_non_zero` passed. No deployment occurred.
 
 ## 2026-06-17 Git Hygiene Context
 

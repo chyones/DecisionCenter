@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `a6a8226b497cce36952b5cad9d0edbd82eb2d354` (GitHub `main` HEAD; Odoo Source Map batched-scan merge + repo consolidation + continuity-doc refresh; latest CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `662cf469e4e190856531c64f19cd3509336cfc7d` (PR #5 branch validation anchor; GitHub `main` base is `85675b9702aa2fdcbe5d38fa3aefc20d618ccd40`, latest prior CI-verified commit is `74c944b`, run `27261573729`)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -18,16 +18,14 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
-## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged + Repo Consolidated To Main
+## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged + Stacked Fix Branches Active
 
 This supersedes the git-hygiene note below. The Odoo Source Map **automatic
 batched deep scan** was completed and **merged to `main` via PR #3** (merge commit
 `6f3d310`); pre-merge review fixes were applied (strong reference to the background
-scan `asyncio.Task`; UI progress poll window widened 5m -> 15m). The repo was then
-**consolidated to only `main`** (HEAD `7f9f2e6`): the `docs(ai)` context was
-preserved into `main`, `.gitignore` now ignores root-level generated reports, and
-**all feature branches were deleted** (local + remote). A fresh local-only
-`work/next` branch was created off `main` for the next task.
+scan `asyncio.Task`; UI progress poll window widened 5m -> 15m). The repo later
+advanced to PR #4 merge HEAD `85675b9`, and two stacked fix branches are active:
+`fix/ci-odoo-config-coverage` first, then `fix/report-sync-timeout-guard`.
 
 - What the feature does: per-source isolated scan; `search_count` for exact
   totals; bounded offset-paged sample (never a full-table read); strict
@@ -43,6 +41,12 @@ preserved into `main`, `.gitignore` now ignores root-level generated reports, an
   timeout). Do NOT rebuild the frontend alone.
 - Recovery SHAs (deleted branches): odoo `136522d`, connector-truth `ba27557`,
   owner-operator `24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
+- PR #5 (`fix/ci-odoo-config-coverage`) corrected the CI config-coverage gap and
+  a goldenset scope issue uncovered by CI: mailbox allowlist cases now use
+  synthetic `PRJ-MAILBOX-ONLY` so they verify explicit allowlist/RBAC behavior,
+  not PRJ-001's real group-mailbox mapping path. Local validation: config
+  coverage `51/51`, goldenset `64/64`, and the exact previously failing pytest
+  `test_runner_threshold_exit_non_zero` passed. No deployment occurred.
 
 ## 2026-06-17 Git Hygiene And Governance Anchor Refresh
 
