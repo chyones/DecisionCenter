@@ -14,6 +14,15 @@ This document formally closes the batched-scan implementation phase. It records
 what was built, how it was verified, what remains, and the operator steps that
 are still required. No merge and no deployment were performed in this phase.
 
+> **Post-merge update (2026-06-17, later):** the table above reflects the state at
+> phase close (pre-PR). Since then this branch was **merged to `main` via PR #3**
+> (merge commit `6f3d310`) and the repo was **consolidated to only `main`** (HEAD
+> `a6a8226`; all feature branches deleted, docs(ai) continuity refreshed). The
+> code is therefore in `main` but **production remains NOT_LIVE — the operator
+> deploy is still pending** (rebuild `app` + frontend `dist` together, then
+> redeploy the n8n `odoo_read` workflow for exact `search_count` totals). No
+> deployment has been performed.
+
 ## What was implemented
 Replaced the single synchronous Odoo Source Map scan (which ran ~22 sources in
 one request and could exceed the 120 s reverse-proxy timeout) with a background,

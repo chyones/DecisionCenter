@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `7f9f2e69bcf505f83d3cf8dcd80e5b14b78b8321` (main; Odoo Source Map batched scan merged + repo consolidated)
+- Current verified commit (anchor): `a6a8226b497cce36952b5cad9d0edbd82eb2d354` (GitHub `main` HEAD; Odoo Source Map batched scan merged + repo consolidated + continuity refresh)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
