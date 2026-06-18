@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `792dda930e63260c803082cfe810ced893734760` (timeout guard branch validation anchor; GitHub `main` base is PR #5 merge `41e01b62a267fd871369d3a399eef85993b289b5`, latest prior CI-verified commit is `74c944b`, run `27261573729`)
+- **Current anchor:** `3822aabfbefdf47a5702e9cebe43fa4a75535495` (GitHub `main` PR #6 merge; repo state checked 2026-06-18)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -15,17 +15,32 @@
 - **Phase 2D Slice 3:** Live Integration Validation — implemented (NOT_LIVE)
 - **Phase 2D Slice 4:** Backup and Restore — implemented (NOT_LIVE)
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
-- **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); **live UAT evidence MISSING**, operator-pending
+- **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); live UAT evidence exists but remains partial/not go-live proof, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
-## 2026-06-17 (Later) — Odoo Source Map Batched Scan Merged + Stacked Fix Branches Active
+## 2026-06-18 Git/GitHub Repo State Repair
+
+Repo state was inspected on `main` at
+`3822aabfbefdf47a5702e9cebe43fa4a75535495`, tracking `origin/main` with
+divergence `0 0`. `git fetch --prune origin` completed cleanly and
+`git pull --ff-only` reported "Already up to date." No merge commit was
+created. No stashes or visible untracked files were present. Ignored local
+runtime/tooling artifacts were left in place and not committed.
+
+The only required repair was governance context: docs/ai still described PR #6
+(`fix/report-sync-timeout-guard`) as active after it had already merged to
+`main`. This session refreshed docs/ai context and added
+`docs/evidence/uat/GIT_REPO_STATE_FIX_2026-06-18.md`. No code, `.env`,
+deployment, runtime, n8n, or production-state change occurred. Production
+remains `NOT_LIVE`; Slice 7 remains approval-gated.
+
+## 2026-06-17 (Later) — Odoo Source Map Batched Scan + PR #5/#6 Merged
 
 This supersedes the git-hygiene note below. The Odoo Source Map **automatic
 batched deep scan** was completed and **merged to `main` via PR #3** (merge commit
 `6f3d310`); pre-merge review fixes were applied (strong reference to the background
 scan `asyncio.Task`; UI progress poll window widened 5m -> 15m). The repo later
-advanced to PR #5 merge HEAD `41e01b6`; the remaining fix branch is
-`fix/report-sync-timeout-guard`.
+advanced through PR #5 and PR #6 to merge HEAD `3822aab`.
 
 - What the feature does: per-source isolated scan; `search_count` for exact
   totals; bounded offset-paged sample (never a full-table read); strict
@@ -35,10 +50,10 @@ advanced to PR #5 merge HEAD `41e01b6`; the remaining fix branch is
   Odoo source registry.
 - Evidence: `docs/evidence/uat/ODOO_SCAN_BATCHED_2026-06-17.md` and
   `docs/evidence/uat/ODOO_SCAN_BATCHED_PHASE_CLOSE_2026-06-17.md`.
-- **Production: NOT_LIVE.** Operator deploy still pending — rebuild `app` + frontend
-  `dist` together, then redeploy the n8n `odoo_read` workflow to unlock exact
-  `search_count` totals (until then the scan reports capped counts, still no
-  timeout). Do NOT rebuild the frontend alone.
+- **Production: NOT_LIVE.** No deployment occurred in the 2026-06-18
+  repo-state repair. Any future operator deploy still requires explicit
+  approval and must rebuild `app` + frontend `dist` together, then redeploy the
+  n8n `odoo_read` workflow to unlock exact `search_count` totals.
 - Recovery SHAs (deleted branches): odoo `136522d`, connector-truth `ba27557`,
   owner-operator `24f32c4`, entra `d49e51b`, pre-cleanup main `6f3d310`.
 - PR #5 (`fix/ci-odoo-config-coverage`) corrected the CI config-coverage gap and
@@ -48,12 +63,13 @@ advanced to PR #5 merge HEAD `41e01b6`; the remaining fix branch is
   coverage `51/51`, goldenset `64/64`, and the exact previously failing pytest
   `test_runner_threshold_exit_non_zero` passed. PR #5 merged to `main` as
   `41e01b6`; no deployment occurred.
-- The rebased `fix/report-sync-timeout-guard` branch wraps synchronous
+- PR #6 (`fix/report-sync-timeout-guard`) wraps synchronous
   `/reports/staging` workflow execution with `asyncio.wait_for` and returns a
   controlled HTTP 504 at 90 seconds, below the typical 100-second edge/proxy
   read-timeout budget. Local validation: timeout guard pytest `2 passed`, smoke
   `2 passed`, config coverage `51/51`, Ruff, compileall, doc drift, AI context,
-  and `git diff --check` clean. Production remains `NOT_LIVE`.
+  and `git diff --check` clean. PR #6 merged to `main` as `3822aab`; production
+  remains `NOT_LIVE`.
 
 ## 2026-06-17 Git Hygiene And Governance Anchor Refresh
 

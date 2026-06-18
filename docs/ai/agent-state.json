@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "792dda930e63260c803082cfe810ced893734760",
+  "current_commit": "3822aabfbefdf47a5702e9cebe43fa4a75535495",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -96,7 +96,11 @@
       "widen the UI live-progress poll window 5m -> 15m for slow degraded scans"
     ],
     "not_changed": "report generation, AI providers, SharePoint, Email, generic Odoo source registry",
-    "operator_steps_pending": "rebuild app + frontend dist together; redeploy the n8n odoo_read workflow to enable exact search_count totals (until deployed the scan reports capped counts but still has no 120s timeout). Do NOT rebuild frontend alone — it would call endpoints the running app lacks."
+    "follow_up_fixes": [
+      "PR #5 fix/ci-odoo-config-coverage merged to main as 41e01b62a267fd871369d3a399eef85993b289b5",
+      "PR #6 fix/report-sync-timeout-guard merged to main as 3822aabfbefdf47a5702e9cebe43fa4a75535495"
+    ],
+    "operator_steps_pending": "No deploy occurred in the 2026-06-18 git-hygiene task. Any future operator deployment requires explicit user approval and must rebuild app + frontend dist together, then redeploy the n8n odoo_read workflow to enable exact search_count totals."
   },
   "latest_read_only_audit": {
     "date": "2026-06-10",
@@ -130,10 +134,10 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-17",
-    "context": "PR #5 (fix/ci-odoo-config-coverage) merged to main as 41e01b6 after GitHub Actions run 27687951906 passed backend evaluation and frontend UI tests. The report-timeout branch was rebased onto that main and now contains only the synchronous /reports/staging timeout guard: run_workflow is wrapped in asyncio.wait_for and returns a controlled HTTP 504 at 90s, below the typical 100s edge/proxy read-timeout budget. No deploy was performed in this validation step.",
-    "head": "792dda930e63260c803082cfe810ced893734760",
-    "branches": "origin/main plus rebased fix/report-sync-timeout-guard",
+    "date": "2026-06-18",
+    "context": "Git/GitHub repo-state repair on main. Local main and origin/main were aligned at PR #6 merge commit 3822aabfbefdf47a5702e9cebe43fa4a75535495 with divergence 0 0. git fetch --prune origin completed cleanly and git pull --ff-only reported Already up to date. No stashes or visible untracked files were present. The only required repair was stale docs/ai context that still described PR #6 as active after merge. No deploy was performed.",
+    "head": "3822aabfbefdf47a5702e9cebe43fa4a75535495",
+    "branches": "main tracking origin/main, divergence 0 0",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -142,10 +146,10 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "timeout guard pytest 2 passed; smoke 2 passed; config coverage 51/51; ruff clean; compileall clean; doc_drift clean; ai_context clean; git diff --check clean",
+    "tests": "agent_preflight clean before edit; python3 -m json.tool docs/ai/agent-state.json passed; git diff --check passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; python3 scripts/agent_postflight.py --allow-no-evidence clean",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "verdict": "REPORT_SYNC_TIMEOUT_GUARD_READY_FOR_PR_NOT_LIVE"
+    "verdict": "GIT_REPO_STATE_DOC_REFRESH_VALIDATED_NOT_LIVE"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -184,7 +188,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Push the rebased fix/report-sync-timeout-guard branch, open/refresh its PR, wait for GitHub Actions, then merge it before any operator deploy. Odoo Source Map batched scan is MERGED but NOT deployed — operator may rebuild app + frontend and redeploy the n8n odoo_read workflow (exact search_count) when ready. Broader go-live still pending per GO_LIVE_RUNBOOK_2026-06-15.md: deployed /reports/staging via https://vantage.elrace.com with an interactive Entra USER token + approve/publish/download, then sign SLICE7_GO_LIVE_READINESS. Production remains NOT_LIVE.",
+  "next_action": "Keep production NOT_LIVE. Do not deploy or merge to main without explicit user approval. Broader go-live still requires live UAT evidence, explicit Slice 7 approval, and the signed readiness gate.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,
