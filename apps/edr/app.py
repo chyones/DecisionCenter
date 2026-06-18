@@ -7,6 +7,7 @@ import re
 import socket
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
@@ -30,13 +31,41 @@ from apps.edr.admin import connector_status
 from apps.edr.rbac.project_mapping import ProjectMapping, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _recover_stale_report_jobs_after_startup()
+    yield
+
+
 app = FastAPI(
     title="Decision Center",
     version="0.1.0",
     description="Read-only executive decision report workflow.",
+    lifespan=lifespan,
 )
 
-logger = logging.getLogger(__name__)
+
+async def _recover_stale_report_jobs_after_startup() -> None:
+    """Fail or complete in-flight report jobs orphaned by an app restart."""
+    try:
+        pg = get_postgres_store()
+        await pg.init_schema()
+        recovered = await pg.recover_report_jobs_after_restart()
+    except Exception as exc:
+        logger.warning(
+            "report_job_startup_recovery_failed error_class=%s",
+            exc.__class__.__name__,
+        )
+        return
+    if recovered.get("completed", 0) or recovered.get("failed", 0):
+        logger.info(
+            "report_job_startup_recovery completed=%s failed=%s",
+            recovered.get("completed", 0),
+            recovered.get("failed", 0),
+        )
 
 
 class ReportRequest(BaseModel):

@@ -1506,6 +1506,11 @@ review gate, audit log, and download rules remain authoritative. The legacy
 synchronous route behavior MAY remain available for internal diagnostics, but
 browser Query Composer submissions MUST use the background job flow.
 
+On app startup, queued or running job metadata from a previous worker instance
+MUST be reconciled. If the matching audit row exists, the job MUST be marked
+completed without deleting any artifacts. If no audit row exists, the job MUST
+move to a controlled failed state with reason `app_restart_or_worker_lost`.
+
 ---
 
 ## 31. Implementation Sequence (Vibe Coding)

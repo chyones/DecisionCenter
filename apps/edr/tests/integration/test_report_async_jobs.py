@@ -112,6 +112,43 @@ class _FakeReportJobStore:
             }
         )
 
+    async def recover_report_jobs_after_restart(self) -> dict[str, int]:
+        completed = 0
+        failed = 0
+        for job in self.jobs.values():
+            if job["status"] not in {"queued", "running"}:
+                continue
+            audit = self.audits.get(job["request_id"])
+            if audit is not None:
+                job.update(
+                    {
+                        "status": "completed",
+                        "current_node": job["total_nodes"],
+                        "current_stage": "completed",
+                        "stage_status": "completed",
+                        "result_status": "staging",
+                        "quality_gate_status": audit.get("quality_gate_status"),
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                )
+                completed += 1
+                continue
+            job.update(
+                {
+                    "status": "failed",
+                    "current_stage": job.get("current_stage")
+                    or "app_restart_or_worker_lost",
+                    "stage_status": "failed",
+                    "error_class": "WorkerLost",
+                    "error_message": (
+                        "Report generation failed: app_restart_or_worker_lost."
+                    ),
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            )
+            failed += 1
+        return {"completed": completed, "failed": failed}
+
 
 @pytest.mark.anyio
 async def test_stage_report_creates_background_job_by_default(
@@ -222,3 +259,70 @@ async def test_report_job_runner_records_completion(
     assert job["result_status"] == "ready"
     assert job["quality_gate_status"] == "passed"
     assert job["exported_formats"] == ["md"]
+
+
+@pytest.mark.anyio
+async def test_startup_recovery_fails_orphaned_running_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeReportJobStore()
+    job_id = "job-orphaned"
+    await store.insert_report_job(
+        job_id=job_id,
+        request_id=job_id,
+        user_id_hash=appmod.hash_user_id("u-1"),
+        project_code="PRJ-001",
+        query="q",
+        total_nodes=18,
+    )
+    await store.mark_report_job_running(
+        job_id=job_id,
+        current_stage="node_12_draft_json",
+        current_node=13,
+    )
+
+    monkeypatch.setattr(appmod, "get_postgres_store", lambda: store)
+
+    await appmod._recover_stale_report_jobs_after_startup()
+
+    job = store.jobs[job_id]
+    assert job["status"] == "failed"
+    assert job["current_stage"] == "node_12_draft_json"
+    assert job["error_class"] == "WorkerLost"
+    assert job["error_message"] == "Report generation failed: app_restart_or_worker_lost."
+
+
+@pytest.mark.anyio
+async def test_startup_recovery_completes_job_when_audit_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeReportJobStore()
+    job_id = "job-audited"
+    await store.insert_report_job(
+        job_id=job_id,
+        request_id=job_id,
+        user_id_hash=appmod.hash_user_id("u-1"),
+        project_code="PRJ-001",
+        query="q",
+        total_nodes=18,
+    )
+    await store.mark_report_job_running(
+        job_id=job_id,
+        current_stage="node_15_save_audit",
+        current_node=16,
+    )
+    store.audits[job_id] = {
+        "request_id": job_id,
+        "quality_gate_status": "passed",
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+    monkeypatch.setattr(appmod, "get_postgres_store", lambda: store)
+
+    await appmod._recover_stale_report_jobs_after_startup()
+
+    job = store.jobs[job_id]
+    assert job["status"] == "completed"
+    assert job["current_node"] == 18
+    assert job["current_stage"] == "completed"
+    assert job["quality_gate_status"] == "passed"

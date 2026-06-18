@@ -441,6 +441,63 @@ class PostgresStore:
                 error_message,
             )
 
+    async def recover_report_jobs_after_restart(self) -> dict[str, int]:
+        """Repair in-flight report job metadata after an app restart.
+
+        Background report tasks are in-process. After a container restart, any
+        queued/running row cannot continue in this worker. If node 15 already
+        wrote an audit row, preserve that report by marking the job completed;
+        otherwise expose a controlled failed state for the polling UI.
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            completed = await conn.fetchval(
+                """
+                WITH recovered AS (
+                    UPDATE report_jobs AS j
+                    SET status = 'completed',
+                        current_node = j.total_nodes,
+                        current_stage = 'completed',
+                        stage_status = 'completed',
+                        result_status = CASE
+                            WHEN a.quality_gate_status = 'failed' THEN 'failed'
+                            WHEN a.quality_gate_status = 'needs_review' THEN 'needs_review'
+                            ELSE 'staging'
+                        END,
+                        quality_gate_status = a.quality_gate_status,
+                        completed_at = NOW(),
+                        updated_at = NOW()
+                    FROM audit_log AS a
+                    WHERE j.request_id = a.request_id
+                      AND j.status IN ('queued', 'running')
+                    RETURNING 1
+                )
+                SELECT COUNT(*)::int FROM recovered
+                """
+            )
+            failed = await conn.fetchval(
+                """
+                WITH recovered AS (
+                    UPDATE report_jobs AS j
+                    SET status = 'failed',
+                        current_stage = COALESCE(j.current_stage, 'app_restart_or_worker_lost'),
+                        stage_status = 'failed',
+                        error_class = 'WorkerLost',
+                        error_message = 'Report generation failed: app_restart_or_worker_lost.',
+                        completed_at = NOW(),
+                        updated_at = NOW()
+                    WHERE j.status IN ('queued', 'running')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM audit_log AS a
+                          WHERE a.request_id = j.request_id
+                      )
+                    RETURNING 1
+                )
+                SELECT COUNT(*)::int FROM recovered
+                """
+            )
+        return {"completed": int(completed or 0), "failed": int(failed or 0)}
+
     async def list_audits(
         self,
         *,
