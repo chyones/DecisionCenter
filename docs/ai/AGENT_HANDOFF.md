@@ -18,6 +18,26 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); live UAT evidence exists but remains partial/not go-live proof, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-18 Query Composer Timeout Deploy Verification
+
+Current `origin/main` commit `513314df977fa7d7acd3f8501313c22b5a6fcd4f`
+was deployed to the NOT_LIVE app environment with
+`docker compose up -d --build app`. n8n workflows, connector settings, secrets,
+and production status were not changed. The app container was recreated from
+image digest `sha256:c6571d0f23051eb7129507c475c7e18c2dfe3a79cc1ad002c0dcc363e5051695`
+and is healthy. Local and public `/healthz` returned HTTP 200.
+
+The running container contains the `/reports/staging` timeout guard
+(`REPORT_SYNC_TIMEOUT_S` plus `asyncio.wait_for`), and the in-container timeout
+guard test passed (`2 passed`). Query Composer/API attempts for
+`Construction of Civil Defense building in Al Marfa` (`PRJ-001`) with the
+requested question returned fast JSON HTTP 401 responses because no real bearer
+token was available and production mode correctly rejects dev-bypass headers.
+Therefore the authenticated long-running workflow path was not verified in this
+run. Evidence:
+`docs/evidence/uat/QUERY_COMPOSER_TIMEOUT_DEPLOY_VERIFY_2026-06-18.md`.
+Production remains `NOT_LIVE`; `must_not_deploy` remains `true`.
+
 ## 2026-06-18 Git/GitHub Repo State Repair
 
 Repo state was inspected on `main` at

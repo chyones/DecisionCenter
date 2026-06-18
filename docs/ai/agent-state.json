@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "3822aabfbefdf47a5702e9cebe43fa4a75535495",
+  "current_commit": "513314df977fa7d7acd3f8501313c22b5a6fcd4f",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -135,9 +135,9 @@
   },
   "latest_local_validation": {
     "date": "2026-06-18",
-    "context": "Git/GitHub repo-state repair on main. Local main and origin/main were aligned at PR #6 merge commit 3822aabfbefdf47a5702e9cebe43fa4a75535495 with divergence 0 0. git fetch --prune origin completed cleanly and git pull --ff-only reported Already up to date. No stashes or visible untracked files were present. The only required repair was stale docs/ai context that still described PR #6 as active after merge. No deploy was performed.",
-    "head": "3822aabfbefdf47a5702e9cebe43fa4a75535495",
-    "branches": "main tracking origin/main, divergence 0 0",
+    "context": "Current origin/main commit 513314df977fa7d7acd3f8501313c22b5a6fcd4f was deployed to the NOT_LIVE app environment with docker compose up -d --build app. n8n workflows, connector settings, secrets, production_status, and must_not_deploy were not changed. Runtime app image digest sha256:c6571d0f23051eb7129507c475c7e18c2dfe3a79cc1ad002c0dcc363e5051695 is healthy. Local and public /healthz returned HTTP 200. Runtime source contains REPORT_SYNC_TIMEOUT_S and asyncio.wait_for. In-container timeout guard test passed. Query Composer/API attempts for PRJ-001 returned fast JSON HTTP 401 because no real bearer token was available and production mode rejects dev-bypass headers, so authenticated long-running workflow behavior remains not verified.",
+    "head": "513314df977fa7d7acd3f8501313c22b5a6fcd4f",
+    "branches": "main tracking origin/main at deploy time, divergence 0 0",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -146,10 +146,10 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "agent_preflight clean before edit; python3 -m json.tool docs/ai/agent-state.json passed; git diff --check passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; python3 scripts/agent_postflight.py --allow-no-evidence clean",
+    "tests": "ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; .venv/bin/python -m pytest -q apps/edr/tests/integration/test_report_timeout_guard.py passed 2; docker compose exec -T app pytest -q apps/edr/tests/integration/test_report_timeout_guard.py passed 2",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "verdict": "GIT_REPO_STATE_DOC_REFRESH_VALIDATED_NOT_LIVE"
+    "verdict": "DEPLOYED_NOT_LIVE_TIMEOUT_GUARD_RUNTIME_VERIFIED_AUTHENTICATED_QUERY_NOT_VERIFIED"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
@@ -188,7 +188,7 @@
     "cd frontend && npm run build",
     "python3 scripts/agent_postflight.py --allow-no-evidence"
   ],
-  "next_action": "Keep production NOT_LIVE. Do not deploy or merge to main without explicit user approval. Broader go-live still requires live UAT evidence, explicit Slice 7 approval, and the signed readiness gate.",
+  "next_action": "Keep production NOT_LIVE. Do not deploy or merge to main without explicit user approval. To complete Query Composer timeout verification, rerun the PRJ-001 MD-only and all-formats /reports/staging checks with a real Entra bearer token; current production-mode runtime correctly rejects unauthenticated/dev-bypass requests. Broader go-live still requires live UAT evidence, explicit Slice 7 approval, and the signed readiness gate.",
   "phase_2d_slice_6_live_uat": {
     "implementation": "IMPLEMENTED_CI_GREEN",
     "evidence_exists": true,
