@@ -50,7 +50,8 @@ over live HTTP (no mocks):
 | Stage | Real endpoint / behavior |
 |---|---|
 | Real login | `GET /me` with a real Entra `Authorization: Bearer` token → canonical role |
-| Submission | `POST /reports/staging` runs the 18-node LangGraph workflow |
+| Submission | `POST /reports/staging` creates a background report job and returns `job_id`, `request_id`, `status`, and `polling_url`; the existing 18-node LangGraph workflow runs after the browser request returns |
+| Progress polling | `GET /reports/{id}/status` returns queued/running stage metadata, then the existing staged report state after audit persistence |
 | Evidence retrieval | `GET /reports/{id}/content` + `GET /reports/{id}` (live connectors) |
 | Quality gate | `quality_gate` verdict from the deterministic claim checker |
 | Approval | `POST /reports/staging/{id}/approve` (self-approval blocked; RBAC enforced) |

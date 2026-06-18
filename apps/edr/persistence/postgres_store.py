@@ -178,6 +178,37 @@ class PostgresStore:
                     ON odoo_scan_sessions (project_code, updated_at DESC)
                 """
             )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS report_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    request_id TEXT NOT NULL UNIQUE,
+                    user_id_hash TEXT NOT NULL,
+                    project_code TEXT,
+                    query TEXT,
+                    status TEXT NOT NULL,
+                    current_node INTEGER NOT NULL DEFAULT 0,
+                    total_nodes INTEGER NOT NULL DEFAULT 18,
+                    current_stage TEXT,
+                    stage_status TEXT,
+                    result_status TEXT,
+                    quality_gate_status TEXT,
+                    exported_formats JSONB NOT NULL DEFAULT '[]',
+                    error_class TEXT,
+                    error_message TEXT,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    started_at TIMESTAMP WITH TIME ZONE,
+                    completed_at TIMESTAMP WITH TIME ZONE,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS report_jobs_user_created_idx
+                    ON report_jobs (user_id_hash, created_at DESC)
+                """
+            )
             await self._seed_source_mappings(conn)
             await self._migrate_project_names(conn)
             await self._migrate_verified_prj_source_mappings(conn)
@@ -244,6 +275,171 @@ class PostgresStore:
             if row is None:
                 return None
             return dict(row)
+
+    async def insert_report_job(
+        self,
+        *,
+        job_id: str,
+        request_id: str,
+        user_id_hash: str,
+        project_code: str | None,
+        query: str | None,
+        total_nodes: int,
+    ) -> None:
+        """Create a queued report job row.
+
+        The row stores metadata only. Report content/evidence remains in the
+        existing MinIO/audit-log path once the workflow completes.
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO report_jobs (
+                    job_id, request_id, user_id_hash, project_code, query,
+                    status, current_node, total_nodes, current_stage, stage_status
+                ) VALUES ($1, $2, $3, $4, $5, 'queued', 0, $6, 'queued', 'queued')
+                ON CONFLICT (job_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    current_node = EXCLUDED.current_node,
+                    total_nodes = EXCLUDED.total_nodes,
+                    current_stage = EXCLUDED.current_stage,
+                    stage_status = EXCLUDED.stage_status,
+                    error_class = NULL,
+                    error_message = NULL,
+                    updated_at = NOW()
+                """,
+                job_id,
+                request_id,
+                user_id_hash,
+                project_code,
+                query,
+                total_nodes,
+            )
+
+    async def get_report_job(self, job_id: str) -> dict[str, Any] | None:
+        """Fetch a report job row by job_id/request_id."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM report_jobs WHERE job_id = $1",
+                job_id,
+            )
+            if row is None:
+                return None
+            return dict(row)
+
+    async def mark_report_job_running(
+        self,
+        *,
+        job_id: str,
+        current_stage: str,
+        current_node: int,
+    ) -> None:
+        """Record the currently running workflow stage."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE report_jobs
+                SET status = 'running',
+                    current_stage = $2,
+                    current_node = $3,
+                    stage_status = 'running',
+                    started_at = COALESCE(started_at, NOW()),
+                    updated_at = NOW()
+                WHERE job_id = $1 AND status NOT IN ('completed', 'failed', 'timeout', 'cancelled')
+                """,
+                job_id,
+                current_stage,
+                current_node,
+            )
+
+    async def mark_report_job_stage_complete(
+        self,
+        *,
+        job_id: str,
+        current_stage: str,
+        current_node: int,
+    ) -> None:
+        """Record that a workflow stage completed."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE report_jobs
+                SET current_stage = $2,
+                    current_node = $3,
+                    stage_status = 'completed',
+                    updated_at = NOW()
+                WHERE job_id = $1 AND status NOT IN ('completed', 'failed', 'timeout', 'cancelled')
+                """,
+                job_id,
+                current_stage,
+                current_node,
+            )
+
+    async def complete_report_job(
+        self,
+        *,
+        job_id: str,
+        result_status: str,
+        quality_gate_status: str | None,
+        exported_formats: list[str],
+    ) -> None:
+        """Mark a report job completed after artifacts/audit are persisted."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE report_jobs
+                SET status = 'completed',
+                    current_node = total_nodes,
+                    current_stage = 'completed',
+                    stage_status = 'completed',
+                    result_status = $2,
+                    quality_gate_status = $3,
+                    exported_formats = $4,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE job_id = $1
+                """,
+                job_id,
+                result_status,
+                quality_gate_status,
+                json.dumps(exported_formats),
+            )
+
+    async def fail_report_job(
+        self,
+        *,
+        job_id: str,
+        status: str,
+        current_stage: str | None,
+        error_class: str,
+        error_message: str,
+    ) -> None:
+        """Mark a report job failed, timed out, or cancelled."""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE report_jobs
+                SET status = $2,
+                    current_stage = $3,
+                    stage_status = $2,
+                    error_class = $4,
+                    error_message = $5,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE job_id = $1
+                """,
+                job_id,
+                status,
+                current_stage,
+                error_class,
+                error_message,
+            )
 
     async def list_audits(
         self,

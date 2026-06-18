@@ -21,12 +21,14 @@ export interface ReportRequest {
 }
 
 export interface ReportResponse {
+  job_id: string;
   request_id: string;
-  status: string;
-  quality_gate: string;
-  visited_nodes: string[];
-  exported_formats: string[];
-  exports: Record<string, string>;
+  status: 'queued' | 'running';
+  polling_url: string;
+  quality_gate?: string;
+  visited_nodes?: string[];
+  exported_formats?: string[];
+  exports?: Record<string, string>;
 }
 
 export interface ApproveRequest {
@@ -65,6 +67,8 @@ export type ReportState =
   | 'final'
   | 'cancelled'
   | 'failed';
+
+export type ReportJobState = ReportState | 'queued' | 'running' | 'timed_out';
 
 export interface ReportSummary {
   request_id: string;
@@ -107,13 +111,17 @@ export interface ReportDetail {
 
 export interface ReportStatusResponse {
   request_id: string;
-  state: ReportState;
+  state: ReportJobState;
   quality_gate: string | null;
   total_nodes: number;
   current_node: number;
   is_terminal: boolean;
   updated_at: string | null;
   qg_failure_reason: string | null;
+  current_stage?: string | null;
+  stage_status?: string | null;
+  error_class?: string | null;
+  error_message?: string | null;
 }
 
 export interface CancelReportResponse {

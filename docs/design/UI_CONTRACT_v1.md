@@ -194,7 +194,7 @@ Access violations return HTTP 403 from the server. Client-side routing guards ar
 | `idle` | Loaded, no input | Placeholder text in textarea |
 | `draft` | Any field filled | Character counter active; submit enabled if project + query set |
 | `submitting` | POST in flight | Submit button disabled; inline spinner replaces arrow |
-| `queued` | 202 received | Immediate transition to Processing View |
+| `queued` | Job response received from `POST /reports/staging` | Immediate transition to Processing View using `request_id` and polling URL. |
 | `error` | Server rejection | Inline error banner above submit. Fields remain editable. |
 | `no_projects` | `allowed_projects` is empty | "No authorized projects for your role. Contact your administrator." Submit hidden. |
 
@@ -204,6 +204,12 @@ Access violations return HTTP 403 from the server. Client-side routing guards ar
 
 **Route:** `/workspace/report/{request_id}/processing`
 **Purpose:** Show workflow progress. Never expose system internals.
+
+Query Composer submissions are asynchronous. The initial `POST /reports/staging`
+returns `job_id`, `request_id`, `status`, and `polling_url` promptly; this screen
+polls `GET /reports/{request_id}/status` until the job reaches a terminal state.
+The frontend then redirects to Report View for completed staged reports or shows
+the controlled failed/timeout/cancelled state returned by the API.
 
 **Layout:**
 ```

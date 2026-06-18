@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import socket
@@ -34,6 +35,8 @@ app = FastAPI(
     version="0.1.0",
     description="Read-only executive decision report workflow.",
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ReportRequest(BaseModel):
@@ -118,6 +121,17 @@ class ReportStatusResponse(BaseModel):
     is_terminal: bool
     updated_at: datetime | None
     qg_failure_reason: str | None = None
+    current_stage: str | None = None
+    stage_status: str | None = None
+    error_class: str | None = None
+    error_message: str | None = None
+
+
+class ReportJobResponse(BaseModel):
+    job_id: str
+    request_id: str
+    status: Literal["queued", "running"]
+    polling_url: str
 
 
 class CancelReportResponse(BaseModel):
@@ -415,6 +429,66 @@ def _check_can_read_own_report(
         )
 
 
+def _check_can_read_report_job(
+    claims: JWTClaims | None, job: dict[str, Any]
+) -> None:
+    """Authorize a read against a report_jobs metadata row."""
+    if settings.entra_client_id and settings.entra_tenant_id:
+        if claims is None or not claims.user_id:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+    else:
+        return
+
+    role_str = claims.role if claims else None
+    if role_str == Role.AUDITOR.value:
+        return
+    try:
+        if ROLE_PERMISSIONS[Role(role_str)].can_view_all_reports:
+            return
+    except (ValueError, KeyError):
+        pass
+
+    requester_hash = hash_user_id(claims.user_id) if claims else ""
+    if requester_hash != job.get("user_id_hash", ""):
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to access this report.",
+        )
+
+
+def _job_external_state(job: dict[str, Any]) -> str:
+    status = str(job.get("status") or "queued")
+    if status == "timeout":
+        return "timed_out"
+    if status == "completed":
+        result = str(job.get("result_status") or "")
+        return result if result in {"staging", "needs_review", "failed"} else "staging"
+    return status
+
+
+def _job_updated_at(job: dict[str, Any]) -> datetime | None:
+    value = job.get("updated_at")
+    return value if isinstance(value, datetime) else None
+
+
+def _job_status_response(job: dict[str, Any]) -> ReportStatusResponse:
+    status = str(job.get("status") or "queued")
+    return ReportStatusResponse(
+        request_id=str(job.get("request_id") or job.get("job_id") or ""),
+        state=_job_external_state(job),
+        quality_gate=job.get("quality_gate_status"),
+        total_nodes=int(job.get("total_nodes") or NODE_COUNT),
+        current_node=int(job.get("current_node") or 0),
+        is_terminal=status in REPORT_JOB_TERMINAL_STATES,
+        updated_at=_job_updated_at(job),
+        qg_failure_reason=None,
+        current_stage=job.get("current_stage"),
+        stage_status=job.get("stage_status"),
+        error_class=job.get("error_class"),
+        error_message=job.get("error_message"),
+    )
+
+
 def _is_requester(claims: JWTClaims, audit: dict[str, Any]) -> bool:
     if not claims.user_id:
         return False
@@ -598,28 +672,24 @@ def _derive_status(outputs: dict[str, object]) -> str:
 # 504 JSON instead of an opaque proxy timeout. Cloudflare's default edge budget
 # is roughly 100s, so keep this comfortably below that ceiling.
 REPORT_SYNC_TIMEOUT_S = 90.0
+REPORT_JOB_TIMEOUT_S = 15 * 60.0
+REPORT_JOB_TERMINAL_STATES = {"completed", "failed", "timeout", "cancelled"}
+_REPORT_JOB_TASKS: dict[str, asyncio.Task] = {}
 
 
-@app.post("/reports/staging")
-async def stage_report(
-    request: ReportRequest,
-    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
-) -> dict[str, object]:
-    user_id = (claims.user_id if claims and claims.user_id else None) or request.user_id
-    role = claims.role if claims else None
-
+async def _enforce_complete_source_mapping(project_code: str | None) -> None:
     # A-20: block if source_mappings table is seeded and project has no complete mapping
-    if request.project_code:
+    if project_code:
         try:
             _pg = get_postgres_store()
             await _pg.init_schema()
             _all = await _pg.list_source_mappings()
             if _all:  # table is seeded — enforce the mapping constraint
-                _row = await _pg.get_source_mapping(request.project_code)
+                _row = await _pg.get_source_mapping(project_code)
                 if _row is None or _row.get("mapping_status") != "complete":
                     raise HTTPException(
                         status_code=422,
-                        detail=f"Project {request.project_code!r} has no complete source mapping. "
+                        detail=f"Project {project_code!r} has no complete source mapping. "
                                "Configure it in the Source Mapping admin screen.",
                     )
         except HTTPException:
@@ -627,6 +697,31 @@ async def stage_report(
         except Exception:
             pass  # DB unavailable — allow through; production will fail at retrieval
 
+
+def _build_decision_state(
+    request: ReportRequest,
+    *,
+    request_id: str,
+    user_id: str,
+    role: str | None,
+) -> DecisionState:
+    return DecisionState(
+        request_id=request_id,
+        user_id=user_id,
+        role=role,
+        project_code=request.project_code,
+        query=request.query,
+        inputs=request.model_dump(exclude_none=True),
+        output_formats=list(request.output_formats),
+    )
+
+
+async def _run_report_sync(
+    request: ReportRequest,
+    *,
+    user_id: str,
+    role: str | None,
+) -> dict[str, object]:
     state = DecisionState(
         request_id=str(uuid.uuid4()),
         user_id=user_id,
@@ -663,6 +758,152 @@ async def stage_report(
         "exported_formats": list(exports.keys()),
         "exports": exports,
     }
+
+
+def _safe_job_error(stage: str | None, exc: BaseException, *, timeout: bool = False) -> str:
+    label = stage or "workflow"
+    if timeout:
+        return f"Report generation timed out during {label}."
+    if isinstance(exc, RbacDeniedError):
+        return f"Report generation blocked during {label}: access denied."
+    return f"Report generation failed during {label}."
+
+
+def _schedule_report_job(job_id: str, state: DecisionState) -> None:
+    task = asyncio.create_task(_run_report_job(job_id, state))
+    _REPORT_JOB_TASKS[job_id] = task
+
+    def _forget(done: asyncio.Task) -> None:
+        _REPORT_JOB_TASKS.pop(job_id, None)
+        try:
+            done.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("report_job_task_unhandled job_id=%s", job_id)
+
+    task.add_done_callback(_forget)
+
+
+async def _run_report_job(job_id: str, state: DecisionState) -> None:
+    pg = get_postgres_store()
+    await pg.init_schema()
+    current_stage: str | None = "queued"
+
+    async def on_stage_event(
+        event: str,
+        stage: str,
+        index: int,
+        _state: DecisionState,
+        _duration_ms: int | None,
+        _exc: BaseException | None,
+    ) -> None:
+        nonlocal current_stage
+        current_stage = stage
+        if event == "start":
+            job = await pg.get_report_job(job_id)
+            if job and job.get("status") == "cancelled":
+                raise asyncio.CancelledError
+            await pg.mark_report_job_running(
+                job_id=job_id,
+                current_stage=stage,
+                current_node=index + 1,
+            )
+        elif event == "end":
+            await pg.mark_report_job_stage_complete(
+                job_id=job_id,
+                current_stage=stage,
+                current_node=index + 1,
+            )
+
+    try:
+        result = await asyncio.wait_for(
+            run_workflow(state, on_stage_event=on_stage_event),
+            timeout=REPORT_JOB_TIMEOUT_S,
+        )
+        audit = await pg.get_audit(result.request_id)
+        if audit is None:
+            await pg.fail_report_job(
+                job_id=job_id,
+                status="failed",
+                current_stage="node_15_save_audit",
+                error_class="PersistenceError",
+                error_message="Report generation failed during node_15_save_audit.",
+            )
+            return
+        exports = result.outputs.get("exported_reports", {})
+        await pg.complete_report_job(
+            job_id=job_id,
+            result_status=_derive_status(result.outputs),
+            quality_gate_status=result.outputs.get("quality_gate", "needs_review"),
+            exported_formats=list(exports.keys()),
+        )
+    except asyncio.TimeoutError as exc:
+        await pg.fail_report_job(
+            job_id=job_id,
+            status="timeout",
+            current_stage=current_stage,
+            error_class=exc.__class__.__name__,
+            error_message=_safe_job_error(current_stage, exc, timeout=True),
+        )
+    except asyncio.CancelledError as exc:
+        await pg.fail_report_job(
+            job_id=job_id,
+            status="cancelled",
+            current_stage=current_stage,
+            error_class=exc.__class__.__name__,
+            error_message="Report generation was cancelled.",
+        )
+        raise
+    except Exception as exc:
+        await pg.fail_report_job(
+            job_id=job_id,
+            status="failed",
+            current_stage=current_stage,
+            error_class=exc.__class__.__name__,
+            error_message=_safe_job_error(current_stage, exc),
+        )
+
+
+@app.post("/reports/staging")
+async def stage_report(
+    request: ReportRequest,
+    claims: Annotated[JWTClaims | None, Depends(_extract_claims)],
+    sync: Annotated[bool, Query()] = False,
+) -> dict[str, object]:
+    user_id = (claims.user_id if claims and claims.user_id else None) or request.user_id
+    role = claims.role if claims else None
+
+    await _enforce_complete_source_mapping(request.project_code)
+
+    if sync:
+        return await _run_report_sync(request, user_id=user_id, role=role)
+
+    request_id = str(uuid.uuid4())
+    job_id = request_id
+    pg = get_postgres_store()
+    await pg.init_schema()
+    await pg.insert_report_job(
+        job_id=job_id,
+        request_id=request_id,
+        user_id_hash=hash_user_id(user_id),
+        project_code=request.project_code,
+        query=request.query,
+        total_nodes=NODE_COUNT,
+    )
+    state = _build_decision_state(
+        request,
+        request_id=request_id,
+        user_id=user_id,
+        role=role,
+    )
+    _schedule_report_job(job_id, state)
+    return ReportJobResponse(
+        job_id=job_id,
+        request_id=request_id,
+        status="queued",
+        polling_url=f"/reports/{request_id}/status",
+    ).model_dump()
 
 
 @app.get("/me", response_model=MeResponse)
@@ -850,16 +1091,23 @@ async def get_report_status(
 ) -> ReportStatusResponse:
     """Return processing-state metadata for the Processing View polling loop.
 
-    The workflow is synchronous today (``POST /reports/staging`` blocks until
-    the graph completes), so any audit row already represents a terminal state.
-    The response shape leaves room for an async runtime in a later phase
-    (``current_node``, ``is_terminal``).
+    Async report jobs write stage progress to ``report_jobs`` while the graph is
+    running. Once node_15 persists the audit row, this endpoint returns the
+    existing report/audit state so downstream screens keep using the locked
+    staging/review/download paths.
     """
     claims = _require_claims(claims)
 
     pg = get_postgres_store()
     await pg.init_schema()
+    job = await pg.get_report_job(request_id)
     audit = await pg.get_audit(request_id)
+
+    if job is not None:
+        _check_can_read_report_job(claims, job)
+        if str(job.get("status") or "") != "completed" or audit is None:
+            return _job_status_response(job)
+
     if audit is None:
         raise HTTPException(status_code=404, detail="Report not found.")
 
@@ -877,6 +1125,8 @@ async def get_report_status(
         is_terminal=True,
         updated_at=audit.get("updated_at"),
         qg_failure_reason=audit.get("qg_failure_reason"),
+        current_stage="completed",
+        stage_status="completed",
     )
 
 
@@ -974,9 +1224,29 @@ async def cancel_report(
 
     pg = get_postgres_store()
     await pg.init_schema()
+    job = await pg.get_report_job(request_id)
     audit = await pg.get_audit(request_id)
     if audit is None:
-        raise HTTPException(status_code=404, detail="Report not found.")
+        if job is None:
+            raise HTTPException(status_code=404, detail="Report not found.")
+        _check_can_read_report_job(claims, job)
+        current = str(job.get("status") or "queued")
+        if current in REPORT_JOB_TERMINAL_STATES:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Report cannot be cancelled (current state: {current}).",
+            )
+        task = _REPORT_JOB_TASKS.get(request_id)
+        if task is not None:
+            task.cancel()
+        await pg.fail_report_job(
+            job_id=request_id,
+            status="cancelled",
+            current_stage=job.get("current_stage"),
+            error_class="Cancelled",
+            error_message="Report generation was cancelled.",
+        )
+        return CancelReportResponse(request_id=request_id, state="cancelled")
 
     # Owner-only: requester must match. Auditor/admin cannot cancel another
     # user's report. In bypass mode skip the user-match check (consistent with

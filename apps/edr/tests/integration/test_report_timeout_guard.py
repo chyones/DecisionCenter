@@ -33,7 +33,7 @@ async def test_stage_report_returns_504_when_workflow_exceeds_budget(
     claims = JWTClaims(user_id="u-1", role="executive")
 
     with pytest.raises(HTTPException) as exc:
-        await appmod.stage_report(req, claims)
+        await appmod.stage_report(req, claims, sync=True)
     assert exc.value.status_code == 504
     assert "synchronous request budget" in exc.value.detail
 
@@ -58,6 +58,6 @@ async def test_stage_report_passes_through_when_workflow_is_fast(
         user_id="u-1", query="q", project_code=None, output_formats=["md"],
     )
     claims = JWTClaims(user_id="u-1", role="executive")
-    resp = await appmod.stage_report(req, claims)
+    resp = await appmod.stage_report(req, claims, sync=True)
     assert resp["request_id"] == "r-1"
     assert resp["exported_formats"] == ["md"]

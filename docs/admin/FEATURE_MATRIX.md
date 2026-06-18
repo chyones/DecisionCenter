@@ -50,7 +50,7 @@
 | Feature | Spec Section | Endpoint | RBAC Role | Schema / Model | Audit Event | Validation Proof | Status |
 |---------|--------------|----------|-----------|----------------|-------------|------------------|--------|
 | Health check | 27 | `GET /healthz` | All (unauthenticated) | Service status JSON | None | health proof + CI smoke | implemented |
-| Stage report | 27 | `POST /reports/staging` | Report-capable roles only | `ReportRequest` → `DecisionState` | `request_id` generated (UUID) | smoke + RBAC integration tests | implemented |
+| Stage report | 27, 30.1 | `POST /reports/staging` | Report-capable roles only | `ReportRequest` → queued report job (`job_id`, `request_id`, `polling_url`); legacy `?sync=true` keeps the bounded diagnostic sync path | `request_id` generated (UUID); runtime progress stored in `report_jobs` metadata | smoke + RBAC integration tests + async job lifecycle tests | implemented |
 | Download staging report | 27 | `GET /reports/staging/{id}/download/{fmt}` | Request owner or auditor; admin denied; blocked when approval required and `review_state != approved` | MIME type response | `download` event | `test_phase1f.py` + `test_phase1g.py` + Phase 2A admin-denial regression | implemented |
 | Approve report | 27, 16.16 | `POST /reports/staging/{id}/approve` | Approval roles per `docs/security/rbac_matrix.md`; admin uses `admin_override` with mandatory comment; auditor blocked; self-approval blocked | Approval record | `approval` event | `test_phase1g.py` | implemented |
 | Reject report | 27, 16.16 | `POST /reports/staging/{id}/reject` | Approval roles per `docs/security/rbac_matrix.md`; auditor blocked; self-rejection blocked | Rejection record (reason required) | `rejection` event | `test_phase1g.py` | implemented |
@@ -225,7 +225,7 @@ implementation and the U-01..U-16 manual QA closeout are complete. See
 |---|---|---|---|---|
 | Frontend foundation | `frontend/` | N/A | Phase 1I CI closeout | implemented |
 | API client foundation | `frontend/src/api/*` | Controlled `fetch` wrapper with dev role header wiring | Commit `840e954`; CI green | implemented |
-| Query Composer submit | `/workspace/new` | Live `GET /workspace/context` + `POST /reports/staging`; project dropdown is backend role-scoped | Phase 2A U-01/U-02/U-04 QA; frontend lint/build | implemented |
+| Query Composer submit | `/workspace/new` | Live `GET /workspace/context` + async `POST /reports/staging`; project dropdown is backend role-scoped; submit redirects to Processing View with returned `request_id` | Phase 2A U-01/U-02/U-04 QA; frontend lint/build; async job lifecycle tests | implemented |
 | Reports List | `/workspace/reports` | Live `GET /reports` with role-scoped filters | Phase 2A U-03 QA; frontend lint/build | implemented |
 | Processing View | `/workspace/report/{request_id}/processing` | Live `GET /reports/{id}/status` and `DELETE /reports/{id}` | Phase 2A U-05/U-16 QA; `make phase2a-e2e` | implemented |
 | Report View | `/workspace/report/{request_id}` | Live `GET /reports/{id}/content`; review actions use existing approval endpoints | Phase 2A U-06/U-07/U-08/U-09/U-14/U-15 QA | implemented |

@@ -1481,6 +1481,31 @@ Shape:
 
 The audit log MUST NOT include full confidential source content.
 
+### 30.1 Report Job Runtime Metadata
+
+Interactive report submissions MUST NOT require the browser request to remain
+open while the full 18-node workflow runs. The API MUST create a report job,
+return a request/job identifier and polling location promptly, and execute the
+existing workflow in the background.
+
+Runtime job metadata MAY be stored separately from `audit-log.json` while the
+workflow is queued or running. This metadata MUST be limited to operational
+fields such as job status, current node number, current stage name, stage
+status, timestamps, output format names, and sanitized error class/message. It
+MUST NOT include source evidence contents, authorization tokens, cookies,
+headers, prompts with confidential source text, or connector credentials.
+
+Allowed job states are:
+
+```
+queued | running | completed | failed | timeout | cancelled
+```
+
+When the workflow completes, the existing staging/final report persistence,
+review gate, audit log, and download rules remain authoritative. The legacy
+synchronous route behavior MAY remain available for internal diagnostics, but
+browser Query Composer submissions MUST use the background job flow.
+
 ---
 
 ## 31. Implementation Sequence (Vibe Coding)

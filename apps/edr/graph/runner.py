@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 import logging
 import time
 from typing import Any
@@ -27,6 +27,10 @@ from apps.edr.graph import (
 from apps.edr.graph.state import DecisionState
 
 Node = Callable[[DecisionState], Coroutine[Any, Any, DecisionState]]
+StageEventCallback = Callable[
+    [str, str, int, DecisionState, int | None, BaseException | None],
+    Awaitable[None],
+]
 logger = logging.getLogger(__name__)
 
 NODES: tuple[Node, ...] = (
@@ -53,8 +57,11 @@ NODES: tuple[Node, ...] = (
 NODE_COUNT = len(NODES)
 
 
-async def run_workflow(state: DecisionState) -> DecisionState:
-    for node in NODES:
+async def run_workflow(
+    state: DecisionState,
+    on_stage_event: StageEventCallback | None = None,
+) -> DecisionState:
+    for idx, node in enumerate(NODES):
         stage = node.__module__.rsplit(".", 1)[-1]
         start = time.perf_counter()
         logger.info(
@@ -62,6 +69,8 @@ async def run_workflow(state: DecisionState) -> DecisionState:
             state.request_id,
             stage,
         )
+        if on_stage_event is not None:
+            await on_stage_event("start", stage, idx, state, None, None)
         try:
             state = await node(state)
         except asyncio.CancelledError as exc:
@@ -74,6 +83,8 @@ async def run_workflow(state: DecisionState) -> DecisionState:
                 duration_ms,
                 exc.__class__.__name__,
             )
+            if on_stage_event is not None:
+                await on_stage_event("error", stage, idx, state, duration_ms, exc)
             raise
         except Exception as exc:
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -85,6 +96,8 @@ async def run_workflow(state: DecisionState) -> DecisionState:
                 duration_ms,
                 exc.__class__.__name__,
             )
+            if on_stage_event is not None:
+                await on_stage_event("error", stage, idx, state, duration_ms, exc)
             raise
         duration_ms = int((time.perf_counter() - start) * 1000)
         logger.info(
@@ -93,4 +106,6 @@ async def run_workflow(state: DecisionState) -> DecisionState:
             stage,
             duration_ms,
         )
+        if on_stage_event is not None:
+            await on_stage_event("end", stage, idx, state, duration_ms, None)
     return state

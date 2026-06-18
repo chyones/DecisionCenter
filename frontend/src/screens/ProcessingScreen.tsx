@@ -56,6 +56,7 @@ const NODES: NodeStep[] = [
   { id: 'node_03_scope', label: 'Determining scope' },
   { id: 'node_04_plan', label: 'Planning retrieval' },
   { id: 'node_05_sharepoint', label: 'Searching SharePoint' },
+  { id: 'node_06_owncloud', label: 'Checking ownCloud' },
   { id: 'node_07_email', label: 'Searching email' },
   { id: 'node_08_odoo', label: 'Reading Odoo records' },
   { id: 'node_09_normalize', label: 'Organizing evidence' },
@@ -70,7 +71,7 @@ const NODES: NodeStep[] = [
 ];
 
 /** Initial active node index until the first backend status response arrives. */
-const DEMO_ACTIVE_INDEX = 5;
+const INITIAL_ACTIVE_INDEX = 0;
 
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -83,6 +84,7 @@ function formatElapsed(seconds: number): string {
 function getStateBanner(
   state: ProcessingState,
   qgFailureReason?: string | null,
+  jobError?: string | null,
 ): {
   text: string;
   tone: 'success' | 'warning' | 'error' | 'info';
@@ -120,7 +122,7 @@ function getStateBanner(
       };
     case 'timed_out':
       return {
-        text: 'Processing timed out. Please try again.',
+        text: jobError || 'Processing timed out. Please try again.',
         tone: 'error',
         icon: <Clock className="h-4 w-4" />,
       };
@@ -201,7 +203,19 @@ export function ProcessingScreen() {
         if (!active) return;
         setStatus(res);
         setErrorMsg('');
-        if (res.state === 'cancelled') setState('cancelled');
+        if (
+          res.is_terminal &&
+          (res.state === 'staging' ||
+            res.state === 'needs_review' ||
+            res.state === 'approved' ||
+            res.state === 'final')
+        ) {
+          window.location.replace(`#/workspace/report/${requestId}`);
+          return;
+        }
+        if (res.state === 'queued' || res.state === 'running') setState('running');
+        else if (res.state === 'timed_out') setState('timed_out');
+        else if (res.state === 'cancelled') setState('cancelled');
         else if (res.state === 'failed' || res.quality_gate === 'failed') setState('quality_gate_failed');
         else if (res.state === 'needs_review' || res.quality_gate === 'needs_review') setState('quality_gate_needs_review');
         else if (res.state === 'staging') setState('awaiting_reviewer');
@@ -246,14 +260,17 @@ export function ProcessingScreen() {
   const activeIndex = useMemo(() => {
     if (state === 'cancelled') return -1;
     if (state === 'rbac_denied') return -1;
-    if (state === 'timed_out') return DEMO_ACTIVE_INDEX;
-    if (state === 'quality_gate_failed') return 11; // up to Drafting report (node_12, index 11 after removing ownCloud)
-    if (state === 'awaiting_reviewer') return 14; // up to Saving to staging
-    if (state === 'quality_gate_needs_review') return 12;
-    if (state === 'quality_gate_passed') return 12;
+    if (status && status.current_node > 0) {
+      return Math.max(0, Math.min(NODES.length - 1, status.current_node - 1));
+    }
+    if (state === 'timed_out') return INITIAL_ACTIVE_INDEX;
+    if (state === 'quality_gate_failed') return 12; // up to Drafting report
+    if (state === 'awaiting_reviewer') return 15; // up to Saving to staging
+    if (state === 'quality_gate_needs_review') return 13;
+    if (state === 'quality_gate_passed') return 13;
     if (state === 'self_correct_retry') return 10;
-    return DEMO_ACTIVE_INDEX;
-  }, [state]);
+    return INITIAL_ACTIVE_INDEX;
+  }, [state, status]);
 
   const progress = useMemo(() => {
     if (state === 'cancelled') return 0;
@@ -262,9 +279,9 @@ export function ProcessingScreen() {
     return Math.round(((activeIndex + 1) / NODES.length) * 100);
   }, [state, activeIndex]);
 
-  const banner = getStateBanner(state, status?.qg_failure_reason);
+  const banner = getStateBanner(state, status?.qg_failure_reason, status?.error_message);
   const cancelAllowed = status
-    ? status.state === 'staging' || status.state === 'needs_review'
+    ? status.state === 'queued' || status.state === 'running'
     : state === 'running' || state === 'self_correct_retry';
 
   if (!requestId) {

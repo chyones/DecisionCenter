@@ -424,6 +424,7 @@ async def test_get_report_allows_auditor_in_entra_mode() -> None:
 async def test_get_status_reflects_external_state() -> None:
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(
         return_value=_audit_row(quality_gate_status="failed")
     )
@@ -441,6 +442,7 @@ async def test_get_status_reflects_external_state() -> None:
 async def test_get_status_returns_404_for_unknown_report() -> None:
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=None)
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
@@ -454,6 +456,7 @@ async def test_get_status_allows_admin_owner() -> None:
     """Owner-operator: admin is a full owner and may read report status."""
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row())
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
@@ -589,6 +592,7 @@ async def test_report_content_allows_admin_owner() -> None:
 async def test_cancel_report_sets_state_and_records_decision() -> None:
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row(review_state="staging"))
     mock_pg.insert_review_decision = AsyncMock(return_value=None)
     mock_pg.update_review_state = AsyncMock(return_value=None)
@@ -608,6 +612,7 @@ async def test_cancel_report_admin_can_cancel_own() -> None:
     admin_hash = hash_user_id("admin-1")
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(
         return_value=_audit_row(user_id_hash=admin_hash, review_state="staging")
     )
@@ -636,6 +641,7 @@ async def test_cancel_report_blocks_terminal_states() -> None:
     ):
         mock_pg = MagicMock()
         mock_pg.init_schema = AsyncMock(return_value=None)
+        mock_pg.get_report_job = AsyncMock(return_value=None)
         mock_pg.get_audit = AsyncMock(
             return_value=_audit_row(review_state=review_state)
         )
@@ -653,6 +659,7 @@ async def test_cancel_report_blocks_terminal_states() -> None:
 async def test_cancel_report_owner_only_in_entra_mode() -> None:
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=_audit_row())
 
     with (
@@ -672,6 +679,7 @@ async def test_cancel_report_owner_only_in_entra_mode() -> None:
 async def test_cancel_report_returns_404_when_unknown() -> None:
     mock_pg = MagicMock()
     mock_pg.init_schema = AsyncMock(return_value=None)
+    mock_pg.get_report_job = AsyncMock(return_value=None)
     mock_pg.get_audit = AsyncMock(return_value=None)
 
     with patch("apps.edr.app.get_postgres_store", return_value=mock_pg):
