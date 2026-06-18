@@ -15,6 +15,10 @@ ONLY the proven project-link paths in ``apps/edr/connectors/odoo_sources.py``.
 All queries are read-only and ambiguous/denylisted paths can never be issued.
 """
 
+import asyncio
+import logging
+import time
+
 from apps.edr.config import settings
 from apps.edr.connectors.odoo import (
     build_all_source_queries,
@@ -29,6 +33,14 @@ from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
 from apps.edr.retrieval.embeddings import EmbeddingClient
 from apps.edr.retrieval.qdrant_store import EvidenceStore
 
+logger = logging.getLogger(__name__)
+
+# /reports/staging has a 90s route budget. Keep Odoo fail-soft and leave room
+# for the later draft/quality/export/persistence stages.
+ODOO_NODE_BUDGET_S = 35.0
+ODOO_BASE_READ_TIMEOUT_S = 15.0
+ODOO_EXTENDED_SOURCE_TIMEOUT_S = 5.0
+
 
 def _enabled(mapping: dict) -> bool:
     return "odoo" in set(mapping.get("enabled_sources", []))
@@ -42,8 +54,61 @@ def _extended_enabled(odoo_config: dict) -> bool:
     )
 
 
+def _remaining_timeout(deadline: float, cap_s: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise asyncio.TimeoutError
+    return min(cap_s, remaining)
+
+
+async def _read_odoo_timed(
+    payload: dict,
+    *,
+    request_id: str,
+    label: str,
+    timeout_s: float,
+) -> list:
+    start = time.perf_counter()
+    logger.info(
+        "odoo_read_start request_id=%s source=%s timeout_s=%.1f",
+        request_id,
+        label,
+        timeout_s,
+    )
+    try:
+        evidence = await asyncio.wait_for(read_odoo(payload), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        logger.warning(
+            "odoo_read_timeout request_id=%s source=%s duration_ms=%d",
+            request_id,
+            label,
+            duration_ms,
+        )
+        raise
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        logger.warning(
+            "odoo_read_error request_id=%s source=%s duration_ms=%d error_class=%s",
+            request_id,
+            label,
+            duration_ms,
+            exc.__class__.__name__,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    logger.info(
+        "odoo_read_end request_id=%s source=%s duration_ms=%d count=%d",
+        request_id,
+        label,
+        duration_ms,
+        len(evidence),
+    )
+    return evidence
+
+
 async def _retrieve_extended_sources(
-    state: DecisionState, odoo_config: dict
+    state: DecisionState, odoo_config: dict, deadline: float
 ) -> int:
     """Read every proven, mappable Odoo source and tag the evidence.
 
@@ -75,7 +140,20 @@ async def _retrieve_extended_sources(
             "allowed_odoo_ids": state.allowed_odoo_ids,
         }
         try:
-            evidence = await read_odoo(payload)
+            timeout_s = _remaining_timeout(deadline, ODOO_EXTENDED_SOURCE_TIMEOUT_S)
+            evidence = await _read_odoo_timed(
+                payload,
+                request_id=state.request_id,
+                label=key,
+                timeout_s=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            statuses[key] = "timeout"
+            counts[key] = 0
+            if deadline - time.monotonic() <= 0:
+                statuses["__budget__"] = f"timeout_after_{ODOO_NODE_BUDGET_S:g}s"
+                break
+            continue
         except Exception as exc:  # one bad source must not drop the rest
             statuses[key] = f"error: {type(exc).__name__}"
             counts[key] = 0
@@ -124,6 +202,9 @@ async def run(state: DecisionState) -> DecisionState:
     odoo_config = mapping.get("odoo", {})
     added = 0
     financial_available = False
+    project_ev: list = []
+    cost_ev: list = []
+    deadline = time.monotonic() + ODOO_NODE_BUDGET_S
     try:
         # 1) Project record (always)
         domain, fields = build_project_query(odoo_config, state.project_code)
@@ -134,12 +215,16 @@ async def run(state: DecisionState) -> DecisionState:
             "fields": fields,
             "allowed_odoo_ids": state.allowed_odoo_ids,
         }
-        project_ev = await read_odoo(payload)
+        project_ev = await _read_odoo_timed(
+            payload,
+            request_id=state.request_id,
+            label="project_identity",
+            timeout_s=_remaining_timeout(deadline, ODOO_BASE_READ_TIMEOUT_S),
+        )
         state.evidence.extend([e.model_dump() for e in project_ev])
         added += len(project_ev)
 
         # 2) Cost lines from the verified analytic account (real posted costs only)
-        cost_ev: list = []
         cost_q = build_cost_query(odoo_config)
         if cost_q is not None:
             cost_model, cost_domain, cost_fields = cost_q
@@ -152,10 +237,17 @@ async def run(state: DecisionState) -> DecisionState:
                 "allowed_odoo_ids": state.allowed_odoo_ids,
             }
             try:
-                cost_ev = await read_odoo(cost_payload)
+                cost_ev = await _read_odoo_timed(
+                    cost_payload,
+                    request_id=state.request_id,
+                    label="actual_cost",
+                    timeout_s=_remaining_timeout(deadline, ODOO_BASE_READ_TIMEOUT_S),
+                )
                 state.evidence.extend([e.model_dump() for e in cost_ev])
                 added += len(cost_ev)
                 financial_available = len(cost_ev) > 0
+            except asyncio.TimeoutError:
+                state.outputs["odoo_cost_status"] = "timeout"
             except Exception as exc:
                 state.outputs["odoo_cost_status"] = f"error: {exc}"
         else:
@@ -165,15 +257,26 @@ async def run(state: DecisionState) -> DecisionState:
         #    Opt-in; read-only; proven link paths only; never weakens financials.
         if _extended_enabled(odoo_config):
             try:
-                added += await _retrieve_extended_sources(state, odoo_config)
+                added += await _retrieve_extended_sources(state, odoo_config, deadline)
             except Exception as exc:
                 state.outputs["odoo_extended_status"] = f"error: {type(exc).__name__}"
             else:
-                state.outputs["odoo_extended_status"] = "ok"
+                statuses = state.outputs.get("odoo_source_status", {})
+                state.outputs["odoo_extended_status"] = (
+                    "timeout"
+                    if "__budget__" in statuses or any(v == "timeout" for v in statuses.values())
+                    else "ok"
+                )
         else:
             state.outputs["odoo_extended_status"] = "disabled"
 
-        state.outputs["odoo_status"] = f"ok ({added} items)"
+        has_timeout = (
+            state.outputs.get("odoo_cost_status") == "timeout"
+            or state.outputs.get("odoo_extended_status") == "timeout"
+        )
+        state.outputs["odoo_status"] = (
+            f"partial_timeout ({added} items)" if has_timeout else f"ok ({added} items)"
+        )
         state.outputs["odoo_financial_available"] = financial_available
         if not financial_available:
             state.outputs["odoo_financial_note"] = (
@@ -201,6 +304,16 @@ async def run(state: DecisionState) -> DecisionState:
             state.outputs["odoo_qdrant_status"] = "inserted"
         except Exception as exc:
             state.outputs["odoo_qdrant_status"] = f"error: {exc}"
+    except asyncio.TimeoutError:
+        state.outputs["odoo_status"] = f"timeout_after_{ODOO_NODE_BUDGET_S:g}s ({added} items)"
+        state.outputs["odoo_financial_available"] = financial_available
+        if not financial_available:
+            state.outputs["odoo_financial_note"] = (
+                "financial data not available in verified Odoo evidence"
+            )
+        coverage.record(state, "odoo", enabled=enabled, attempted=True,
+                        status="timeout", evidence_count=added,
+                        reason=f"Odoo retrieval exceeded {ODOO_NODE_BUDGET_S:g}s budget.")
     except Exception as exc:
         state.outputs["odoo_status"] = f"error: {exc}"
         coverage.record(state, "odoo", enabled=enabled, attempted=True,

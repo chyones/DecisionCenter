@@ -326,6 +326,23 @@ def test_extended_is_graceful_on_single_source_failure(monkeypatch: pytest.Monke
     assert state.outputs["odoo_status"].startswith("ok")
 
 
+def test_extended_is_graceful_on_single_source_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_08_odoo, "ODOO_EXTENDED_SOURCE_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(node_08_odoo, "ODOO_NODE_BUDGET_S", 1.0)
+
+    async def fake_read(payload: dict) -> list:
+        if payload["model"] == "purchase.order":
+            await asyncio.sleep(0.05)
+        return [_ev(payload["model"], "1")]
+
+    state = _run_node(monkeypatch, extended=True, cfg=PRJ1_CFG, read_impl=fake_read)
+    statuses = state.outputs["odoo_source_status"]
+    assert statuses["purchase_orders"] == "timeout"
+    assert statuses["material_requests"] == "ok"
+    assert state.outputs["odoo_extended_status"] == "timeout"
+    assert state.outputs["odoo_status"].startswith("partial_timeout")
+
+
 def test_extended_does_not_change_financial_gating(monkeypatch: pytest.MonkeyPatch) -> None:
     # No analytic cost lines → financial must remain unavailable even though
     # extended sources return data. Quality-gate inputs are not weakened.

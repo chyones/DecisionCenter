@@ -1,4 +1,7 @@
+import asyncio
 from collections.abc import Callable, Coroutine
+import logging
+import time
 from typing import Any
 
 from apps.edr.graph import (
@@ -24,6 +27,7 @@ from apps.edr.graph import (
 from apps.edr.graph.state import DecisionState
 
 Node = Callable[[DecisionState], Coroutine[Any, Any, DecisionState]]
+logger = logging.getLogger(__name__)
 
 NODES: tuple[Node, ...] = (
     node_00_begin.run,
@@ -51,5 +55,42 @@ NODE_COUNT = len(NODES)
 
 async def run_workflow(state: DecisionState) -> DecisionState:
     for node in NODES:
-        state = await node(state)
+        stage = node.__module__.rsplit(".", 1)[-1]
+        start = time.perf_counter()
+        logger.info(
+            "workflow_stage_start request_id=%s stage=%s",
+            state.request_id,
+            stage,
+        )
+        try:
+            state = await node(state)
+        except asyncio.CancelledError as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.warning(
+                "workflow_stage_error request_id=%s stage=%s duration_ms=%d "
+                "error_class=%s",
+                state.request_id,
+                stage,
+                duration_ms,
+                exc.__class__.__name__,
+            )
+            raise
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.warning(
+                "workflow_stage_error request_id=%s stage=%s duration_ms=%d "
+                "error_class=%s",
+                state.request_id,
+                stage,
+                duration_ms,
+                exc.__class__.__name__,
+            )
+            raise
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        logger.info(
+            "workflow_stage_end request_id=%s stage=%s duration_ms=%d status=ok",
+            state.request_id,
+            stage,
+            duration_ms,
+        )
     return state
