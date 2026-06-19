@@ -15,7 +15,10 @@ from apps.edr.schemas.quality_gate import ClaimCheck, QualityGateResult
 _MANAGEMENT_QUESTION_RE = re.compile(
     r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
     r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
-    r"\bwhat\s+should\s+we\s+do\b|\brecommend\w*\s+(action|intervention)|"
+    r"\bwhat\s+should\s+(management|we)\s+(decide|do)\b|"
+    r"\bwhat\s+decision\s+should\s+(management|we)\s+make\b|"
+    r"\bdecide\s+this\s+(week|month)|\bmanagement\s+decide\b|"
+    r"\brecommend\w*\s+(action|intervention)|"
     r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
     re.IGNORECASE,
 )

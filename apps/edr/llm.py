@@ -40,9 +40,10 @@ _TIER_MODELS: dict[str, str] = {
 }
 
 # Per-request token caps from spec Section 22.2
+# Heavy-tier output raised to accommodate the management_question_answer contract.
 _TIER_CAPS: dict[str, dict[str, int]] = {
     "light": {"input": 200_000, "output": 10_000},
-    "heavy": {"input": 60_000, "output": 4_000},
+    "heavy": {"input": 60_000, "output": 8_000},
 }
 
 # Locked DeepSeek model IDs (same locking convention as the Anthropic tiers).
@@ -63,7 +64,7 @@ _DEEPSEEK_TIER_MODELS: dict[str, str] = {
 # so both tiers are clamped below the Anthropic figures.
 _DEEPSEEK_TIER_CAPS: dict[str, dict[str, int]] = {
     "light": {"input": 56_000, "output": 8_000},
-    "heavy": {"input": 56_000, "output": 4_000},
+    "heavy": {"input": 56_000, "output": 12_000},
 }
 
 # Cost rates (USD per million tokens) — conservative estimates aligned with spec.

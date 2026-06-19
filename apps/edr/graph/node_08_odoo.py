@@ -37,9 +37,14 @@ logger = logging.getLogger(__name__)
 
 # /reports/staging has a 90s route budget. Keep Odoo fail-soft and leave room
 # for the later draft/quality/export/persistence stages.
-ODOO_NODE_BUDGET_S = 35.0
-ODOO_BASE_READ_TIMEOUT_S = 15.0
+# Inline (mandatory) reads get more time because the live Odoo backend is
+# intermittently slow; extended (optional) reads keep a tight per-source cap.
+ODOO_NODE_BUDGET_S = 50.0
+ODOO_PROJECT_IDENTITY_TIMEOUT_S = 25.0
+ODOO_ACTUAL_COST_TIMEOUT_S = 20.0
 ODOO_EXTENDED_SOURCE_TIMEOUT_S = 5.0
+ODOO_RETRY_BACKOFF_S = 0.5
+ODOO_MAX_RETRIES = 1
 
 
 def _enabled(mapping: dict) -> bool:
@@ -105,6 +110,52 @@ async def _read_odoo_timed(
         len(evidence),
     )
     return evidence
+
+
+async def _read_odoo_with_retry(
+    payload: dict,
+    *,
+    request_id: str,
+    label: str,
+    timeout_s: float,
+    deadline: float,
+) -> list:
+    """Read Odoo with one retry on non-timeout failures.
+
+    The live n8n/Odoo webhook intermittently returns 502 during authentication
+    or query dispatch. A single short retry absorbs these transient errors
+    without masking true failures or exceeding the node budget.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(ODOO_MAX_RETRIES + 1):
+        try:
+            return await _read_odoo_timed(
+                payload,
+                request_id=request_id,
+                label=label,
+                timeout_s=_remaining_timeout(deadline, timeout_s),
+            )
+        except asyncio.TimeoutError:
+            # Timeouts indicate the backend is genuinely slow; do not burn budget
+            # retrying slow calls.
+            raise
+        except Exception as exc:
+            last_exc = exc
+            if attempt == ODOO_MAX_RETRIES:
+                break
+            # Only retry if the node budget can fit another attempt plus backoff.
+            if deadline - time.monotonic() < timeout_s + ODOO_RETRY_BACKOFF_S + 0.5:
+                break
+            logger.warning(
+                "odoo_read_retry request_id=%s source=%s attempt=%d error_class=%s",
+                request_id,
+                label,
+                attempt + 1,
+                exc.__class__.__name__,
+            )
+            await asyncio.sleep(ODOO_RETRY_BACKOFF_S)
+    assert last_exc is not None
+    raise last_exc
 
 
 async def _retrieve_extended_sources(
@@ -215,11 +266,12 @@ async def run(state: DecisionState) -> DecisionState:
             "fields": fields,
             "allowed_odoo_ids": state.allowed_odoo_ids,
         }
-        project_ev = await _read_odoo_timed(
+        project_ev = await _read_odoo_with_retry(
             payload,
             request_id=state.request_id,
             label="project_identity",
-            timeout_s=_remaining_timeout(deadline, ODOO_BASE_READ_TIMEOUT_S),
+            timeout_s=ODOO_PROJECT_IDENTITY_TIMEOUT_S,
+            deadline=deadline,
         )
         state.evidence.extend([e.model_dump() for e in project_ev])
         added += len(project_ev)
@@ -237,11 +289,12 @@ async def run(state: DecisionState) -> DecisionState:
                 "allowed_odoo_ids": state.allowed_odoo_ids,
             }
             try:
-                cost_ev = await _read_odoo_timed(
+                cost_ev = await _read_odoo_with_retry(
                     cost_payload,
                     request_id=state.request_id,
                     label="actual_cost",
-                    timeout_s=_remaining_timeout(deadline, ODOO_BASE_READ_TIMEOUT_S),
+                    timeout_s=ODOO_ACTUAL_COST_TIMEOUT_S,
+                    deadline=deadline,
                 )
                 state.evidence.extend([e.model_dump() for e in cost_ev])
                 added += len(cost_ev)
