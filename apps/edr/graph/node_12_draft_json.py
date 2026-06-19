@@ -7,9 +7,14 @@ Every claim MUST bind to evidence_ids; financial values MUST come from Odoo.
 from __future__ import annotations
 
 import json
-import re
 
 from apps.edr.graph import coverage
+from apps.edr.graph.intent import (
+    classify_report_type,
+    is_management_question,
+    is_salary_payroll_evidence,
+)
+from apps.edr.graph.project_identity import ProjectIdentity, resolve_project_identity
 from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm, sanitize_evidence
 
@@ -96,9 +101,7 @@ def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def _apply_rerank(
-    state: DecisionState, evidence: list[dict]
-) -> tuple[list[dict], str]:
+async def _apply_rerank(state: DecisionState, evidence: list[dict]) -> tuple[list[dict], str]:
     """Source-aware evidence selection for the LLM prompt.
 
     Odoo and Email items are structured and critical, but large Odoo packs
@@ -124,8 +127,7 @@ async def _apply_rerank(
         from apps.edr.retrieval.rerank import Reranker
 
         hits = [
-            SearchHit(evidence_id=e.get("evidence_id", ""), score=0.0, payload=e)
-            for e in other
+            SearchHit(evidence_id=e.get("evidence_id", ""), score=0.0, payload=e) for e in other
         ]
         ranked_hits = await Reranker(api_key=key).rerank(state.query, hits)
         sp_ranked = [h.payload for h in ranked_hits][:10]
@@ -142,33 +144,29 @@ async def _apply_rerank(
 # ---------------------------------------------------------------------------
 
 
-_MANAGEMENT_QUESTION_RE = re.compile(
-    r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
-    r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
-    r"\bwhat\s+should\s+(management|we)\s+(decide|do)\b|"
-    r"\bwhat\s+decision\s+should\s+(management|we)\s+make\b|"
-    r"\bdecide\s+this\s+(week|month)|\bmanagement\s+decide\b|"
-    r"\brecommend\w*\s+(action|intervention)|"
-    r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
-    re.IGNORECASE,
-)
-
-
-def _is_management_question(query: str) -> bool:
-    """Return True when the query asks for a decision, one big problem, or recommendation."""
-    return bool(_MANAGEMENT_QUESTION_RE.search(query or ""))
-
-
-def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
+def _build_prompt(
+    state: DecisionState,
+    prompt_evidence: list[dict],
+    *,
+    report_type: str,
+    project_identity: ProjectIdentity,
+) -> str:
     odoo_ev = [e for e in prompt_evidence if e.get("source_type") == "odoo"]
     email_ev = [e for e in prompt_evidence if e.get("source_type") == "email"]
-    sp_ev = [e for e in prompt_evidence if e.get("source_type") in ("sharepoint", "owncloud", "cad")]
+    sp_ev = [
+        e for e in prompt_evidence if e.get("source_type") in ("sharepoint", "owncloud", "cad")
+    ]
 
     odoo_ctx = _extract_odoo_context(odoo_ev)
 
     role = state.role or "unknown"
     can_see_finance = role in (
-        "executive", "project_manager", "finance", "commercial", "procurement", "legal"
+        "executive",
+        "project_manager",
+        "finance",
+        "commercial",
+        "procurement",
+        "legal",
     )
 
     # --- Odoo block ---
@@ -181,9 +179,17 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         odoo_lines.append(
             f"\nCOST EVIDENCE SUMMARY ({odoo_ctx['cost_count']} analytic lines):\n"
             f"  Budget: NOT PRESENT in these records (analytic lines encode expenses, not budget)\n"
-            + (f"  Total tracked expense: {odoo_ctx['total_amount']} AED\n" if odoo_ctx["has_amount"] else "")
+            + (
+                f"  Total tracked expense: {odoo_ctx['total_amount']} AED\n"
+                if odoo_ctx["has_amount"]
+                else ""
+            )
             + f"  Cost categories: {', '.join(odoo_ctx['categories'][:10]) or 'none extracted'}\n"
-            + (f"  Latest record date: {odoo_ctx['latest_date']}\n" if odoo_ctx["latest_date"] else "")
+            + (
+                f"  Latest record date: {odoo_ctx['latest_date']}\n"
+                if odoo_ctx["latest_date"]
+                else ""
+            )
         )
         sample_excerpts = []
         for line in odoo_ctx["sample_lines"]:
@@ -196,7 +202,9 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
     sp_lines: list[str] = []
     for ev in sp_ev[:8]:
         safe_ex, _ = sanitize_evidence(ev.get("excerpt", "") or ev.get("title", ""))
-        sp_lines.append(f"[{ev.get('evidence_id', '')}] {ev.get('title', 'Untitled')}:\n{safe_ex[:200]}")
+        sp_lines.append(
+            f"[{ev.get('evidence_id', '')}] {ev.get('title', 'Untitled')}:\n{safe_ex[:200]}"
+        )
     sp_section = "\n\n".join(sp_lines) if sp_lines else "No document evidence available."
 
     # --- Email block ---
@@ -216,7 +224,6 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         else "actual_cost: status='not_available' (no cost lines in evidence)"
     )
 
-    management_question = _is_management_question(state.query)
     compactness_instruction = (
         "BREVITY RULE — The full JSON response must fit within the 12,000-token output limit.\n"
         "Keep every field concise. Strict limits:\n"
@@ -229,38 +236,84 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         "  recommended_action fields = short; risks_if_no_action = 1 sentence; missing_evidence_or_assumptions = 1 sentence.\n"
     )
 
-    management_instruction = (
-        "MANAGEMENT QUESTION MODE — The user asked a focused decision question.\n"
-        "Your report must read like an executive decision memo, NOT a search summary.\n"
-        "- In MANAGEMENT_QUESTION_ANSWER, name exactly ONE biggest problem in executive_answer.\n"
-        "- why_biggest_problem: 3-5 bullets, each tied to a specific evidence_id.\n"
-        "- business_impact: separate schedule, cost/commercial, and operational/client impact.\n"
-        "- decision_required: state what management must decide now.\n"
-        "- recommended_action: specific_action, owner_role, timeframe.\n"
-        "- risks_if_no_action: concise.\n"
-        "- confidence: high/medium/low, with missing_evidence_or_assumptions.\n"
-        "- If evidence is insufficient, say so; do not invent.\n"
-        "- The executive_summary and key_findings must support the decision memo, not catalogue evidence.\n"
-        if management_question
-        else ""
+    if report_type == "salary_payroll":
+        intent_instruction = (
+            "SALARY / PAYROLL DATA REPORT MODE — The user asked for HR/payroll data.\n"
+            "Treat salary/payroll as sensitive HR/Finance data.\n"
+            "- If verified salary/payroll evidence exists, produce a compact table with columns: "
+            "Staff Name, File ID, Role/Trade, Salary/Cost, Period, Source, Confidence.\n"
+            "- If salary/payroll evidence is NOT present, return a professional AVAILABILITY report, NOT a fake table.\n"
+            "- DO NOT generate management_question_answer, root_causes, delay_analysis, or contractual_implications.\n"
+            "- DO NOT use 'biggest problem' framing.\n"
+            "- DO NOT infer salary information from construction documents, MIRs, schedules, or general correspondence.\n"
+            "- For timed-out sources say 'not confirmed' or 'inconclusive', NEVER 'empty' or 'no data'.\n"
+            "- For successfully searched sources without salary matches, say 'no salary records found'.\n"
+            "- Confidence must be low or medium when evidence is partial or a relevant source timed out.\n"
+            "- Include a 'what_was_checked' summary and a 'required_data' list.\n"
+        )
+    elif report_type == "management_question":
+        intent_instruction = (
+            "MANAGEMENT QUESTION MODE — The user asked a focused decision question.\n"
+            "Your report must read like an executive decision memo, NOT a search summary.\n"
+            "- In MANAGEMENT_QUESTION_ANSWER, name exactly ONE biggest problem in executive_answer.\n"
+            "- why_biggest_problem: 3-5 bullets, each tied to a specific evidence_id.\n"
+            "- business_impact: separate schedule, cost/commercial, and operational/client impact.\n"
+            "- decision_required: state what management must decide now.\n"
+            "- recommended_action: specific_action, owner_role, timeframe.\n"
+            "- risks_if_no_action: concise.\n"
+            "- confidence: high/medium/low, with missing_evidence_or_assumptions.\n"
+            "- If evidence is insufficient, say so; do not invent.\n"
+            "- The executive_summary and key_findings must support the decision memo, not catalogue evidence.\n"
+        )
+    elif report_type == "data_report":
+        intent_instruction = (
+            "DATA REPORT MODE — The user asked for a specific data extraction or list.\n"
+            "- Answer the query directly with a compact table or list when possible.\n"
+            "- DO NOT generate management_question_answer or 'biggest problem' framing.\n"
+            "- Only include sections relevant to the query; omit root_causes/delay_analysis/contractual_implications unless requested.\n"
+            "- Cite evidence_ids for every row/fact.\n"
+            "- If data is unavailable, explain which sources were checked and what is required.\n"
+        )
+    else:
+        intent_instruction = (
+            "GENERAL PROJECT STATUS MODE — Provide a concise project status summary.\n"
+            "- DO NOT generate management_question_answer unless the query is a decision question.\n"
+            "- Focus on verified facts and cite evidence_ids.\n"
+        )
+
+    identity_block = (
+        f"Project Identity:\n"
+        f"- Project Code: {project_identity.project_code}\n"
+        f"- Project Name: {project_identity.project_name}\n"
+        f"- Identity Source: {project_identity.identity_source}\n"
+        f"- Identity Confidence: {project_identity.identity_confidence}\n"
     )
+    if project_identity.missing_identity_evidence:
+        identity_block += (
+            "- Missing Identity Evidence: "
+            + "; ".join(project_identity.missing_identity_evidence)
+            + "\n"
+        )
 
     return (
         "You are an executive decision-support analyst for a construction company.\n"
         "Generate a FULLY POPULATED structured JSON report. Every required section must have real content.\n\n"
+        f"Report type: {report_type}\n"
+        f"Report title/header format: <Report Type> — {project_identity.project_name} — {project_identity.project_code}\n\n"
+        f"{identity_block}\n"
         "ABSOLUTE RULES:\n"
         "1. Every claim MUST carry at least one evidence_id from the evidence listed below.\n"
         "2. Every financial number MUST carry an Odoo evidence_id.\n"
         "3. Do NOT invent facts, numbers, or dates not present in the evidence.\n"
-        "4. VALID JSON ONLY: every string value must be on a single line; escape double quotes with \\\" and newlines with \\n.\n"
-        "5. This is an executive decision memo, not a search-results page.\n"
-        "   KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
+        '4. VALID JSON ONLY: every string value must be on a single line; escape double quotes with \\" and newlines with \\n.\n'
+        "5. KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
         "   CORRECT: 'Four successive BOQ revisions indicate ongoing scope changes into Q1 2026.'\n"
         "   WRONG:   'BOQ Revision 4.xlsx', 'Project_Schedule_Rev3.pdf'\n"
-        "5. EXECUTIVE_SUMMARY must directly answer the user's query in 4–8 sentences.\n"
-        "6. MISSING_DATA must list every item that could not be determined, including budget.\n\n"
+        "6. EXECUTIVE_SUMMARY must directly answer the user's query in 4–8 sentences.\n"
+        "7. MISSING_DATA must list every item that could not be determined, including budget.\n"
+        "8. If a source timed out, say 'not confirmed' or 'inconclusive'; NEVER say it returned no data.\n\n"
         f"{compactness_instruction}\n"
-        f"{management_instruction}\n"
+        f"{intent_instruction}\n"
         f"User role: {role} | Can view financials: {can_see_finance}\n"
         f"Query: {state.query}\n"
         f"Project code: {state.project_code}\n"
@@ -312,17 +365,17 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         '      "schedule_impact": "...",\n'
         '      "cost_commercial_impact": "...",\n'
         '      "operational_client_impact": "..."\n'
-        '    },\n'
+        "    },\n"
         '    "decision_required": "what management must decide now",\n'
         '    "recommended_action": {\n'
         '      "specific_action": "...",\n'
         '      "owner_role": "...",\n'
         '      "timeframe": "..."\n'
-        '    },\n'
+        "    },\n"
         '    "risks_if_no_action": "concise",\n'
         '    "confidence": "high|medium|low",\n'
         '    "missing_evidence_or_assumptions": "..."\n'
-        '  },\n'
+        "  },\n"
         '  "missing_data": ["Project budget (AED): not available in Odoo analytic line records", ...],\n'
         '  "conflicts": [...],\n'
         '  "sources": [{"source_id": "S1", "source_type": "sharepoint|odoo|email", "title": "...", "reference": "...", "date": "...", "confidence": "...", "used_in": ["section"]}]\n'
@@ -335,9 +388,7 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _enforce_financial_from_odoo(
-    report: dict, odoo_ctx: dict, evidence_ids: set[str]
-) -> None:
+def _enforce_financial_from_odoo(report: dict, odoo_ctx: dict, evidence_ids: set[str]) -> None:
     """Enforce accurate financial snapshot from deterministic Odoo extraction.
 
     If the LLM left actual_cost as not_available but we have analytic lines
@@ -411,8 +462,18 @@ def _normalize_financial_snapshot(report: dict) -> None:
     fs = report.get("financial_snapshot")
     if not isinstance(fs, dict):
         fs = {
-            "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
-            "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "budget": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
+            "actual_cost": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
             "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
         }
         report["financial_snapshot"] = fs
@@ -458,8 +519,14 @@ def _is_placeholder_text(text: str) -> bool:
         return True
     lowered = text.lower().strip()
     placeholders = {
-        "...", "synthesized insight from evidence", "one clear sentence naming the biggest problem or decision",
-        "what management must decide now", "concise", "bullet 1 tied to evidence", "bullet 2", "bullet 3",
+        "...",
+        "synthesized insight from evidence",
+        "one clear sentence naming the biggest problem or decision",
+        "what management must decide now",
+        "concise",
+        "bullet 1 tied to evidence",
+        "bullet 2",
+        "bullet 3",
     }
     if lowered in placeholders:
         return True
@@ -473,8 +540,12 @@ def _report_has_valid_claims(report: dict, evidence_ids: set[str]) -> bool:
     if not isinstance(report, dict):
         return False
     list_sections = (
-        "executive_summary", "key_findings", "root_causes",
-        "delay_analysis", "contractual_implications", "recommended_actions",
+        "executive_summary",
+        "key_findings",
+        "root_causes",
+        "delay_analysis",
+        "contractual_implications",
+        "recommended_actions",
     )
     has_real_claim = False
     for section in list_sections:
@@ -497,25 +568,36 @@ def _report_has_valid_claims(report: dict, evidence_ids: set[str]) -> bool:
 
 def _enrich_management_question_answer(report: dict, state: DecisionState) -> None:
     """Populate a minimal management_question_answer when the LLM left it empty or as a placeholder."""
-    if not _is_management_question(state.query):
+    if not is_management_question(state.query):
         return
-    mqa = report.setdefault("management_question_answer", {
-        "executive_answer": "",
-        "why_biggest_problem": [],
-        "evidence_used": [],
-        "business_impact": {"schedule_impact": "", "cost_commercial_impact": "", "operational_client_impact": ""},
-        "decision_required": "",
-        "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
-        "risks_if_no_action": "",
-        "confidence": "low",
-        "missing_evidence_or_assumptions": "",
-    })
+    mqa = report.setdefault(
+        "management_question_answer",
+        {
+            "executive_answer": "",
+            "why_biggest_problem": [],
+            "evidence_used": [],
+            "business_impact": {
+                "schedule_impact": "",
+                "cost_commercial_impact": "",
+                "operational_client_impact": "",
+            },
+            "decision_required": "",
+            "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
+            "risks_if_no_action": "",
+            "confidence": "low",
+            "missing_evidence_or_assumptions": "",
+        },
+    )
     if not isinstance(mqa, dict):
         mqa = report["management_question_answer"] = {
             "executive_answer": "",
             "why_biggest_problem": [],
             "evidence_used": [],
-            "business_impact": {"schedule_impact": "", "cost_commercial_impact": "", "operational_client_impact": ""},
+            "business_impact": {
+                "schedule_impact": "",
+                "cost_commercial_impact": "",
+                "operational_client_impact": "",
+            },
             "decision_required": "",
             "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
             "risks_if_no_action": "",
@@ -525,13 +607,17 @@ def _enrich_management_question_answer(report: dict, state: DecisionState) -> No
 
     findings = [f for f in (report.get("key_findings") or []) if isinstance(f, dict)]
     if findings:
-        first_text = findings[0].get("text", "").strip() or "No specific analytical finding available."
+        first_text = (
+            findings[0].get("text", "").strip() or "No specific analytical finding available."
+        )
         first_eids = _flatten_eids(findings[0].get("evidence_ids", []))
     else:
         first_text = "No specific analytical finding available."
         first_eids = []
 
-    if not (mqa.get("executive_answer") or "").strip() or _is_placeholder_text(mqa.get("executive_answer", "")):
+    if not (mqa.get("executive_answer") or "").strip() or _is_placeholder_text(
+        mqa.get("executive_answer", "")
+    ):
         mqa["executive_answer"] = f"The most prominent issue is: {first_text}"
 
     why = mqa.get("why_biggest_problem")
@@ -549,14 +635,24 @@ def _enrich_management_question_answer(report: dict, state: DecisionState) -> No
     if not isinstance(bi, dict):
         bi = mqa["business_impact"] = {}
     if not (bi.get("schedule_impact") or "").strip():
-        bi["schedule_impact"] = "Potential schedule exposure cannot be quantified without further evidence."
+        bi["schedule_impact"] = (
+            "Potential schedule exposure cannot be quantified without further evidence."
+        )
     if not (bi.get("cost_commercial_impact") or "").strip():
-        bi["cost_commercial_impact"] = "Commercial impact is unclear pending budget and cost baseline verification."
+        bi["cost_commercial_impact"] = (
+            "Commercial impact is unclear pending budget and cost baseline verification."
+        )
     if not (bi.get("operational_client_impact") or "").strip():
-        bi["operational_client_impact"] = "Client and operational workflows may be affected; confirm with project team."
+        bi["operational_client_impact"] = (
+            "Client and operational workflows may be affected; confirm with project team."
+        )
 
-    if not (mqa.get("decision_required") or "").strip() or _is_placeholder_text(mqa.get("decision_required", "")):
-        mqa["decision_required"] = "Management should review the findings and decide on immediate mitigation steps."
+    if not (mqa.get("decision_required") or "").strip() or _is_placeholder_text(
+        mqa.get("decision_required", "")
+    ):
+        mqa["decision_required"] = (
+            "Management should review the findings and decide on immediate mitigation steps."
+        )
 
     rec = mqa.setdefault("recommended_action", {})
     if not isinstance(rec, dict):
@@ -568,11 +664,17 @@ def _enrich_management_question_answer(report: dict, state: DecisionState) -> No
     if not (rec.get("timeframe") or "").strip():
         rec["timeframe"] = "Within 5 working days"
 
-    if not (mqa.get("risks_if_no_action") or "").strip() or _is_placeholder_text(mqa.get("risks_if_no_action", "")):
-        mqa["risks_if_no_action"] = "Without action, the issue may escalate into schedule or commercial exposure."
+    if not (mqa.get("risks_if_no_action") or "").strip() or _is_placeholder_text(
+        mqa.get("risks_if_no_action", "")
+    ):
+        mqa["risks_if_no_action"] = (
+            "Without action, the issue may escalate into schedule or commercial exposure."
+        )
 
     if not (mqa.get("missing_evidence_or_assumptions") or "").strip():
-        mqa["missing_evidence_or_assumptions"] = "Automated synthesis was incomplete; reviewer validation required."
+        mqa["missing_evidence_or_assumptions"] = (
+            "Automated synthesis was incomplete; reviewer validation required."
+        )
 
     mqa["confidence"] = "low"
     mqa["evidence_used"] = first_eids or ["evidence catalogued in key_findings"]
@@ -607,7 +709,8 @@ def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
     if not odoo_ctx.get("has_amount"):
         add(
             "Actual cost total: not available — no cost analytic lines in evidence",
-            "actual cost", "actual_cost",
+            "actual cost",
+            "actual_cost",
         )
     # Delay if delay sections empty
     if not report.get("delay_analysis") and not report.get("root_causes"):
@@ -633,21 +736,27 @@ def _basic_executive_summary(
     doc_ev: list[dict],
     email_ev: list[dict],
     odoo_ctx: dict,
+    project_identity: ProjectIdentity | None = None,
 ) -> list[dict]:
     """Build a minimal executive_summary so the QG check does not reject deterministic fallback reports.
 
     This summary is intentionally low-confidence and tells the reviewer that
     automated synthesis failed — it does NOT invent analytical conclusions.
     """
-    ref_eids = [
-        e.get("evidence_id")
-        for e in (doc_ev + email_ev)[:3]
-        if e.get("evidence_id")
-    ]
+    ref_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
     if not ref_eids:
         return []
 
-    project_label = f"Project {state.project_code}" if state.project_code else "the requested project"
+    project_name = (
+        project_identity.project_name
+        if project_identity and project_identity.project_name not in ("", "Not verified")
+        else None
+    )
+    project_label = (
+        f"{project_name} ({state.project_code})"
+        if project_name and state.project_code
+        else (f"Project {state.project_code}" if state.project_code else "the requested project")
+    )
 
     first_ev = (doc_ev + email_ev)[0] if (doc_ev or email_ev) else {}
     first_finding = (first_ev.get("excerpt") or first_ev.get("title") or "").strip()
@@ -664,12 +773,184 @@ def _basic_executive_summary(
     return [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
 
-def _build_report_from_evidence(state: DecisionState) -> dict:
+def _source_coverage_note(source: str, source_info: dict) -> str:
+    status = source_info.get("status", "unknown")
+    attempted = source_info.get("attempted", False)
+    count = source_info.get("evidence_count", 0)
+    if status == "timeout":
+        return f"{source}: attempted; timed out; inconclusive"
+    if not attempted:
+        return f"{source}: not attempted"
+    if count == 0:
+        return f"{source}: checked; no salary/payroll records found in retrieved evidence"
+    return f"{source}: checked; {count} evidence item(s) retrieved but none contain verified salary/payroll data"
+
+
+def _first_evidence_id_for_source(evidence: list[dict], source_type: str) -> str | None:
+    for ev in evidence:
+        if isinstance(ev, dict) and ev.get("source_type") == source_type:
+            return ev.get("evidence_id")
+    return None
+
+
+def _build_salary_availability_report(
+    state: DecisionState,
+    project_identity: ProjectIdentity,
+) -> dict:
+    """Deterministic availability report when salary/payroll evidence is missing."""
+    evidence = state.evidence
+    cov_sources = coverage.summary(state)["sources"]
+
+    checked_findings: list[dict] = []
+    for src in ("sharepoint", "email", "odoo"):
+        info = cov_sources.get(src) or {}
+        note = _source_coverage_note(src.capitalize(), info)
+        eid = _first_evidence_id_for_source(evidence, src)
+        if eid:
+            checked_findings.append(
+                {
+                    "text": note,
+                    "evidence_ids": [eid],
+                    "confidence": "low",
+                }
+            )
+
+    if not checked_findings and evidence:
+        # Fall back to citing the first available evidence item for the status claim.
+        first_eid = evidence[0].get("evidence_id")
+        if first_eid:
+            checked_findings.append(
+                {
+                    "text": "Retrieved evidence does not contain verified salary/payroll records.",
+                    "evidence_ids": [first_eid],
+                    "confidence": "low",
+                }
+            )
+
+    odoo_timed_out = (cov_sources.get("odoo") or {}).get("status") == "timeout"
+    reason = (
+        "No verified salary/payroll records were available in the retrieved evidence. "
+        + ("Odoo timed out, so ERP payroll/cost data was not confirmed. " if odoo_timed_out else "")
+        + "SharePoint/email evidence reviewed does not contain salary/payroll records."
+    )
+
+    what_was_checked: list[str] = []
+    missing_data: list[str] = []
+    for src in ("sharepoint", "email", "odoo"):
+        info = cov_sources.get(src) or {}
+        if not info.get("enabled"):
+            continue
+        note = _source_coverage_note(src.capitalize(), info)
+        what_was_checked.append(note)
+        status = info.get("status", "unknown")
+        if status == "timeout":
+            missing_data.append(
+                f"{src}: salary/payroll retrieval timed out — result is inconclusive"
+            )
+        elif status == "error":
+            missing_data.append(f"{src}: connector error prevented salary/payroll check")
+        elif info.get("evidence_count", 0) == 0:
+            missing_data.append(f"{src}: no salary/payroll records found")
+
+    required_data = [
+        "Verified HR/payroll source with staff name, file ID, salary/cost, and period fields.",
+        "Role-based access approval for salary/payroll data (HR/Finance/Executive).",
+        "If Odoo is the source: confirmed analytic/accounting line query for labor cost by employee.",
+    ]
+
+    executive = []
+    if checked_findings:
+        executive.append(
+            {
+                "claim": (
+                    f"Cannot generate salary report for {project_identity.project_name} "
+                    f"({project_identity.project_code}) from verified evidence. "
+                    f"{reason}"
+                ),
+                "evidence_ids": checked_findings[0].get("evidence_ids", []),
+                "confidence": "low",
+            }
+        )
+
+    return {
+        "request_id": state.request_id,
+        "project_code": state.project_code,
+        "project_identity": project_identity.to_dict(),
+        "query": state.query,
+        "language": "en",
+        "report_type": "salary_payroll",
+        "executive_summary": executive,
+        "financial_snapshot": {
+            "budget": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
+            "actual_cost": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
+            "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
+        },
+        "key_findings": checked_findings,
+        "root_causes": [],
+        "delay_analysis": [],
+        "contractual_implications": [],
+        "recommended_actions": [
+            {
+                "text": "Connect a verified HR/payroll source or re-run with an explicit salary/payroll export.",
+                "evidence_ids": checked_findings[0].get("evidence_ids", [])
+                if checked_findings
+                else [],
+                "confidence": "low",
+            },
+        ],
+        "management_question_answer": {
+            "executive_answer": "",
+            "why_biggest_problem": [],
+            "evidence_used": [],
+            "business_impact": {
+                "schedule_impact": "",
+                "cost_commercial_impact": "",
+                "operational_client_impact": "",
+            },
+            "decision_required": "",
+            "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
+            "risks_if_no_action": "",
+            "confidence": "low",
+            "missing_evidence_or_assumptions": (
+                "Salary/payroll evidence not found; request requires HR/Finance data source and authorization."
+            ),
+        },
+        "missing_data": missing_data or ["No salary/payroll evidence available."],
+        "conflicts": [],
+        "sources": [],
+        "what_was_checked": what_was_checked,
+        "required_data": required_data,
+        "connector_coverage": coverage.report_section(state),
+        "quality_gate_status": "not_run",
+    }
+
+
+def _build_report_from_evidence(
+    state: DecisionState,
+    project_identity: ProjectIdentity | None = None,
+) -> dict:
     """Deterministic report builder used when no LLM key is available."""
+    if project_identity is None:
+        project_identity = resolve_project_identity(state)
     evidence = state.evidence
     role = state.role or "unknown"
     can_see_finance = role in (
-        "executive", "project_manager", "finance", "commercial", "procurement", "legal"
+        "executive",
+        "project_manager",
+        "finance",
+        "commercial",
+        "procurement",
+        "legal",
     )
     odoo_ev = [e for e in evidence if e.get("source_type") == "odoo"]
     doc_ev = [e for e in evidence if e.get("source_type") in ("sharepoint", "owncloud")]
@@ -708,26 +989,30 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
             contractual_implications.append(finding)
         else:
             key_findings.append(finding)
-        sources_list.append({
-            "source_id": f"S{idx}",
-            "source_type": stype,
-            "title": ev.get("title", "Untitled"),
-            "reference": ev.get("source_uri", "—"),
-            "date": ev.get("timestamp") or "—",
-            "confidence": confidence,
-            "used_in": ["Key Findings"],
-        })
+        sources_list.append(
+            {
+                "source_id": f"S{idx}",
+                "source_type": stype,
+                "title": ev.get("title", "Untitled"),
+                "reference": ev.get("source_uri", "—"),
+                "date": ev.get("timestamp") or "—",
+                "confidence": confidence,
+                "used_in": ["Key Findings"],
+            }
+        )
 
     for idx, ev in enumerate(odoo_ev, start=len(sources_list) + 1):
-        sources_list.append({
-            "source_id": f"S{idx}",
-            "source_type": "odoo",
-            "title": ev.get("title", "Odoo Record"),
-            "reference": ev.get("source_uri", "—"),
-            "date": ev.get("timestamp") or "—",
-            "confidence": ev.get("confidence", "high"),
-            "used_in": ["Financial Snapshot"],
-        })
+        sources_list.append(
+            {
+                "source_id": f"S{idx}",
+                "source_type": "odoo",
+                "title": ev.get("title", "Odoo Record"),
+                "reference": ev.get("source_uri", "—"),
+                "date": ev.get("timestamp") or "—",
+                "confidence": ev.get("confidence", "high"),
+                "used_in": ["Financial Snapshot"],
+            }
+        )
 
     missing_data: list[str] = []
     if not evidence:
@@ -760,7 +1045,10 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
         "project_code": state.project_code,
         "query": state.query,
         "language": "en",
-        "executive_summary": _basic_executive_summary(state, doc_ev, email_ev, odoo_ctx),
+        "project_identity": project_identity.to_dict(),
+        "executive_summary": _basic_executive_summary(
+            state, doc_ev, email_ev, odoo_ctx, project_identity
+        ),
         "financial_snapshot": {
             "budget": budget,
             "actual_cost": actual_cost,
@@ -834,9 +1122,7 @@ def _remap_evidence_ids(report: dict, evidence: list[dict]) -> None:
                 continue
             eids = _flatten_eids(item.get("evidence_ids"))
             if eids:
-                item["evidence_ids"] = [
-                    synth_to_real.get(e, e) for e in eids
-                ]
+                item["evidence_ids"] = [synth_to_real.get(e, e) for e in eids]
 
     # Remap claim evidence_ids across all claim-bearing sections.
     for section in (
@@ -880,15 +1166,17 @@ def _remap_evidence_ids(report: dict, evidence: list[dict]) -> None:
         ev = evidence_by_id.get(eid)
         if not ev:
             continue
-        new_sources.append({
-            "source_id": eid,
-            "source_type": ev.get("source_type", "sharepoint"),
-            "title": ev.get("title", "Untitled"),
-            "reference": ev.get("source_uri", "—"),
-            "date": ev.get("timestamp") or "—",
-            "confidence": ev.get("confidence", "medium"),
-            "used_in": ["Key Findings"],
-        })
+        new_sources.append(
+            {
+                "source_id": eid,
+                "source_type": ev.get("source_type", "sharepoint"),
+                "title": ev.get("title", "Untitled"),
+                "reference": ev.get("source_uri", "—"),
+                "date": ev.get("timestamp") or "—",
+                "confidence": ev.get("confidence", "medium"),
+                "used_in": ["Key Findings"],
+            }
+        )
     report["sources"] = new_sources
 
 
@@ -909,7 +1197,9 @@ def _flatten_eids(eids) -> list[str]:
 
 def is_financial_query(query: str) -> bool:
     lower = query.lower()
-    return any(kw in lower for kw in ("budget", "cost", "payment", "invoice", "financial", "actual"))
+    return any(
+        kw in lower for kw in ("budget", "cost", "payment", "invoice", "financial", "actual")
+    )
 
 
 def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
@@ -934,7 +1224,14 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
     if not ref_eids:
         return
 
-    project_label = f"Project {state.project_code}" if state.project_code else "the requested project"
+    pid = state.outputs.get("project_identity") or {}
+    project_name = pid.get("project_name") if isinstance(pid, dict) else None
+    if project_name and project_name not in ("", "Not verified") and state.project_code:
+        project_label = f"{project_name} ({state.project_code})"
+    elif state.project_code:
+        project_label = f"Project {state.project_code}"
+    else:
+        project_label = "the requested project"
     first_finding = findings[0].get("text", "")[:250]
 
     claim = (
@@ -951,17 +1248,39 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
 
 
 async def run(state: DecisionState) -> DecisionState:
+    report_type = state.outputs.get("report_type", classify_report_type(state.query))
+    project_identity = ProjectIdentity.from_dict(
+        state.outputs.get("project_identity") or resolve_project_identity(state).to_dict()
+    )
+    state.outputs["report_type"] = report_type
+
+    # Salary/payroll without verified salary evidence -> deterministic availability report.
+    # This prevents the LLM from hallucinating a management decision memo.
+    if report_type == "salary_payroll" and not is_salary_payroll_evidence(state.evidence):
+        report = _build_salary_availability_report(state, project_identity)
+        state.report_json = report
+        state.outputs["draft_report_status"] = "salary_availability"
+        state.outputs["cohere_rerank_status"] = "skipped_salary_availability"
+        return state.mark("node_12_draft_json")
+
     # Source-aware rerank: keep all Odoo+Email; rerank SharePoint to top 10.
     # state.evidence is preserved intact for coverage/sufficiency reporting.
     prompt_evidence, rerank_status = await _apply_rerank(state, state.evidence)
     state.outputs["cohere_rerank_status"] = rerank_status
 
-    prompt = _build_prompt(state, prompt_evidence)
+    prompt = _build_prompt(
+        state,
+        prompt_evidence,
+        report_type=report_type,
+        project_identity=project_identity,
+    )
     import sys
+
     print(
         f"[NODE12] prompt request_id={state.request_id} prompt_chars={len(prompt)} "
         f"prompt_words={len(prompt.split())} rerank={rerank_status}",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     result = await call_llm(
@@ -978,23 +1297,22 @@ async def run(state: DecisionState) -> DecisionState:
     print(
         f"[NODE12] llm response request_id={state.request_id} model={result.model} "
         f"input_tokens={result.input_tokens} output_tokens={result.output_tokens} content_chars={len(result.content)}",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     evidence_ids = {e.get("evidence_id", "") for e in state.evidence if isinstance(e, dict)}
-    odoo_ctx = _extract_odoo_context(
-        [e for e in state.evidence if e.get("source_type") == "odoo"]
-    )
+    odoo_ctx = _extract_odoo_context([e for e in state.evidence if e.get("source_type") == "odoo"])
 
     def _normalize(report_candidate: dict | None) -> dict:
         """Coerce a parsed/repaired report into a valid shape or fall back to deterministic builder."""
         if not isinstance(report_candidate, dict):
-            return _build_report_from_evidence(state)
+            return _build_report_from_evidence(state, project_identity)
         _normalize_financial_snapshot(report_candidate)
         _enforce_financial_from_odoo(report_candidate, odoo_ctx, evidence_ids)
         _remap_evidence_ids(report_candidate, state.evidence)
         if not _report_has_valid_claims(report_candidate, evidence_ids):
-            return _build_report_from_evidence(state)
+            return _build_report_from_evidence(state, project_identity)
         return report_candidate
 
     report: dict | None = None
@@ -1008,7 +1326,8 @@ async def run(state: DecisionState) -> DecisionState:
         else:
             print(
                 f"[NODE12] json parse returned non-dict request_id={state.request_id} type={type(parsed)}",
-                file=sys.stderr, flush=True,
+                file=sys.stderr,
+                flush=True,
             )
     except Exception as exc:
         parse_error = exc
@@ -1016,7 +1335,8 @@ async def run(state: DecisionState) -> DecisionState:
             f"[NODE12] json parse failed request_id={state.request_id} exc={exc} "
             f"content_len={len(result.content)} content_prefix={result.content[:200]} "
             f"content_suffix={result.content[-400:]}",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
 
     # 2. Structural repair without an extra LLM call.
@@ -1027,17 +1347,20 @@ async def run(state: DecisionState) -> DecisionState:
                 report = repaired
                 print(
                     f"[NODE12] json_repair success request_id={state.request_id}",
-                    file=sys.stderr, flush=True,
+                    file=sys.stderr,
+                    flush=True,
                 )
             else:
                 print(
                     f"[NODE12] json_repair failed request_id={state.request_id} ok={ok}",
-                    file=sys.stderr, flush=True,
+                    file=sys.stderr,
+                    flush=True,
                 )
         except Exception as repair_exc:
             print(
                 f"[NODE12] json_repair exception request_id={state.request_id} exc={repair_exc}",
-                file=sys.stderr, flush=True,
+                file=sys.stderr,
+                flush=True,
             )
 
     # 3. Last-resort LLM repair only if structural repair failed.
@@ -1046,7 +1369,7 @@ async def run(state: DecisionState) -> DecisionState:
             "The previous output was invalid JSON. Return ONLY a valid JSON object "
             "matching the exact schema in the original prompt. Do not include markdown fences, explanations, "
             "or any text outside the JSON object. Ensure every string value is on a single line "
-            "and escapes double quotes with \\\" and newlines with \\n.\n\n"
+            'and escapes double quotes with \\" and newlines with \\n.\n\n'
             "Required top-level keys: request_id, project_code, query, language, executive_summary, "
             "financial_snapshot, key_findings, root_causes, delay_analysis, contractual_implications, "
             "recommended_actions, management_question_answer, missing_data, conflicts, sources.\n\n"
@@ -1069,17 +1392,20 @@ async def run(state: DecisionState) -> DecisionState:
                 report = parsed_repair
                 print(
                     f"[NODE12] llm repair parse request_id={state.request_id} success=True",
-                    file=sys.stderr, flush=True,
+                    file=sys.stderr,
+                    flush=True,
                 )
             else:
                 print(
                     f"[NODE12] llm repair parse request_id={state.request_id} success=False non-dict",
-                    file=sys.stderr, flush=True,
+                    file=sys.stderr,
+                    flush=True,
                 )
         except Exception as repair_exc:
             print(
                 f"[NODE12] llm repair parse failed request_id={state.request_id} exc={repair_exc}",
-                file=sys.stderr, flush=True,
+                file=sys.stderr,
+                flush=True,
             )
 
     report = _normalize(report)
@@ -1088,7 +1414,8 @@ async def run(state: DecisionState) -> DecisionState:
     print(
         f"[NODE12] parsed report request_id={state.request_id} keys={sorted(report.keys())} "
         f"has_mqa={isinstance(mqa_preview, dict)} mqa_exec_answer_len={len(mqa_preview.get('executive_answer', '')) if isinstance(mqa_preview, dict) else 0}",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     # Ensure required fields exist
@@ -1097,35 +1424,51 @@ async def run(state: DecisionState) -> DecisionState:
     report.setdefault("query", state.query)
     report.setdefault("language", "en")
     report.setdefault("executive_summary", [])
-    report.setdefault("financial_snapshot", {
-        "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
-        "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
-        "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
-    })
+    report.setdefault(
+        "financial_snapshot",
+        {
+            "budget": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
+            "actual_cost": {
+                "value": None,
+                "currency": "AED",
+                "evidence_id": None,
+                "status": "not_available",
+            },
+            "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
+        },
+    )
     report.setdefault("key_findings", [])
     report.setdefault("root_causes", [])
     report.setdefault("delay_analysis", [])
     report.setdefault("contractual_implications", [])
     report.setdefault("recommended_actions", [])
-    report.setdefault("management_question_answer", {
-        "executive_answer": "",
-        "why_biggest_problem": [],
-        "evidence_used": [],
-        "business_impact": {
-            "schedule_impact": "",
-            "cost_commercial_impact": "",
-            "operational_client_impact": "",
+    report.setdefault(
+        "management_question_answer",
+        {
+            "executive_answer": "",
+            "why_biggest_problem": [],
+            "evidence_used": [],
+            "business_impact": {
+                "schedule_impact": "",
+                "cost_commercial_impact": "",
+                "operational_client_impact": "",
+            },
+            "decision_required": "",
+            "recommended_action": {
+                "specific_action": "",
+                "owner_role": "",
+                "timeframe": "",
+            },
+            "risks_if_no_action": "",
+            "confidence": "low",
+            "missing_evidence_or_assumptions": "",
         },
-        "decision_required": "",
-        "recommended_action": {
-            "specific_action": "",
-            "owner_role": "",
-            "timeframe": "",
-        },
-        "risks_if_no_action": "",
-        "confidence": "low",
-        "missing_evidence_or_assumptions": "",
-    })
+    )
     report.setdefault("missing_data", [])
     report.setdefault("conflicts", [])
     report.setdefault("sources", [])
@@ -1133,14 +1476,16 @@ async def run(state: DecisionState) -> DecisionState:
 
     # Post-LLM deterministic corrections
     evidence_ids = {e.get("evidence_id", "") for e in state.evidence if isinstance(e, dict)}
-    odoo_ctx = _extract_odoo_context(
-        [e for e in state.evidence if e.get("source_type") == "odoo"]
-    )
+    odoo_ctx = _extract_odoo_context([e for e in state.evidence if e.get("source_type") == "odoo"])
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
     _remap_evidence_ids(report, state.evidence)
     _enforce_missing_data(report, odoo_ctx)
     _enforce_executive_summary(report, state)
     _enrich_management_question_answer(report, state)
+
+    # Enforce the verified Project Identity Contract on every report.
+    report["project_identity"] = project_identity.to_dict()
+    report["report_type"] = report_type
 
     # Deterministic connector coverage (factual; never LLM-authored)
     report["connector_coverage"] = coverage.report_section(state)

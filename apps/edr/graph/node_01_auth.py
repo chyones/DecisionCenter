@@ -1,4 +1,5 @@
 """Node 01 — Auth and RBAC Gate. Spec: Sections 8, 9, and 16."""
+from apps.edr.graph.project_identity import resolve_project_identity
 from apps.edr.graph.state import DecisionState
 from apps.edr.rbac.project_mapping import ProjectMapping, ProjectNotFoundError, RbacDeniedError
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, VALID_ROLES, Role
@@ -29,5 +30,10 @@ async def run(state: DecisionState) -> DecisionState:
     state.allowed_odoo_ids = mapping.allowed_odoo_ids(project_code)
     state.outputs["rbac_status"] = "authorized"
     state.outputs["rbac_role"] = role
+
+    # Global Project Identity Contract: resolve once and propagate downstream.
+    identity = resolve_project_identity(state)
+    state.outputs["project_identity"] = identity.to_dict()
+    state.outputs["project_identity_status"] = identity.identity_confidence
 
     return state.mark("node_01_auth")

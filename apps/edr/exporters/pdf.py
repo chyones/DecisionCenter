@@ -63,6 +63,7 @@ def _pick_font(text: str) -> str:
         return _ARABIC_FONT
     return "Helvetica"
 
+
 _PAGE_W, _PAGE_H = A4
 _MARGIN = 2.0 * cm
 _BRAND_BLUE = colors.HexColor("#1F3864")
@@ -86,7 +87,9 @@ def _make_doc(buf: io.BytesIO) -> BaseDocTemplate:
 def _styles(body_font: str = "Helvetica") -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
     return {
-        "title": ParagraphStyle("DC_Title", parent=base["Title"], fontSize=18, spaceAfter=10, fontName=body_font),
+        "title": ParagraphStyle(
+            "DC_Title", parent=base["Title"], fontSize=18, spaceAfter=10, fontName=body_font
+        ),
         "h1": ParagraphStyle(
             "DC_H1",
             parent=base["Heading1"],
@@ -96,7 +99,9 @@ def _styles(body_font: str = "Helvetica") -> dict[str, ParagraphStyle]:
             spaceBefore=14,
             fontName=body_font,
         ),
-        "body": ParagraphStyle("DC_Body", parent=base["Normal"], fontSize=10, spaceAfter=4, fontName=body_font),
+        "body": ParagraphStyle(
+            "DC_Body", parent=base["Normal"], fontSize=10, spaceAfter=4, fontName=body_font
+        ),
         "bullet": ParagraphStyle(
             "DC_Bullet",
             parent=base["Normal"],
@@ -115,32 +120,40 @@ def _styles(body_font: str = "Helvetica") -> dict[str, ParagraphStyle]:
     }
 
 
-_TBL_HEADER = TableStyle([
-    ("BACKGROUND", (0, 0), (-1, 0), _BRAND_BLUE),
-    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-    ("FONTSIZE", (0, 0), (-1, -1), 9),
-    ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-    ("PADDING", (0, 0), (-1, -1), 4),
-    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-])
+_TBL_HEADER = TableStyle(
+    [
+        ("BACKGROUND", (0, 0), (-1, 0), _BRAND_BLUE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("PADDING", (0, 0), (-1, -1), 4),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]
+)
 
-_META_STYLE = TableStyle([
-    ("BACKGROUND", (0, 0), (0, -1), _BRAND_BLUE),
-    ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
-    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-    ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
-    ("FONTSIZE", (0, 0), (-1, -1), 9),
-    ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-    ("PADDING", (0, 0), (-1, -1), 4),
-])
+_META_STYLE = TableStyle(
+    [
+        ("BACKGROUND", (0, 0), (0, -1), _BRAND_BLUE),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.white),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("PADDING", (0, 0), (-1, -1), 4),
+    ]
+)
 
 
 def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     """Build the Platypus story list and return it with the has_arabic flag."""
     request_id = report.get("request_id", "N/A")
     project_code = report.get("project_code") or "N/A"
+    pid = report.get("project_identity") or {}
+    project_name = pid.get("project_name") or project_code
+    report_type = report.get("report_type", "executive_decision")
+    report_title = report_type.replace("_", " ").title()
     query = report.get("query") or report.get("question", "N/A")
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
@@ -151,13 +164,15 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     s = _styles(body_font)
     story: list = []
 
-    story.append(Paragraph("Executive Decision Report", s["title"]))
+    story.append(Paragraph(f"{report_title} — {project_name} — {project_code}", s["title"]))
     story.append(Spacer(1, 0.3 * cm))
 
     meta_table = Table(
         [
             ["Request ID", request_id],
-            ["Project", project_code],
+            ["Project Name", project_name],
+            ["Project Code", project_code],
+            ["Report Type", report_type],
             ["Language", language],
             ["Quality Gate", qg_status],
             ["Generated", generated_at],
@@ -182,9 +197,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
                 confidence = item.get("confidence", "medium")
                 refs = ", ".join(item.get("evidence_ids", []))
                 ref_note = f" — {refs}" if refs else ""
-                story.append(
-                    Paragraph(f"• {claim} <i>[{confidence}]{ref_note}</i>", s["bullet"])
-                )
+                story.append(Paragraph(f"• {claim} <i>[{confidence}]{ref_note}</i>", s["bullet"]))
     else:
         story.append(Paragraph("No summary available.", s["body"]))
 
@@ -215,7 +228,12 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
             variance_row = ["Variance", f"{val_str}{' (' + formula + ')' if formula else ''}", "—"]
 
         fin_table = Table(
-            [["Item", "Value", "Source"], _fv(budget, "Budget"), _fv(actual, "Actual Cost"), variance_row],
+            [
+                ["Item", "Value", "Source"],
+                _fv(budget, "Budget"),
+                _fv(actual, "Actual Cost"),
+                variance_row,
+            ],
             colWidths=[3.5 * cm, 10 * cm, 3 * cm],
         )
         fin_table.setStyle(_TBL_HEADER)
@@ -224,14 +242,20 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
         story.append(Paragraph("Financial data not available.", s["body"]))
     story.append(Spacer(1, 0.3 * cm))
 
+    is_data_report = report_type in ("salary_payroll", "data_report")
+
     # 3–7. Findings sections
-    for heading, key in [
+    section_specs = [
         ("3. Key Findings", "key_findings"),
-        ("4. Root Causes", "root_causes"),
-        ("5. Delay Analysis", "delay_analysis"),
-        ("6. Contractual / Commercial Implications", "contractual_implications"),
         ("7. Recommended Actions — Proposal Only", "recommended_actions"),
-    ]:
+    ]
+    if not is_data_report:
+        section_specs[1:1] = [
+            ("4. Root Causes", "root_causes"),
+            ("5. Delay Analysis", "delay_analysis"),
+            ("6. Contractual / Commercial Implications", "contractual_implications"),
+        ]
+    for heading, key in section_specs:
         story.append(Paragraph(heading, s["h1"]))
         items = report.get(key, [])
         if items:
@@ -275,6 +299,18 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     else:
         story.append(Paragraph("No missing data.", s["body"]))
 
+    what_checked = report.get("what_was_checked", [])
+    if what_checked:
+        story.append(Paragraph("What Was Checked", s["h1"]))
+        for item in what_checked:
+            story.append(Paragraph(f"• {item}", s["bullet"]))
+
+    required = report.get("required_data", [])
+    if required:
+        story.append(Paragraph("Required Data / Next Steps", s["h1"]))
+        for item in required:
+            story.append(Paragraph(f"• {item}", s["bullet"]))
+
     # 10. Sources
     story.append(Paragraph("10. Sources", s["h1"]))
     sources = report.get("sources", [])
@@ -282,14 +318,16 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
         src_rows = [["ID", "Type", "Title", "Reference", "Date", "Confidence"]]
         for src in sources:
             if isinstance(src, dict):
-                src_rows.append([
-                    src.get("source_id", "—"),
-                    src.get("source_type", "—"),
-                    src.get("title", "—")[:28],
-                    src.get("reference", "—")[:32],
-                    src.get("date") or "—",
-                    src.get("confidence", "—"),
-                ])
+                src_rows.append(
+                    [
+                        src.get("source_id", "—"),
+                        src.get("source_type", "—"),
+                        src.get("title", "—")[:28],
+                        src.get("reference", "—")[:32],
+                        src.get("date") or "—",
+                        src.get("confidence", "—"),
+                    ]
+                )
         src_table = Table(
             src_rows,
             colWidths=[1.4 * cm, 2.2 * cm, 4.0 * cm, 5.0 * cm, 2.0 * cm, 2.0 * cm],

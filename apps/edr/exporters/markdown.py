@@ -11,18 +11,24 @@ def to_markdown(report: dict) -> str:
 
     request_id = report.get("request_id", "N/A")
     project_code = report.get("project_code") or "N/A"
+    pid = report.get("project_identity") or {}
+    project_name = pid.get("project_name") or project_code
+    report_type = report.get("report_type", "executive_decision")
+    report_title = report_type.replace("_", " ").title()
     query = report.get("query") or report.get("question", "N/A")
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     lines += [
-        "# Executive Decision Report",
+        f"# {report_title} — {project_name} — {project_code}",
         "",
         "| Field | Value |",
         "|---|---|",
         f"| Request ID | {request_id} |",
-        f"| Project | {project_code} |",
+        f"| Project Name | {project_name} |",
+        f"| Project Code | {project_code} |",
+        f"| Report Type | {report_type} |",
         f"| Language | {language} |",
         f"| Quality Gate | {qg_status} |",
         f"| Evidence Completeness | {report.get('evidence_completeness', 'n/a')} |",
@@ -133,15 +139,18 @@ def to_markdown(report: dict) -> str:
         lines.append(f"> {fs['note']}.")
     lines.append("")
 
+    is_data_report = report_type in ("salary_payroll", "data_report")
+
     # 3–7. Findings sections
     _findings_section(lines, "## 3. Key Findings", report.get("key_findings", []))
-    _findings_section(lines, "## 4. Root Causes", report.get("root_causes", []))
-    _findings_section(lines, "## 5. Delay Analysis", report.get("delay_analysis", []))
-    _findings_section(
-        lines,
-        "## 6. Contractual / Commercial Implications",
-        report.get("contractual_implications", []),
-    )
+    if not is_data_report:
+        _findings_section(lines, "## 4. Root Causes", report.get("root_causes", []))
+        _findings_section(lines, "## 5. Delay Analysis", report.get("delay_analysis", []))
+        _findings_section(
+            lines,
+            "## 6. Contractual / Commercial Implications",
+            report.get("contractual_implications", []),
+        )
 
     lines.append("## 7. Recommended Actions — Proposal Only")
     lines.append("")
@@ -190,6 +199,22 @@ def to_markdown(report: dict) -> str:
     else:
         lines.append("_No missing data._")
     lines.append("")
+
+    # 9b. What was checked / required data (salary/payroll availability reports)
+    what_checked = report.get("what_was_checked", [])
+    if what_checked:
+        lines.append("## What Was Checked")
+        lines.append("")
+        for item in what_checked:
+            lines.append(f"- {item}")
+        lines.append("")
+    required = report.get("required_data", [])
+    if required:
+        lines.append("## Required Data / Next Steps")
+        lines.append("")
+        for item in required:
+            lines.append(f"- {item}")
+        lines.append("")
 
     # 10. Sources
     lines.append("## 10. Sources")

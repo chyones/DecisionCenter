@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from apps.edr.graph.intent import classify_report_type
 from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm
 
@@ -69,4 +70,5 @@ async def run(state: DecisionState) -> DecisionState:
         intents = ["general_project_status"]
 
     state.outputs["intent"] = intents
+    state.outputs["report_type"] = classify_report_type(state.query)
     return state.mark("node_02_intent")

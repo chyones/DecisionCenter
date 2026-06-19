@@ -19,25 +19,33 @@ def to_word(report: dict) -> bytes:
 
     request_id = report.get("request_id", "N/A")
     project_code = report.get("project_code") or "N/A"
+    pid = report.get("project_identity") or {}
+    project_name = pid.get("project_name") or project_code
+    report_type = report.get("report_type", "executive_decision")
+    report_title = report_type.replace("_", " ").title()
     query = report.get("query") or report.get("question", "N/A")
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     # Cover heading
-    title_para = doc.add_heading("Executive Decision Report", level=0)
+    title_para = doc.add_heading(f"{report_title} — {project_name} — {project_code}", level=0)
     title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Metadata table
-    meta_table = doc.add_table(rows=5, cols=2)
+    meta_table = doc.add_table(rows=7, cols=2)
     meta_table.style = "Table Grid"
-    for i, (key, val) in enumerate([
-        ("Request ID", request_id),
-        ("Project", project_code),
-        ("Language", language),
-        ("Quality Gate", qg_status),
-        ("Generated", generated_at),
-    ]):
+    for i, (key, val) in enumerate(
+        [
+            ("Request ID", request_id),
+            ("Project Name", project_name),
+            ("Project Code", project_code),
+            ("Report Type", report_type),
+            ("Language", language),
+            ("Quality Gate", qg_status),
+            ("Generated", generated_at),
+        ]
+    ):
         meta_table.rows[i].cells[0].text = key
         meta_table.rows[i].cells[0].paragraphs[0].runs[0].bold = True
         meta_table.rows[i].cells[1].text = val
@@ -105,14 +113,20 @@ def to_word(report: dict) -> bytes:
         doc.add_paragraph("Financial data not available.")
     doc.add_paragraph()
 
+    is_data_report = report_type in ("salary_payroll", "data_report")
+
     # 3–7. Findings sections
-    for heading, key in [
+    section_specs = [
         ("3. Key Findings", "key_findings"),
-        ("4. Root Causes", "root_causes"),
-        ("5. Delay Analysis", "delay_analysis"),
-        ("6. Contractual / Commercial Implications", "contractual_implications"),
         ("7. Recommended Actions — Proposal Only", "recommended_actions"),
-    ]:
+    ]
+    if not is_data_report:
+        section_specs[1:1] = [
+            ("4. Root Causes", "root_causes"),
+            ("5. Delay Analysis", "delay_analysis"),
+            ("6. Contractual / Commercial Implications", "contractual_implications"),
+        ]
+    for heading, key in section_specs:
         doc.add_heading(heading, level=1)
         items = report.get(key, [])
         if items:
@@ -135,7 +149,9 @@ def to_word(report: dict) -> bytes:
     if conflicts:
         for c in conflicts:
             if isinstance(c, dict):
-                doc.add_paragraph(f"Type: {c.get('conflict_type', '?')} — {c.get('description', '')}")
+                doc.add_paragraph(
+                    f"Type: {c.get('conflict_type', '?')} — {c.get('description', '')}"
+                )
                 doc.add_paragraph(f"Source A: {c.get('source_a_ref', '—')}", style="List Bullet")
                 doc.add_paragraph(f"Source B: {c.get('source_b_ref', '—')}", style="List Bullet")
     else:
@@ -149,6 +165,18 @@ def to_word(report: dict) -> bytes:
             doc.add_paragraph(str(item), style="List Bullet")
     else:
         doc.add_paragraph("No missing data.")
+
+    what_checked = report.get("what_was_checked", [])
+    if what_checked:
+        doc.add_heading("What Was Checked", level=1)
+        for item in what_checked:
+            doc.add_paragraph(str(item), style="List Bullet")
+
+    required = report.get("required_data", [])
+    if required:
+        doc.add_heading("Required Data / Next Steps", level=1)
+        for item in required:
+            doc.add_paragraph(str(item), style="List Bullet")
 
     # 10. Sources
     doc.add_heading("10. Sources", level=1)
