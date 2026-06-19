@@ -5,9 +5,28 @@ Deterministic claim checker.  No LLM is used here.
 
 from __future__ import annotations
 
+import re
+
 from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
 from apps.edr.schemas.quality_gate import ClaimCheck, QualityGateResult
+
+
+_MANAGEMENT_QUESTION_RE = re.compile(
+    r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
+    r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
+    r"\bwhat\s+should\s+we\s+do\b|\brecommend\w*\s+(action|intervention)|"
+    r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
+    re.IGNORECASE,
+)
+
+
+_SEARCH_SUMMARY_PATTERNS = re.compile(
+    r"\b(evidence\s+retrieval|evidence\s+review|search\s+results?|"
+    r"retrieved|catalogued|document\(s\)\s+and|email\(s\)\s+retrieved|"
+    r"available\s+evidence)\b",
+    re.IGNORECASE,
+)
 
 
 def _collect_claims(report: dict) -> list[tuple[str, dict]]:
@@ -155,6 +174,122 @@ def _check_executive_summary(report: dict, evidence: list[dict]) -> list[ClaimCh
     return checks
 
 
+def _is_management_question(query: str) -> bool:
+    return bool(_MANAGEMENT_QUESTION_RE.search(query or ""))
+
+
+def _check_search_summary_patterns(report: dict) -> list[ClaimCheck]:
+    """Flag reports whose executive summary reads like an evidence catalog."""
+    checks: list[ClaimCheck] = []
+    es = report.get("executive_summary", [])
+    if not isinstance(es, list):
+        return checks
+
+    for idx, item in enumerate(es):
+        if not isinstance(item, dict):
+            continue
+        claim = item.get("claim", "")
+        if _SEARCH_SUMMARY_PATTERNS.search(claim):
+            checks.append(ClaimCheck(
+                claim_id=f"executive_summary[{idx}]",
+                verdict="needs_review",
+                evidence_ids=item.get("evidence_ids", []),
+                reason=(
+                    "Executive summary appears to be a search/evidence summary "
+                    "rather than an analytical answer to the query."
+                ),
+            ))
+    return checks
+
+
+def _check_management_question_answer(report: dict, query: str) -> list[ClaimCheck]:
+    """Validate that focused management questions receive a decision-memo answer."""
+    checks: list[ClaimCheck] = []
+    if not _is_management_question(query):
+        return checks
+
+    mqa = report.get("management_question_answer")
+    if not isinstance(mqa, dict):
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer",
+            verdict="unsupported",
+            evidence_ids=[],
+            reason="Management question requires a management_question_answer object.",
+        ))
+        return checks
+
+    executive_answer = (mqa.get("executive_answer") or "").strip()
+    if not executive_answer:
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.executive_answer",
+            verdict="unsupported",
+            evidence_ids=[],
+            reason="Management question requires a non-empty executive_answer.",
+        ))
+
+    why = mqa.get("why_biggest_problem")
+    if not isinstance(why, list) or len(why) < 3:
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.why_biggest_problem",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Management question answer should provide 3-5 bullets explaining why this is the biggest problem.",
+        ))
+
+    impact = mqa.get("business_impact") or {}
+    if not isinstance(impact, dict) or not all(
+        (impact.get(k) or "").strip()
+        for k in ("schedule_impact", "cost_commercial_impact", "operational_client_impact")
+    ):
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.business_impact",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Business impact should cover schedule, cost/commercial, and operational/client dimensions.",
+        ))
+
+    decision = (mqa.get("decision_required") or "").strip()
+    if not decision:
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.decision_required",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Management question answer should state what management must decide now.",
+        ))
+
+    action = mqa.get("recommended_action") or {}
+    if not isinstance(action, dict) or not (
+        (action.get("specific_action") or "").strip()
+        and (action.get("owner_role") or "").strip()
+    ):
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.recommended_action",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Recommended action should include specific_action and owner_role.",
+        ))
+
+    risks = (mqa.get("risks_if_no_action") or "").strip()
+    if not risks:
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.risks_if_no_action",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Management question answer should include risks_if_no_action.",
+        ))
+
+    confidence = mqa.get("confidence")
+    if confidence not in ("high", "medium", "low"):
+        checks.append(ClaimCheck(
+            claim_id="management_question_answer.confidence",
+            verdict="needs_review",
+            evidence_ids=[],
+            reason="Confidence must be high, medium, or low.",
+        ))
+
+    return checks
+
+
 def _compute_analytical_completeness(report: dict) -> dict:
     """Compute per-section analytical completeness as metadata.
 
@@ -226,8 +361,18 @@ async def run(state: DecisionState) -> DecisionState:
     source_checks = _check_sources(report, evidence_ids)
     conflict_checks = _check_conflicts(report)
     summary_checks = _check_executive_summary(report, evidence)
+    search_summary_checks = _check_search_summary_patterns(report)
+    mqa_checks = _check_management_question_answer(report, state.query)
 
-    all_checks = claim_checks + financial_checks + source_checks + conflict_checks + summary_checks
+    all_checks = (
+        claim_checks
+        + financial_checks
+        + source_checks
+        + conflict_checks
+        + summary_checks
+        + search_summary_checks
+        + mqa_checks
+    )
 
     unsupported = [c for c in all_checks if c.verdict == "unsupported"]
     needs_review = [c for c in all_checks if c.verdict == "needs_review"]

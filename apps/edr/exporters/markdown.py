@@ -55,6 +55,55 @@ def to_markdown(report: dict) -> str:
         lines.append("_No summary available._")
     lines.append("")
 
+    # 1b. Management Question Answer (executive decision memo)
+    mqa = report.get("management_question_answer") or {}
+    if isinstance(mqa, dict) and mqa.get("executive_answer"):
+        lines.append("## Management Question Answer")
+        lines.append("")
+        lines.append(f"**Executive answer:** {mqa.get('executive_answer', '')}")
+        lines.append("")
+        why = mqa.get("why_biggest_problem") or []
+        if why:
+            lines.append("**Why this is the biggest problem:**")
+            for bullet in why:
+                lines.append(f"- {bullet}")
+            lines.append("")
+        evidence_used = mqa.get("evidence_used") or []
+        if evidence_used:
+            lines.append("**Evidence used:**")
+            for item in evidence_used:
+                lines.append(f"- {item}")
+            lines.append("")
+        impact = mqa.get("business_impact") or {}
+        if isinstance(impact, dict) and any(impact.values()):
+            lines.append("**Business impact:**")
+            for label, key in (
+                ("Schedule", "schedule_impact"),
+                ("Cost / Commercial", "cost_commercial_impact"),
+                ("Operational / Client", "operational_client_impact"),
+            ):
+                value = impact.get(key, "") or "_Not specified_"
+                lines.append(f"- **{label}:** {value}")
+            lines.append("")
+        if mqa.get("decision_required"):
+            lines.append(f"**Decision required:** {mqa['decision_required']}")
+            lines.append("")
+        action = mqa.get("recommended_action") or {}
+        if isinstance(action, dict) and action.get("specific_action"):
+            lines.append("**Recommended action:**")
+            lines.append(f"- **Action:** {action.get('specific_action', '')}")
+            lines.append(f"- **Owner role:** {action.get('owner_role', '')}")
+            lines.append(f"- **Timeframe:** {action.get('timeframe', '')}")
+            lines.append("")
+        if mqa.get("risks_if_no_action"):
+            lines.append(f"**Risks if no action:** {mqa['risks_if_no_action']}")
+            lines.append("")
+        lines.append(
+            f"**Confidence:** {mqa.get('confidence', 'medium')} — "
+            f"{mqa.get('missing_evidence_or_assumptions', '') or 'No missing evidence noted.'}"
+        )
+        lines.append("")
+
     # 2. Financial Snapshot — Odoo
     lines.append("## 2. Financial Snapshot — Odoo")
     lines.append("")

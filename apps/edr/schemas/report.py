@@ -54,6 +54,37 @@ class SourceEntry(BaseModel):
     used_in: list[str] = Field(default_factory=list)
 
 
+class BusinessImpact(BaseModel):
+    schedule_impact: str = ""
+    cost_commercial_impact: str = ""
+    operational_client_impact: str = ""
+
+
+class RecommendedActionDetail(BaseModel):
+    specific_action: str = ""
+    owner_role: str = ""
+    timeframe: str = ""
+
+
+class ManagementQuestionAnswer(BaseModel):
+    """Executive decision-memo answer to a focused management question.
+
+    Used when the query asks for a decision, a single biggest problem,
+    or a recommendation.  Populated by node_12 and validated by the
+    quality gate.
+    """
+
+    executive_answer: str = ""
+    why_biggest_problem: list[str] = Field(default_factory=list)
+    evidence_used: list[str] = Field(default_factory=list)
+    business_impact: BusinessImpact = Field(default_factory=BusinessImpact)
+    decision_required: str = ""
+    recommended_action: RecommendedActionDetail = Field(default_factory=RecommendedActionDetail)
+    risks_if_no_action: str = ""
+    confidence: Literal["high", "medium", "low"] = "medium"
+    missing_evidence_or_assumptions: str = ""
+
+
 class ExecutiveDecisionReport(BaseModel):
     """Canonical internal JSON report. All export formats derive from this model.
 
@@ -71,6 +102,9 @@ class ExecutiveDecisionReport(BaseModel):
     delay_analysis: list[FindingItem] = Field(default_factory=list)
     contractual_implications: list[FindingItem] = Field(default_factory=list)
     recommended_actions: list[FindingItem] = Field(default_factory=list)
+    management_question_answer: ManagementQuestionAnswer = Field(
+        default_factory=ManagementQuestionAnswer
+    )
     missing_data: list[str] = Field(default_factory=list)
     conflicts: list[ConflictItem] = Field(default_factory=list)
     sources: list[SourceEntry] = Field(default_factory=list)

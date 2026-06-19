@@ -7,6 +7,7 @@ Every claim MUST bind to evidence_ids; financial values MUST come from Odoo.
 from __future__ import annotations
 
 import json
+import re
 
 from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
@@ -132,6 +133,20 @@ async def _apply_rerank(
 # ---------------------------------------------------------------------------
 
 
+_MANAGEMENT_QUESTION_RE = re.compile(
+    r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
+    r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
+    r"\bwhat\s+should\s+we\s+do\b|\brecommend\w*\s+(action|intervention)|"
+    r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_management_question(query: str) -> bool:
+    """Return True when the query asks for a decision, one big problem, or recommendation."""
+    return bool(_MANAGEMENT_QUESTION_RE.search(query or ""))
+
+
 def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
     odoo_ev = [e for e in prompt_evidence if e.get("source_type") == "odoo"]
     email_ev = [e for e in prompt_evidence if e.get("source_type") == "email"]
@@ -189,6 +204,23 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         else "actual_cost: status='not_available' (no cost lines in evidence)"
     )
 
+    management_question = _is_management_question(state.query)
+    management_instruction = (
+        "MANAGEMENT QUESTION MODE — The user asked a focused decision question.\n"
+        "Your report must read like an executive decision memo, NOT a search summary.\n"
+        "- In MANAGEMENT_QUESTION_ANSWER, name exactly ONE biggest problem in executive_answer.\n"
+        "- why_biggest_problem: 3-5 bullets, each tied to a specific evidence_id.\n"
+        "- business_impact: separate schedule, cost/commercial, and operational/client impact.\n"
+        "- decision_required: state what management must decide now.\n"
+        "- recommended_action: specific_action, owner_role, timeframe.\n"
+        "- risks_if_no_action: concise.\n"
+        "- confidence: high/medium/low, with missing_evidence_or_assumptions.\n"
+        "- If evidence is insufficient, say so; do not invent.\n"
+        "- The executive_summary and key_findings must support the decision memo, not catalogue evidence.\n"
+        if management_question
+        else ""
+    )
+
     return (
         "You are an executive decision-support analyst for a construction company.\n"
         "Generate a FULLY POPULATED structured JSON report. Every required section must have real content.\n\n"
@@ -196,12 +228,13 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         "1. Every claim MUST carry at least one evidence_id from the evidence listed below.\n"
         "2. Every financial number MUST carry an Odoo evidence_id.\n"
         "3. Do NOT invent facts, numbers, or dates not present in the evidence.\n"
-        "4. KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
+        "4. This is an executive decision memo, not a search-results page.\n"
+        "   KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
         "   CORRECT: 'Four successive BOQ revisions indicate ongoing scope changes into Q1 2026.'\n"
         "   WRONG:   'BOQ Revision 4.xlsx', 'Project_Schedule_Rev3.pdf'\n"
-        "5. EXECUTIVE_SUMMARY must contain 4–8 complete sentences covering:\n"
-        "   project status, financial status, schedule/delay signals, top risk, recommended next step.\n"
+        "5. EXECUTIVE_SUMMARY must directly answer the user's query in 4–8 sentences.\n"
         "6. MISSING_DATA must list every item that could not be determined, including budget.\n\n"
+        f"{management_instruction}\n"
         f"User role: {role} | Can view financials: {can_see_finance}\n"
         f"Query: {state.query}\n"
         f"Project code: {state.project_code}\n"
@@ -233,7 +266,7 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         '  "query": "string",\n'
         '  "language": "en or ar",\n'
         '  "executive_summary": [\n'
-        '    {"claim": "4-8 sentence synthesized summary", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}\n'
+        '    {"claim": "direct answer to the user query in 4-8 sentences", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}\n'
         "  ],\n"
         '  "financial_snapshot": {\n'
         '    "budget": {"value": null, "currency": "AED", "evidence_id": null, "status": "not_available"},\n'
@@ -245,6 +278,25 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         '  "delay_analysis": [...],\n'
         '  "contractual_implications": [...],\n'
         '  "recommended_actions": [{"text": "...", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}],\n'
+        '  "management_question_answer": {\n'
+        '    "executive_answer": "One clear sentence naming the biggest problem or decision.",\n'
+        '    "why_biggest_problem": ["bullet 1 tied to evidence", "bullet 2", "bullet 3"],\n'
+        '    "evidence_used": ["source type: short summary", "..."],\n'
+        '    "business_impact": {\n'
+        '      "schedule_impact": "...",\n'
+        '      "cost_commercial_impact": "...",\n'
+        '      "operational_client_impact": "..."\n'
+        '    },\n'
+        '    "decision_required": "what management must decide now",\n'
+        '    "recommended_action": {\n'
+        '      "specific_action": "...",\n'
+        '      "owner_role": "...",\n'
+        '      "timeframe": "..."\n'
+        '    },\n'
+        '    "risks_if_no_action": "concise",\n'
+        '    "confidence": "high|medium|low",\n'
+        '    "missing_evidence_or_assumptions": "..."\n'
+        '  },\n'
         '  "missing_data": ["Project budget (AED): not available in Odoo analytic line records", ...],\n'
         '  "conflicts": [...],\n'
         '  "sources": [{"source_id": "S1", "source_type": "sharepoint|odoo|email", "title": "...", "reference": "...", "date": "...", "confidence": "...", "used_in": ["section"]}]\n'
@@ -452,6 +504,28 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
     if not evidence:
         missing_data.append("No evidence was retrieved for this query.")
 
+    management_question_answer: dict = {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {
+            "schedule_impact": "",
+            "cost_commercial_impact": "",
+            "operational_client_impact": "",
+        },
+        "decision_required": "",
+        "recommended_action": {
+            "specific_action": "",
+            "owner_role": "",
+            "timeframe": "",
+        },
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": (
+            "Automated executive synthesis unavailable; evidence catalogued for manual review."
+        ),
+    }
+
     return {
         "request_id": state.request_id,
         "project_code": state.project_code,
@@ -468,6 +542,7 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
         "delay_analysis": delay_analysis,
         "contractual_implications": contractual_implications,
         "recommended_actions": [],
+        "management_question_answer": management_question_answer,
         "missing_data": missing_data,
         "conflicts": [],
         "sources": sources_list,
@@ -548,12 +623,18 @@ async def run(state: DecisionState) -> DecisionState:
         report = _build_report_from_evidence(state)
 
     # If LLM produced an empty shell but evidence exists, fall back to deterministic builder.
-    has_findings = any(
-        report.get(s)
-        for s in ("executive_summary", "key_findings", "root_causes",
-                  "delay_analysis", "contractual_implications", "recommended_actions")
+    list_sections = ("executive_summary", "key_findings", "root_causes",
+                     "delay_analysis", "contractual_implications", "recommended_actions")
+    has_list_findings = any(
+        isinstance(report.get(s), list) and len(report.get(s)) > 0
+        for s in list_sections
     )
-    if not has_findings and state.evidence:
+    mqa = report.get("management_question_answer")
+    has_mqa_finding = (
+        isinstance(mqa, dict)
+        and (mqa.get("executive_answer") or "").strip()
+    )
+    if not (has_list_findings or has_mqa_finding) and state.evidence:
         report = _build_report_from_evidence(state)
 
     # Ensure required fields exist
@@ -572,6 +653,25 @@ async def run(state: DecisionState) -> DecisionState:
     report.setdefault("delay_analysis", [])
     report.setdefault("contractual_implications", [])
     report.setdefault("recommended_actions", [])
+    report.setdefault("management_question_answer", {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {
+            "schedule_impact": "",
+            "cost_commercial_impact": "",
+            "operational_client_impact": "",
+        },
+        "decision_required": "",
+        "recommended_action": {
+            "specific_action": "",
+            "owner_role": "",
+            "timeframe": "",
+        },
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": "",
+    })
     report.setdefault("missing_data", [])
     report.setdefault("conflicts", [])
     report.setdefault("sources", [])
