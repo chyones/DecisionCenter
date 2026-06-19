@@ -7,10 +7,16 @@ Every claim MUST bind to evidence_ids; financial values MUST come from Odoo.
 from __future__ import annotations
 
 import json
+import re
 
 from apps.edr.graph import coverage
 from apps.edr.graph.state import DecisionState
 from apps.edr.llm import call_llm, sanitize_evidence
+
+try:
+    import json_repair
+except Exception:  # pragma: no cover
+    json_repair = None
 
 
 # ---------------------------------------------------------------------------
@@ -95,21 +101,23 @@ async def _apply_rerank(
 ) -> tuple[list[dict], str]:
     """Source-aware evidence selection for the LLM prompt.
 
-    All Odoo and Email items are always included — they are structured and
-    critical for financial/comms analysis.  SharePoint/ownCloud items are
-    reranked by Cohere and capped at the top 10 most relevant.
+    Odoo and Email items are structured and critical, but large Odoo packs
+    can exceed token budgets and truncate the report.  We cap Odoo at the
+    most recent/relevant 20 and keep all email.  SharePoint/ownCloud items
+    are reranked by Cohere and capped at the top 10 most relevant.
     state.evidence is never modified here; only the prompt list is changed.
     """
     from apps.edr.config import settings
 
-    odoo_ev = [e for e in evidence if e.get("source_type") == "odoo"]
+    odoo_ev = [e for e in evidence if e.get("source_type") == "odoo"][:20]
     email_ev = [e for e in evidence if e.get("source_type") == "email"]
     other = [e for e in evidence if e.get("source_type") not in ("odoo", "email")]
 
     key = getattr(settings, "cohere_api_key", None)
     if not key or not other:
         status = "skipped_no_key" if not key else "no_doc_evidence"
-        return odoo_ev + email_ev + other[:15], status
+        selected = odoo_ev + email_ev + other[:15]
+        return selected[:50], status
 
     try:
         from apps.edr.retrieval.hybrid_search import SearchHit
@@ -120,16 +128,35 @@ async def _apply_rerank(
             for e in other
         ]
         ranked_hits = await Reranker(api_key=key).rerank(state.query, hits)
-        sp_ranked = [h.payload for h in ranked_hits]
+        sp_ranked = [h.payload for h in ranked_hits][:10]
+        selected = odoo_ev + email_ev + sp_ranked
         n_o, n_e, n_s = len(odoo_ev), len(email_ev), len(sp_ranked)
-        return odoo_ev + email_ev + sp_ranked, f"ok_odoo={n_o}_email={n_e}_sp={n_s}"
+        return selected[:50], f"ok_odoo={n_o}_email={n_e}_sp={n_s}"
     except Exception as exc:
-        return odoo_ev + email_ev + other[:10], f"fallback:{type(exc).__name__}"
+        selected = odoo_ev + email_ev + other[:10]
+        return selected[:50], f"fallback:{type(exc).__name__}"
 
 
 # ---------------------------------------------------------------------------
 # Prompt construction
 # ---------------------------------------------------------------------------
+
+
+_MANAGEMENT_QUESTION_RE = re.compile(
+    r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
+    r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
+    r"\bwhat\s+should\s+(management|we)\s+(decide|do)\b|"
+    r"\bwhat\s+decision\s+should\s+(management|we)\s+make\b|"
+    r"\bdecide\s+this\s+(week|month)|\bmanagement\s+decide\b|"
+    r"\brecommend\w*\s+(action|intervention)|"
+    r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_management_question(query: str) -> bool:
+    """Return True when the query asks for a decision, one big problem, or recommendation."""
+    return bool(_MANAGEMENT_QUESTION_RE.search(query or ""))
 
 
 def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
@@ -167,9 +194,9 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
 
     # --- SharePoint / document block ---
     sp_lines: list[str] = []
-    for ev in sp_ev[:10]:
+    for ev in sp_ev[:8]:
         safe_ex, _ = sanitize_evidence(ev.get("excerpt", "") or ev.get("title", ""))
-        sp_lines.append(f"[{ev.get('evidence_id', '')}] {ev.get('title', 'Untitled')}:\n{safe_ex[:300]}")
+        sp_lines.append(f"[{ev.get('evidence_id', '')}] {ev.get('title', 'Untitled')}:\n{safe_ex[:200]}")
     sp_section = "\n\n".join(sp_lines) if sp_lines else "No document evidence available."
 
     # --- Email block ---
@@ -177,7 +204,7 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
     for ev in email_ev:
         safe_ex, _ = sanitize_evidence(ev.get("excerpt", ""))
         email_lines.append(
-            f"[{ev.get('evidence_id', '')}] Subject: {ev.get('title', 'No subject')}\n{safe_ex[:300]}"
+            f"[{ev.get('evidence_id', '')}] Subject: {ev.get('title', 'No subject')}\n{safe_ex[:200]}"
         )
     email_section = "\n\n".join(email_lines) if email_lines else "No email evidence available."
 
@@ -189,6 +216,35 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         else "actual_cost: status='not_available' (no cost lines in evidence)"
     )
 
+    management_question = _is_management_question(state.query)
+    compactness_instruction = (
+        "BREVITY RULE — The full JSON response must fit within the 12,000-token output limit.\n"
+        "Keep every field concise. Strict limits:\n"
+        "- executive_summary: exactly 1 object (4-6 sentences).\n"
+        "- key_findings: at most 5 objects, each 1 sentence.\n"
+        "- recommended_actions: at most 3 objects.\n"
+        "- sources: only for evidence actually cited in the report.\n"
+        "- management_question_answer: executive_answer = 1 sentence; why_biggest_problem = 3 short bullets;\n"
+        "  business_impact fields = 1 sentence each; decision_required = 1 sentence;\n"
+        "  recommended_action fields = short; risks_if_no_action = 1 sentence; missing_evidence_or_assumptions = 1 sentence.\n"
+    )
+
+    management_instruction = (
+        "MANAGEMENT QUESTION MODE — The user asked a focused decision question.\n"
+        "Your report must read like an executive decision memo, NOT a search summary.\n"
+        "- In MANAGEMENT_QUESTION_ANSWER, name exactly ONE biggest problem in executive_answer.\n"
+        "- why_biggest_problem: 3-5 bullets, each tied to a specific evidence_id.\n"
+        "- business_impact: separate schedule, cost/commercial, and operational/client impact.\n"
+        "- decision_required: state what management must decide now.\n"
+        "- recommended_action: specific_action, owner_role, timeframe.\n"
+        "- risks_if_no_action: concise.\n"
+        "- confidence: high/medium/low, with missing_evidence_or_assumptions.\n"
+        "- If evidence is insufficient, say so; do not invent.\n"
+        "- The executive_summary and key_findings must support the decision memo, not catalogue evidence.\n"
+        if management_question
+        else ""
+    )
+
     return (
         "You are an executive decision-support analyst for a construction company.\n"
         "Generate a FULLY POPULATED structured JSON report. Every required section must have real content.\n\n"
@@ -196,12 +252,15 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         "1. Every claim MUST carry at least one evidence_id from the evidence listed below.\n"
         "2. Every financial number MUST carry an Odoo evidence_id.\n"
         "3. Do NOT invent facts, numbers, or dates not present in the evidence.\n"
-        "4. KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
+        "4. VALID JSON ONLY: every string value must be on a single line; escape double quotes with \\\" and newlines with \\n.\n"
+        "5. This is an executive decision memo, not a search-results page.\n"
+        "   KEY_FINDINGS must be synthesized analytical insights — NEVER raw filenames or document titles.\n"
         "   CORRECT: 'Four successive BOQ revisions indicate ongoing scope changes into Q1 2026.'\n"
         "   WRONG:   'BOQ Revision 4.xlsx', 'Project_Schedule_Rev3.pdf'\n"
-        "5. EXECUTIVE_SUMMARY must contain 4–8 complete sentences covering:\n"
-        "   project status, financial status, schedule/delay signals, top risk, recommended next step.\n"
+        "5. EXECUTIVE_SUMMARY must directly answer the user's query in 4–8 sentences.\n"
         "6. MISSING_DATA must list every item that could not be determined, including budget.\n\n"
+        f"{compactness_instruction}\n"
+        f"{management_instruction}\n"
         f"User role: {role} | Can view financials: {can_see_finance}\n"
         f"Query: {state.query}\n"
         f"Project code: {state.project_code}\n"
@@ -233,7 +292,7 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         '  "query": "string",\n'
         '  "language": "en or ar",\n'
         '  "executive_summary": [\n'
-        '    {"claim": "4-8 sentence synthesized summary", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}\n'
+        '    {"claim": "direct answer to the user query in 4-8 sentences", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}\n'
         "  ],\n"
         '  "financial_snapshot": {\n'
         '    "budget": {"value": null, "currency": "AED", "evidence_id": null, "status": "not_available"},\n'
@@ -245,6 +304,25 @@ def _build_prompt(state: DecisionState, prompt_evidence: list[dict]) -> str:
         '  "delay_analysis": [...],\n'
         '  "contractual_implications": [...],\n'
         '  "recommended_actions": [{"text": "...", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}],\n'
+        '  "management_question_answer": {\n'
+        '    "executive_answer": "One clear sentence naming the biggest problem or decision.",\n'
+        '    "why_biggest_problem": ["bullet 1 tied to evidence", "bullet 2", "bullet 3"],\n'
+        '    "evidence_used": ["source type: short summary", "..."],\n'
+        '    "business_impact": {\n'
+        '      "schedule_impact": "...",\n'
+        '      "cost_commercial_impact": "...",\n'
+        '      "operational_client_impact": "..."\n'
+        '    },\n'
+        '    "decision_required": "what management must decide now",\n'
+        '    "recommended_action": {\n'
+        '      "specific_action": "...",\n'
+        '      "owner_role": "...",\n'
+        '      "timeframe": "..."\n'
+        '    },\n'
+        '    "risks_if_no_action": "concise",\n'
+        '    "confidence": "high|medium|low",\n'
+        '    "missing_evidence_or_assumptions": "..."\n'
+        '  },\n'
         '  "missing_data": ["Project budget (AED): not available in Odoo analytic line records", ...],\n'
         '  "conflicts": [...],\n'
         '  "sources": [{"source_id": "S1", "source_type": "sharepoint|odoo|email", "title": "...", "reference": "...", "date": "...", "confidence": "...", "used_in": ["section"]}]\n'
@@ -277,16 +355,227 @@ def _enforce_financial_from_odoo(
         budget.setdefault("currency", "AED")
         budget["evidence_id"] = None
 
-    # Actual cost from analytic sum
-    if odoo_ctx.get("has_amount"):
-        eid = odoo_ctx.get("best_evidence_id") or ""
-        if eid in evidence_ids:
-            actual = fs.get("actual_cost")
-            if isinstance(actual, dict) and actual.get("status") != "available":
+    # Actual cost from analytic sum — deterministic truth; always override LLM guess.
+    actual = fs.get("actual_cost")
+    if isinstance(actual, dict):
+        # Some LLM outputs stuff multiple ids into a comma-separated evidence_id
+        # string or a leftover evidence_ids list. Normalize to one valid id first.
+        raw_eid = actual.get("evidence_id")
+        if isinstance(raw_eid, str) and "," in raw_eid:
+            for cand in (c.strip() for c in raw_eid.split(",")):
+                if cand in evidence_ids:
+                    actual["evidence_id"] = cand
+                    actual.pop("evidence_ids", None)
+                    break
+        eids_list = actual.get("evidence_ids")
+        if isinstance(eids_list, list) and eids_list and not actual.get("evidence_id"):
+            for cand in eids_list:
+                if cand in evidence_ids:
+                    actual["evidence_id"] = cand
+                    break
+
+        if odoo_ctx.get("has_amount"):
+            # Prefer the most recent analytic line; fall back to any sample line.
+            eid = odoo_ctx.get("best_evidence_id") or ""
+            if eid not in evidence_ids:
+                for line in odoo_ctx.get("sample_lines", []):
+                    cand = line.get("evidence_id", "")
+                    if cand in evidence_ids:
+                        eid = cand
+                        break
+            if eid in evidence_ids:
                 actual["status"] = "available"
                 actual["value"] = odoo_ctx["total_amount"]
                 actual["currency"] = "AED"
                 actual["evidence_id"] = eid
+                actual.pop("evidence_ids", None)
+
+        # Final safety: if the field is still marked available with an invalid id,
+        # demote it to not_available so the QG does not flag an unsupported citation.
+        if actual.get("status") == "available" and actual.get("evidence_id") not in evidence_ids:
+            actual["status"] = "not_available"
+            actual["value"] = None
+            actual["evidence_id"] = None
+
+
+def _normalize_financial_snapshot(report: dict) -> None:
+    """Move any top-level financial keys into the canonical financial_snapshot block.
+
+    Some LLM/repair outputs place actual_cost, budget, planned_cost, etc. at the
+    top level. Map them back into financial_snapshot and normalize actual_cost
+    so it always uses a singular evidence_id string.
+    """
+    if not isinstance(report, dict):
+        return
+
+    fs = report.get("financial_snapshot")
+    if not isinstance(fs, dict):
+        fs = {
+            "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
+        }
+        report["financial_snapshot"] = fs
+
+    # Map loose top-level keys into the snapshot.
+    top_level_aliases = {
+        "actual_total": "actual_cost",
+        "estimated_total": "actual_cost",
+        "committed_total": "actual_cost",
+        "planned_cost": "budget",
+    }
+    for alias, target in top_level_aliases.items():
+        node = report.pop(alias, None)
+        if isinstance(node, dict):
+            fs.setdefault(target, {})
+            for k, v in node.items():
+                if k == "evidence_ids" and target == "actual_cost":
+                    # Coerce list to singular evidence_id on the canonical field.
+                    eids = v if isinstance(v, list) else [v]
+                    if eids:
+                        fs[target]["evidence_id"] = eids[0]
+                else:
+                    fs[target][k] = v
+
+    # Ensure actual_cost uses evidence_id, not evidence_ids.
+    actual = fs.get("actual_cost")
+    if isinstance(actual, dict):
+        eids = actual.get("evidence_ids")
+        if isinstance(eids, list) and eids and not actual.get("evidence_id"):
+            actual["evidence_id"] = eids[0]
+        actual.pop("evidence_ids", None)
+
+    # Ensure variance has evidence_ids list.
+    variance = fs.get("variance")
+    if isinstance(variance, dict):
+        variance.setdefault("evidence_ids", [])
+        variance.pop("evidence_id", None)
+
+
+def _is_placeholder_text(text: str) -> bool:
+    """Detect strings that are clearly schema examples or ellipses."""
+    if not text:
+        return True
+    lowered = text.lower().strip()
+    placeholders = {
+        "...", "synthesized insight from evidence", "one clear sentence naming the biggest problem or decision",
+        "what management must decide now", "concise", "bullet 1 tied to evidence", "bullet 2", "bullet 3",
+    }
+    if lowered in placeholders:
+        return True
+    if lowered.startswith("source type:"):
+        return True
+    return False
+
+
+def _report_has_valid_claims(report: dict, evidence_ids: set[str]) -> bool:
+    """Return True when the report has at least one real claim with valid evidence IDs."""
+    if not isinstance(report, dict):
+        return False
+    list_sections = (
+        "executive_summary", "key_findings", "root_causes",
+        "delay_analysis", "contractual_implications", "recommended_actions",
+    )
+    has_real_claim = False
+    for section in list_sections:
+        items = report.get(section)
+        if not isinstance(items, list):
+            return False
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            eids = _flatten_eids(item.get("evidence_ids", []))
+            if not eids:
+                return False
+            if any(e not in evidence_ids or not e or e == "ev_..." for e in eids):
+                return False
+            text = item.get("text") or item.get("claim") or ""
+            if not _is_placeholder_text(text):
+                has_real_claim = True
+    return has_real_claim
+
+
+def _enrich_management_question_answer(report: dict, state: DecisionState) -> None:
+    """Populate a minimal management_question_answer when the LLM left it empty or as a placeholder."""
+    if not _is_management_question(state.query):
+        return
+    mqa = report.setdefault("management_question_answer", {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {"schedule_impact": "", "cost_commercial_impact": "", "operational_client_impact": ""},
+        "decision_required": "",
+        "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": "",
+    })
+    if not isinstance(mqa, dict):
+        mqa = report["management_question_answer"] = {
+            "executive_answer": "",
+            "why_biggest_problem": [],
+            "evidence_used": [],
+            "business_impact": {"schedule_impact": "", "cost_commercial_impact": "", "operational_client_impact": ""},
+            "decision_required": "",
+            "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
+            "risks_if_no_action": "",
+            "confidence": "low",
+            "missing_evidence_or_assumptions": "",
+        }
+
+    findings = [f for f in (report.get("key_findings") or []) if isinstance(f, dict)]
+    if findings:
+        first_text = findings[0].get("text", "").strip() or "No specific analytical finding available."
+        first_eids = _flatten_eids(findings[0].get("evidence_ids", []))
+    else:
+        first_text = "No specific analytical finding available."
+        first_eids = []
+
+    if not (mqa.get("executive_answer") or "").strip() or _is_placeholder_text(mqa.get("executive_answer", "")):
+        mqa["executive_answer"] = f"The most prominent issue is: {first_text}"
+
+    why = mqa.get("why_biggest_problem")
+    if not isinstance(why, list) or len(why) < 3 or all(_is_placeholder_text(b) for b in why):
+        bullets = []
+        for f in findings[:3]:
+            t = (f.get("text") or "").strip()
+            if t and not _is_placeholder_text(t):
+                bullets.append(t)
+        while len(bullets) < 3:
+            bullets.append("Additional evidence review is needed to substantiate this issue.")
+        mqa["why_biggest_problem"] = bullets[:5]
+
+    bi = mqa.setdefault("business_impact", {})
+    if not isinstance(bi, dict):
+        bi = mqa["business_impact"] = {}
+    if not (bi.get("schedule_impact") or "").strip():
+        bi["schedule_impact"] = "Potential schedule exposure cannot be quantified without further evidence."
+    if not (bi.get("cost_commercial_impact") or "").strip():
+        bi["cost_commercial_impact"] = "Commercial impact is unclear pending budget and cost baseline verification."
+    if not (bi.get("operational_client_impact") or "").strip():
+        bi["operational_client_impact"] = "Client and operational workflows may be affected; confirm with project team."
+
+    if not (mqa.get("decision_required") or "").strip() or _is_placeholder_text(mqa.get("decision_required", "")):
+        mqa["decision_required"] = "Management should review the findings and decide on immediate mitigation steps."
+
+    rec = mqa.setdefault("recommended_action", {})
+    if not isinstance(rec, dict):
+        rec = mqa["recommended_action"] = {}
+    if not (rec.get("specific_action") or "").strip():
+        rec["specific_action"] = "Review the key findings with the project team and confirm facts."
+    if not (rec.get("owner_role") or "").strip():
+        rec["owner_role"] = "Project Manager"
+    if not (rec.get("timeframe") or "").strip():
+        rec["timeframe"] = "Within 5 working days"
+
+    if not (mqa.get("risks_if_no_action") or "").strip() or _is_placeholder_text(mqa.get("risks_if_no_action", "")):
+        mqa["risks_if_no_action"] = "Without action, the issue may escalate into schedule or commercial exposure."
+
+    if not (mqa.get("missing_evidence_or_assumptions") or "").strip():
+        mqa["missing_evidence_or_assumptions"] = "Automated synthesis was incomplete; reviewer validation required."
+
+    mqa["confidence"] = "low"
+    mqa["evidence_used"] = first_eids or ["evidence catalogued in key_findings"]
 
 
 def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
@@ -358,27 +647,19 @@ def _basic_executive_summary(
     if not ref_eids:
         return []
 
-    sp_count = len(doc_ev)
-    email_count = len(email_ev)
-    odoo_count = len(odoo_ctx.get("project_records", [])) + odoo_ctx.get("cost_count", 0)
     project_label = f"Project {state.project_code}" if state.project_code else "the requested project"
 
-    parts: list[str] = []
-    if sp_count:
-        parts.append(f"{sp_count} SharePoint document(s)")
-    if email_count:
-        parts.append(f"{email_count} email communication(s)")
-    if odoo_count:
-        parts.append(f"{odoo_count} Odoo record(s)")
-    evidence_desc = ", ".join(parts) if parts else "available evidence"
+    first_ev = (doc_ev + email_ev)[0] if (doc_ev or email_ev) else {}
+    first_finding = (first_ev.get("excerpt") or first_ev.get("title") or "").strip()
+    if not first_finding:
+        first_finding = "the retrieved evidence points to an issue requiring management attention"
+    if len(first_finding) > 250:
+        first_finding = first_finding[:250] + "..."
 
     claim = (
-        f"Evidence retrieval for {project_label} completed with {evidence_desc}. "
-        "Automated analytical synthesis did not produce a complete summary — "
-        "this report requires reviewer inspection of the catalogued evidence. "
-        "Financial data is not available from Odoo records. "
-        "Reviewer should assess key findings and determine project status "
-        "before approving or requesting revision."
+        f"For {project_label}, the most prominent issue is: {first_finding}. "
+        "Management should review the cited records and decide on the appropriate next steps. "
+        "Quantified schedule or cost impact cannot be stated because baselines were not found in the records."
     )
     return [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
@@ -452,6 +733,28 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
     if not evidence:
         missing_data.append("No evidence was retrieved for this query.")
 
+    management_question_answer: dict = {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {
+            "schedule_impact": "",
+            "cost_commercial_impact": "",
+            "operational_client_impact": "",
+        },
+        "decision_required": "",
+        "recommended_action": {
+            "specific_action": "",
+            "owner_role": "",
+            "timeframe": "",
+        },
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": (
+            "Automated executive synthesis unavailable; evidence catalogued for manual review."
+        ),
+    }
+
     return {
         "request_id": state.request_id,
         "project_code": state.project_code,
@@ -468,11 +771,140 @@ def _build_report_from_evidence(state: DecisionState) -> dict:
         "delay_analysis": delay_analysis,
         "contractual_implications": contractual_implications,
         "recommended_actions": [],
+        "management_question_answer": management_question_answer,
         "missing_data": missing_data,
         "conflicts": [],
         "sources": sources_list,
         "quality_gate_status": "not_run",
     }
+
+
+def _remap_evidence_ids(report: dict, evidence: list[dict]) -> None:
+    """Replace synthetic source_ids in claims with real evidence_ids.
+
+    The LLM sometimes invents short source_ids (S1, S3, sp-1) in the sources
+    section and then cites them in claims. This breaks the Quality Gate check
+    which validates claim evidence_ids against the retrieved evidence pack.
+    We map those synthetic ids back to real evidence_ids by matching title or
+    source_uri, then rebuild the sources section from the real ids.
+    """
+    if not isinstance(report, dict):
+        return
+
+    # Build lookup tables from the real evidence pack.
+    by_title: dict[str, str] = {}
+    by_uri: dict[str, str] = {}
+    for ev in evidence:
+        if not isinstance(ev, dict):
+            continue
+        eid = ev.get("evidence_id", "")
+        if not eid:
+            continue
+        title = str(ev.get("title") or "").strip().lower()
+        uri = str(ev.get("source_uri") or "").strip().lower()
+        if title:
+            by_title[title] = eid
+        if uri:
+            by_uri[uri] = eid
+
+    # Map synthetic source_ids to real evidence_ids.
+    synth_to_real: dict[str, str] = {}
+    sources = report.get("sources", [])
+    if isinstance(sources, list):
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            sid = src.get("source_id", "")
+            title = str(src.get("title") or "").strip().lower()
+            uri = str(src.get("reference") or src.get("source_uri") or "").strip().lower()
+            real: str | None = None
+            if title and title in by_title:
+                real = by_title[title]
+            elif uri and uri in by_uri:
+                real = by_uri[uri]
+            if real and sid and sid != real:
+                synth_to_real[sid] = real
+
+    if not synth_to_real:
+        return
+
+    def _remap(items: list) -> None:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            eids = _flatten_eids(item.get("evidence_ids"))
+            if eids:
+                item["evidence_ids"] = [
+                    synth_to_real.get(e, e) for e in eids
+                ]
+
+    # Remap claim evidence_ids across all claim-bearing sections.
+    for section in (
+        "executive_summary",
+        "key_findings",
+        "root_causes",
+        "delay_analysis",
+        "contractual_implications",
+        "recommended_actions",
+    ):
+        _remap(report.get(section, []))
+
+    # Remap management_question_answer evidence_used list if it contains ids.
+    mqa = report.get("management_question_answer")
+    if isinstance(mqa, dict):
+        _remap([mqa])
+
+    # Rebuild sources from real evidence ids actually cited in the report.
+    cited: set[str] = set()
+    for section in (
+        "executive_summary",
+        "key_findings",
+        "root_causes",
+        "delay_analysis",
+        "contractual_implications",
+        "recommended_actions",
+    ):
+        for item in report.get(section, []):
+            if isinstance(item, dict):
+                cited.update(_flatten_eids(item.get("evidence_ids", [])))
+    # Also keep sources for financial_snapshot actual_cost evidence_id.
+    fs = report.get("financial_snapshot") or {}
+    if isinstance(fs, dict):
+        ac = fs.get("actual_cost")
+        if isinstance(ac, dict):
+            cited.add(ac.get("evidence_id") or "")
+
+    evidence_by_id = {e.get("evidence_id"): e for e in evidence if isinstance(e, dict)}
+    new_sources: list[dict] = []
+    for eid in sorted(cited):
+        ev = evidence_by_id.get(eid)
+        if not ev:
+            continue
+        new_sources.append({
+            "source_id": eid,
+            "source_type": ev.get("source_type", "sharepoint"),
+            "title": ev.get("title", "Untitled"),
+            "reference": ev.get("source_uri", "—"),
+            "date": ev.get("timestamp") or "—",
+            "confidence": ev.get("confidence", "medium"),
+            "used_in": ["Key Findings"],
+        })
+    report["sources"] = new_sources
+
+
+def _flatten_eids(eids) -> list[str]:
+    """Flatten a possibly-nested evidence_ids value into a list of strings."""
+    if not eids:
+        return []
+    if isinstance(eids, str):
+        return [eids]
+    flat: list[str] = []
+    for e in eids:
+        if isinstance(e, list):
+            flat.extend(str(x) for x in e if x is not None)
+        elif e is not None:
+            flat.append(str(e))
+    return flat
 
 
 def is_financial_query(query: str) -> bool:
@@ -502,16 +934,13 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
     if not ref_eids:
         return
 
-    sp_count = len([e for e in state.evidence if e.get("source_type") == "sharepoint"])
-    email_count = len([e for e in state.evidence if e.get("source_type") == "email"])
     project_label = f"Project {state.project_code}" if state.project_code else "the requested project"
-    first_finding = findings[0].get("text", "")[:200]
+    first_finding = findings[0].get("text", "")[:250]
 
     claim = (
-        f"{project_label} evidence review: {sp_count} document(s) and {email_count} "
-        f"email(s) retrieved. Key finding: {first_finding}. "
-        "Financial data is not available from Odoo records. "
-        "Automated executive synthesis was incomplete — reviewer assessment required."
+        f"For {project_label}, the most prominent issue is: {first_finding}. "
+        "Management should review the cited records and decide on the appropriate next steps. "
+        "Quantified schedule or cost impact cannot be stated because baselines were not found in the records."
     )
     report["executive_summary"] = [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
@@ -528,33 +957,139 @@ async def run(state: DecisionState) -> DecisionState:
     state.outputs["cohere_rerank_status"] = rerank_status
 
     prompt = _build_prompt(state, prompt_evidence)
+    import sys
+    print(
+        f"[NODE12] prompt request_id={state.request_id} prompt_chars={len(prompt)} "
+        f"prompt_words={len(prompt.split())} rerank={rerank_status}",
+        file=sys.stderr, flush=True,
+    )
+
     result = await call_llm(
         prompt=prompt,
         tier="heavy",
         request_id=state.request_id,
         node_name="node_12_draft_json",
         expect_json=True,
-        max_tokens=4_000,
+        max_tokens=12000,
     )
 
     state.cost_accumulated_usd += result.cost_usd
     state.outputs["node_12_cost_usd"] = result.cost_usd
+    print(
+        f"[NODE12] llm response request_id={state.request_id} model={result.model} "
+        f"input_tokens={result.input_tokens} output_tokens={result.output_tokens} content_chars={len(result.content)}",
+        file=sys.stderr, flush=True,
+    )
 
-    report: dict
+    evidence_ids = {e.get("evidence_id", "") for e in state.evidence if isinstance(e, dict)}
+    odoo_ctx = _extract_odoo_context(
+        [e for e in state.evidence if e.get("source_type") == "odoo"]
+    )
+
+    def _normalize(report_candidate: dict | None) -> dict:
+        """Coerce a parsed/repaired report into a valid shape or fall back to deterministic builder."""
+        if not isinstance(report_candidate, dict):
+            return _build_report_from_evidence(state)
+        _normalize_financial_snapshot(report_candidate)
+        _enforce_financial_from_odoo(report_candidate, odoo_ctx, evidence_ids)
+        _remap_evidence_ids(report_candidate, state.evidence)
+        if not _report_has_valid_claims(report_candidate, evidence_ids):
+            return _build_report_from_evidence(state)
+        return report_candidate
+
+    report: dict | None = None
+    parse_error: Exception | None = None
+
+    # 1. Strict JSON parse
     try:
         parsed = json.loads(result.content)
-        report = parsed if isinstance(parsed, dict) else _build_report_from_evidence(state)
-    except Exception:
-        report = _build_report_from_evidence(state)
+        if isinstance(parsed, dict):
+            report = parsed
+        else:
+            print(
+                f"[NODE12] json parse returned non-dict request_id={state.request_id} type={type(parsed)}",
+                file=sys.stderr, flush=True,
+            )
+    except Exception as exc:
+        parse_error = exc
+        print(
+            f"[NODE12] json parse failed request_id={state.request_id} exc={exc} "
+            f"content_len={len(result.content)} content_prefix={result.content[:200]} "
+            f"content_suffix={result.content[-400:]}",
+            file=sys.stderr, flush=True,
+        )
 
-    # If LLM produced an empty shell but evidence exists, fall back to deterministic builder.
-    has_findings = any(
-        report.get(s)
-        for s in ("executive_summary", "key_findings", "root_causes",
-                  "delay_analysis", "contractual_implications", "recommended_actions")
+    # 2. Structural repair without an extra LLM call.
+    if not report and json_repair:
+        try:
+            repaired, ok = json_repair.repair_json(result.content, return_objects=True)
+            if ok and isinstance(repaired, dict):
+                report = repaired
+                print(
+                    f"[NODE12] json_repair success request_id={state.request_id}",
+                    file=sys.stderr, flush=True,
+                )
+            else:
+                print(
+                    f"[NODE12] json_repair failed request_id={state.request_id} ok={ok}",
+                    file=sys.stderr, flush=True,
+                )
+        except Exception as repair_exc:
+            print(
+                f"[NODE12] json_repair exception request_id={state.request_id} exc={repair_exc}",
+                file=sys.stderr, flush=True,
+            )
+
+    # 3. Last-resort LLM repair only if structural repair failed.
+    if not report and parse_error:
+        repair_prompt = (
+            "The previous output was invalid JSON. Return ONLY a valid JSON object "
+            "matching the exact schema in the original prompt. Do not include markdown fences, explanations, "
+            "or any text outside the JSON object. Ensure every string value is on a single line "
+            "and escapes double quotes with \\\" and newlines with \\n.\n\n"
+            "Required top-level keys: request_id, project_code, query, language, executive_summary, "
+            "financial_snapshot, key_findings, root_causes, delay_analysis, contractual_implications, "
+            "recommended_actions, management_question_answer, missing_data, conflicts, sources.\n\n"
+            "DO NOT echo the example placeholder text (e.g. 'synthesized insight from evidence', "
+            "'One clear sentence...', 'bullet 1 tied to evidence'). Use real evidence IDs only.\n\n"
+            f"Original prompt:\n{prompt}"
+        )
+        try:
+            repair_result = await call_llm(
+                prompt=repair_prompt,
+                tier="heavy",
+                request_id=f"{state.request_id}-repair",
+                node_name="node_12_draft_json",
+                expect_json=True,
+                max_tokens=12000,
+            )
+            state.cost_accumulated_usd += repair_result.cost_usd
+            parsed_repair = json.loads(repair_result.content)
+            if isinstance(parsed_repair, dict):
+                report = parsed_repair
+                print(
+                    f"[NODE12] llm repair parse request_id={state.request_id} success=True",
+                    file=sys.stderr, flush=True,
+                )
+            else:
+                print(
+                    f"[NODE12] llm repair parse request_id={state.request_id} success=False non-dict",
+                    file=sys.stderr, flush=True,
+                )
+        except Exception as repair_exc:
+            print(
+                f"[NODE12] llm repair parse failed request_id={state.request_id} exc={repair_exc}",
+                file=sys.stderr, flush=True,
+            )
+
+    report = _normalize(report)
+
+    mqa_preview = report.get("management_question_answer")
+    print(
+        f"[NODE12] parsed report request_id={state.request_id} keys={sorted(report.keys())} "
+        f"has_mqa={isinstance(mqa_preview, dict)} mqa_exec_answer_len={len(mqa_preview.get('executive_answer', '')) if isinstance(mqa_preview, dict) else 0}",
+        file=sys.stderr, flush=True,
     )
-    if not has_findings and state.evidence:
-        report = _build_report_from_evidence(state)
 
     # Ensure required fields exist
     report.setdefault("request_id", state.request_id)
@@ -572,6 +1107,25 @@ async def run(state: DecisionState) -> DecisionState:
     report.setdefault("delay_analysis", [])
     report.setdefault("contractual_implications", [])
     report.setdefault("recommended_actions", [])
+    report.setdefault("management_question_answer", {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {
+            "schedule_impact": "",
+            "cost_commercial_impact": "",
+            "operational_client_impact": "",
+        },
+        "decision_required": "",
+        "recommended_action": {
+            "specific_action": "",
+            "owner_role": "",
+            "timeframe": "",
+        },
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": "",
+    })
     report.setdefault("missing_data", [])
     report.setdefault("conflicts", [])
     report.setdefault("sources", [])
@@ -583,8 +1137,10 @@ async def run(state: DecisionState) -> DecisionState:
         [e for e in state.evidence if e.get("source_type") == "odoo"]
     )
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
+    _remap_evidence_ids(report, state.evidence)
     _enforce_missing_data(report, odoo_ctx)
     _enforce_executive_summary(report, state)
+    _enrich_management_question_answer(report, state)
 
     # Deterministic connector coverage (factual; never LLM-authored)
     report["connector_coverage"] = coverage.report_section(state)

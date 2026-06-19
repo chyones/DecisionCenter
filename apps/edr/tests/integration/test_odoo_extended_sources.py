@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+import httpx
 import pytest
 
 from apps.edr.connectors import odoo
@@ -373,3 +374,68 @@ def test_extended_unmapped_source_recorded_not_queried(monkeypatch: pytest.Monke
     assert all(c["model"] != "purchase.order" for c in calls)
     # project-scoped sources still queried
     assert any(c["model"] == "material.purchase.requisition" for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# Inline retry for transient n8n/Odoo failures
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_inline_read_retries_on_transient_error_and_recovers() -> None:
+    """A single transient HTTP failure on a mandatory inline read must be retried."""
+    from unittest import mock
+    import time
+
+    call_count = 0
+
+    async def flaky_read(payload: dict) -> list:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise httpx.HTTPStatusError(
+                "Bad Gateway",
+                request=mock.MagicMock(),
+                response=mock.MagicMock(status_code=502),
+            )
+        return [_ev("project.project", "14602")]
+
+    with mock.patch.object(node_08_odoo, "read_odoo", flaky_read):
+        evidence = await node_08_odoo._read_odoo_with_retry(
+            {},
+            request_id="r-retry-001",
+            label="project_identity",
+            timeout_s=5.0,
+            deadline=time.monotonic() + 15.0,
+        )
+
+    assert call_count == 2
+    assert len(evidence) == 1
+
+
+@pytest.mark.asyncio
+async def test_inline_read_does_not_retry_timeouts() -> None:
+    """Slow/timeout calls must not be retried; the node budget cannot absorb them."""
+    from unittest import mock
+    import time
+
+    call_count = 0
+
+    async def slow_read(payload: dict) -> list:
+        nonlocal call_count
+        call_count += 1
+        # Exceed the tiny test timeout immediately to trigger asyncio.TimeoutError.
+        await asyncio.sleep(1.0)
+        return [_ev("project.project", "14602")]
+
+    with mock.patch.object(node_08_odoo, "read_odoo", slow_read):
+        with pytest.raises(asyncio.TimeoutError):
+            await node_08_odoo._read_odoo_with_retry(
+                {},
+                request_id="r-retry-002",
+                label="project_identity",
+                timeout_s=0.05,
+                deadline=time.monotonic() + 5.0,
+            )
+
+    assert call_count == 1
