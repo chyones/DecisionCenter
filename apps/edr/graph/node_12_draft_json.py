@@ -7,6 +7,7 @@ Every claim MUST bind to evidence_ids; financial values MUST come from Odoo.
 from __future__ import annotations
 
 import json
+import re
 
 from apps.edr.graph import coverage
 from apps.edr.graph.intent import (
@@ -29,19 +30,127 @@ except Exception:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
+def _coerce_number(value) -> float | None:
+    """Coerce a scalar to float, rejecting bools and non-numeric strings."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip().replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+def _amount_from_excerpt(excerpt: str) -> float | None:
+    """Parse a cost amount from an evidence excerpt.
+
+    Supports the live n8n format ("name: X; amount: -100.0; date: ...") and the
+    legacy "Category / Amount / Date" layout. Returns None when no amount found.
+    """
+    if not excerpt:
+        return None
+    m = re.search(r"amount\s*[:=]\s*(-?[\d,]+(?:\.\d+)?)", excerpt, re.IGNORECASE)
+    if m:
+        val = _coerce_number(m.group(1))
+        if val is not None:
+            return val
+    parts = [p.strip() for p in excerpt.split(" / ")]
+    if len(parts) >= 2:
+        return _coerce_number(parts[1])
+    return None
+
+
+def _date_from_excerpt(excerpt: str) -> str:
+    if not excerpt:
+        return ""
+    m = re.search(r"date\s*[:=]\s*(\d{4}-\d{2}-\d{2}[^;]*)", excerpt, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    parts = [p.strip() for p in excerpt.split(" / ")]
+    return parts[2] if len(parts) >= 3 else ""
+
+
+def _is_cost_line(ev: dict) -> bool:
+    """True only for analytic *line* / move *line* cost rows.
+
+    The analytic *account* identity row carries a balance but is not a cost line
+    and must never be summed as one.
+    """
+    uri = str(ev.get("source_uri", "")).lower()
+    model = str((ev.get("metadata") or {}).get("model", "")).lower()
+    hay = uri + " " + model
+    return "analytic.line" in hay or "account.move.line" in hay
+
+
+def _cost_line_amount(line: dict) -> float | None:
+    """Cost amount: prefer structured f_amount metadata, fall back to excerpt."""
+    meta = line.get("metadata") or {}
+    val = _coerce_number(meta.get("f_amount"))
+    if val is not None:
+        return val
+    return _amount_from_excerpt(line.get("excerpt", ""))
+
+
+def _cost_line_date(line: dict) -> str:
+    meta = line.get("metadata") or {}
+    d = meta.get("f_date")
+    if isinstance(d, str) and d.strip():
+        return d.strip()
+    ts = line.get("timestamp")
+    if isinstance(ts, str) and ts.strip():
+        return ts.strip()
+    return _date_from_excerpt(line.get("excerpt", ""))
+
+
+def _cost_line_category(line: dict) -> str:
+    meta = line.get("metadata") or {}
+    ga = meta.get("f_general_account_id")
+    if isinstance(ga, list) and len(ga) >= 2 and isinstance(ga[1], str) and ga[1].strip():
+        return ga[1].strip()
+    name = meta.get("f_name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    title = (line.get("title") or "").strip()
+    if title and title.lower() not in ("odoo record", "odoo project record"):
+        return title
+    excerpt = line.get("excerpt", "")
+    if " / " in excerpt:
+        first = excerpt.split(" / ")[0].strip()
+        if first:
+            return first
+    return ""
+
+
+def _project_amount(
+    project_records: list[dict], *meta_keys: str
+) -> tuple[float | None, str | None]:
+    """Read a contract/estimate figure from the project record metadata."""
+    for rec in project_records:
+        meta = rec.get("metadata") or {}
+        for key in meta_keys:
+            val = _coerce_number(meta.get(key))
+            if val is not None:
+                return val, rec.get("evidence_id")
+    return None, None
+
+
 def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
     """Pre-process Odoo evidence into structured context for the LLM prompt.
 
-    Odoo analytic line excerpts encode data as "Category / Amount / Date".
-    We extract this deterministically so the LLM doesn't have to parse it
-    from raw text, and so the financial snapshot can be corrected post-LLM.
+    Reads the structured ``f_*`` fields the n8n Odoo workflow emits in evidence
+    metadata (``f_amount``, ``f_date``, ``f_general_account_id``, ``f_wo_amount``,
+    ``f_estimation_amount``) and falls back to parsing the excerpt for older
+    payloads. Financial figures are extracted deterministically so the snapshot
+    can be corrected post-LLM. Only analytic *line* rows count as cost; the
+    analytic *account* identity row never does.
     """
     project_records: list[dict] = []
     cost_lines: list[dict] = []
     for ev in odoo_evidence:
-        uri = ev.get("source_uri", "").lower()
-        # analytic lines come from the account.analytic.line model
-        if "analytic" in uri:
+        if _is_cost_line(ev):
             cost_lines.append(ev)
         else:
             project_records.append(ev)
@@ -54,35 +163,31 @@ def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
     best_date = ""
 
     for line in cost_lines:
-        excerpt = line.get("excerpt", "")
-        parts = [p.strip() for p in excerpt.split(" / ")]
-        cat = parts[0] if parts else ""
+        cat = _cost_line_category(line)
         if cat and cat not in categories:
             categories.append(cat)
-        if len(parts) >= 2:
-            try:
-                amt = float(parts[1].replace(",", ""))
-                total_amount += amt
-                has_amount = True
-            except (ValueError, IndexError):
-                pass
-        date_str = parts[2] if len(parts) >= 3 else ""
+        amt = _cost_line_amount(line)
+        if amt is not None:
+            total_amount += amt
+            has_amount = True
+        date_str = _cost_line_date(line)
         if date_str:
             dates.append(date_str)
             if date_str > best_date:
                 best_date = date_str
                 best_evidence_id = line.get("evidence_id")
 
-    # Most recent 15 cost lines for prompt (keep token budget reasonable)
-    sorted_lines = sorted(
-        cost_lines,
-        key=lambda e: (
-            e.get("excerpt", "").split(" / ")[2].strip()
-            if len(e.get("excerpt", "").split(" / ")) >= 3
-            else ""
-        ),
-        reverse=True,
-    )
+    if best_evidence_id is None and has_amount:
+        # Amounts present but no usable dates — cite the first valued cost line.
+        for line in cost_lines:
+            if _cost_line_amount(line) is not None and line.get("evidence_id"):
+                best_evidence_id = line.get("evidence_id")
+                break
+
+    sorted_lines = sorted(cost_lines, key=_cost_line_date, reverse=True)
+
+    contract_value, contract_eid = _project_amount(project_records, "f_wo_amount")
+    estimate, estimate_eid = _project_amount(project_records, "f_estimation_amount")
 
     return {
         "project_records": project_records,
@@ -93,6 +198,12 @@ def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
         "latest_date": max(dates) if dates else None,
         "best_evidence_id": best_evidence_id,
         "sample_lines": sorted_lines[:15],
+        # Contract/estimate figures (populated once PROJECT_FIELDS includes them;
+        # consumed by the dedicated financial report type — Slice 4).
+        "contract_value": contract_value,
+        "contract_value_evidence_id": contract_eid,
+        "estimate": estimate,
+        "estimate_evidence_id": estimate_eid,
     }
 
 
@@ -1193,13 +1304,6 @@ def _flatten_eids(eids) -> list[str]:
         elif e is not None:
             flat.append(str(e))
     return flat
-
-
-def is_financial_query(query: str) -> bool:
-    lower = query.lower()
-    return any(
-        kw in lower for kw in ("budget", "cost", "payment", "invoice", "financial", "actual")
-    )
 
 
 def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
