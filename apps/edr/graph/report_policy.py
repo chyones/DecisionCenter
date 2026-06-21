@@ -134,6 +134,15 @@ _DOCUMENT_SECTIONS: tuple[str, ...] = (
 #: Project sources a report of each type considers.
 _PROJECT_SOURCES: tuple[str, ...] = ("odoo", "sharepoint", "email")
 
+#: Source policy — when each project source is used (descriptive). Retrieval
+#: attempts every *enabled* source; disabled sources never affect completeness
+#: (see coverage.summary, which derives completeness only from enabled sources).
+SOURCE_PURPOSE: dict[str, str] = {
+    "sharepoint": "Documents, submittals, drawings, letters, logs, approvals.",
+    "email": "Communications, decisions, confirmations, instructions.",
+    "odoo": "Financials, project identity, actuals, cost, procurement, payroll/labour (if available).",
+}
+
 
 @dataclass(frozen=True)
 class ReportPolicy:
