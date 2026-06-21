@@ -13,18 +13,6 @@ from apps.edr.graph.state import DecisionState
 from apps.edr.schemas.quality_gate import ClaimCheck, QualityGateResult
 
 
-_MANAGEMENT_QUESTION_RE = re.compile(
-    r"\b(big|biggest|main|major|top|one|single)\s+(problem|issue|concern|risk)|"
-    r"\b(problem|issue|concern|risk)\s+(for|with|on|in)\s+this\s+project|"
-    r"\bwhat\s+should\s+(management|we)\s+(decide|do)\b|"
-    r"\bwhat\s+decision\s+should\s+(management|we)\s+make\b|"
-    r"\bdecide\s+this\s+(week|month)|\bmanagement\s+decide\b|"
-    r"\brecommend\w*\s+(action|intervention)|"
-    r"\bgive\s+me\s+(the|one|a)\s+(big|biggest|main|major|top)\b",
-    re.IGNORECASE,
-)
-
-
 _SEARCH_SUMMARY_PATTERNS = re.compile(
     r"\b(evidence\s+retrieval|evidence\s+review|search\s+results?|"
     r"retrieved|catalogued|document\(s\)\s+and|email\(s\)\s+retrieved|"
@@ -194,10 +182,6 @@ def _check_executive_summary(report: dict, evidence: list[dict]) -> list[ClaimCh
             )
         )
     return checks
-
-
-def _is_management_question(query: str) -> bool:
-    return bool(_MANAGEMENT_QUESTION_RE.search(query or ""))
 
 
 def _check_project_identity(report: dict) -> list[ClaimCheck]:
@@ -400,7 +384,8 @@ def _check_search_summary_patterns(report: dict) -> list[ClaimCheck]:
 def _check_management_question_answer(report: dict, query: str) -> list[ClaimCheck]:
     """Validate that focused management questions receive a decision-memo answer."""
     checks: list[ClaimCheck] = []
-    if not _is_management_question(query):
+    report_type = report.get("report_type") or classify_report_type(query)
+    if report_type != "management_question":
         return checks
 
     mqa = report.get("management_question_answer")
