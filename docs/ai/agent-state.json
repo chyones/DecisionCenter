@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "1accc6d008ca9fd30c77ed5c6bb2c2f04c34c5fb",
+  "current_commit": "468d54862d8835076416537602ec6dd23c262a46",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -82,25 +82,21 @@
   "latest_report": "docs/execution/PHASE_2D_SLICE_6_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_feature": {
-    "name": "Odoo Source Map — automatic batched deep scan",
-    "status": "MERGED_TO_MAIN_NOT_LIVE",
-    "merged_pr": "#3 feat/odoo-source-map-batched-scan -> main",
-    "merge_commit": "6f3d3101f65a8e1a9bc78c5de790692647ac5b59",
-    "summary": "Replaced the single synchronous Odoo Source Map scan (could exceed the 120s reverse-proxy timeout) with a background, resumable, batched scan session: per-source isolation, search_count for exact totals, bounded offset-paged sample (never a full-table read), strict per-batch/per-source timeouts, retry/resume, and DB-persisted progress polled by the UI.",
+    "name": "Report pipeline policy parity",
+    "status": "BRANCH_READY_FOR_REVIEW_NOT_LIVE",
+    "branch": "fix/report-pipeline-slice-0-1",
+    "head": "468d54862d8835076416537602ec6dd23c262a46",
+    "summary": "Report generation now uses a ReportPolicy registry as the single section-policy source for Markdown, DOCX, PDF, PPTX, Excel, and Quality Gate profiles. Salary/data reports suppress irrelevant Financial Snapshot, Root Causes, Delay, and Contractual sections while management/general reports keep the full structure.",
     "evidence": [
-      "docs/evidence/uat/ODOO_SCAN_BATCHED_2026-06-17.md",
-      "docs/evidence/uat/ODOO_SCAN_BATCHED_PHASE_CLOSE_2026-06-17.md"
+      "apps/edr/tests/integration/test_report_policy.py",
+      "apps/edr/tests/integration/test_markdown_section_numbering.py",
+      "apps/edr/tests/integration/test_exporter_policy_sections.py",
+      "apps/edr/tests/integration/test_project_identity_and_salary_intent.py",
+      "apps/edr/tests/integration/test_odoo_financial_extraction.py",
+      "apps/edr/tests/integration/test_fallback_professional_floor.py"
     ],
-    "review_fixes": [
-      "hold a strong reference to the background scan asyncio.Task (asyncio keeps only weak refs) — apps/edr/app.py _SCAN_TASKS",
-      "widen the UI live-progress poll window 5m -> 15m for slow degraded scans"
-    ],
-    "not_changed": "report generation, AI providers, SharePoint, Email, generic Odoo source registry",
-    "follow_up_fixes": [
-      "PR #5 fix/ci-odoo-config-coverage merged to main as 41e01b62a267fd871369d3a399eef85993b289b5",
-      "PR #6 fix/report-sync-timeout-guard merged to main as 3822aabfbefdf47a5702e9cebe43fa4a75535495"
-    ],
-    "operator_steps_pending": "No deploy occurred in the 2026-06-18 git-hygiene task. Any future operator deployment requires explicit user approval and must rebuild app + frontend dist together, then redeploy the n8n odoo_read workflow to enable exact search_count totals."
+    "not_changed": "production_status, must_not_deploy, LIVE state, ownCloud, Odoo extended source work, new financial/risk/delay/document report types",
+    "operator_steps_pending": "Branch review, merge to main, and an explicitly requested NOT_LIVE-only deploy remain pending. LIVE must stay disabled."
   },
   "latest_read_only_audit": {
     "date": "2026-06-10",
@@ -134,10 +130,10 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-18",
-    "context": "Current origin/main commit 513314df977fa7d7acd3f8501313c22b5a6fcd4f was deployed to the NOT_LIVE app environment with docker compose up -d --build app. n8n workflows, connector settings, secrets, production_status, and must_not_deploy were not changed. Runtime app image digest sha256:c6571d0f23051eb7129507c475c7e18c2dfe3a79cc1ad002c0dcc363e5051695 is healthy. Local and public /healthz returned HTTP 200. Runtime source contains REPORT_SYNC_TIMEOUT_S and asyncio.wait_for. In-container timeout guard test passed. Query Composer/API attempts for PRJ-001 returned fast JSON HTTP 401 because no real bearer token was available and production mode rejects dev-bypass headers, so authenticated long-running workflow behavior remains not verified.",
-    "head": "513314df977fa7d7acd3f8501313c22b5a6fcd4f",
-    "branches": "main tracking origin/main at deploy time, divergence 0 0",
+    "date": "2026-06-21",
+    "context": "Report pipeline policy parity branch fix/report-pipeline-slice-0-1 at pushed code head 468d54862d8835076416537602ec6dd23c262a46. Governance anchor refreshed for branch review, and goldenset node_13/workflow fixtures now carry verified project_identity so the strengthened Quality Gate project-identity contract is exercised without unrelated missing-identity failures. No deployment, merge, production_status change, LIVE enablement, ownCloud work, extended Odoo source work, or new financial/risk/delay/document report type work occurred in this validation step.",
+    "head": "468d54862d8835076416537602ec6dd23c262a46",
+    "branches": "fix/report-pipeline-slice-0-1 tracking origin/fix/report-pipeline-slice-0-1 after exporter commit push",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -146,10 +142,10 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; .venv/bin/python -m pytest -q apps/edr/tests/integration/test_report_timeout_guard.py passed 2; docker compose exec -T app pytest -q apps/edr/tests/integration/test_report_timeout_guard.py passed 2",
+    "tests": "ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; targeted report-pipeline/evaluation tests passed 44 with 2 slow tests deselected; evaluation non-slow tests passed 11 with 2 slow tests deselected. Host goldenset runner was interrupted because workflow cases require Compose-network services such as minio/postgres; rerun full eval inside Docker after NOT_LIVE deploy.",
     "doc_drift": "clean",
     "ai_context": "clean",
-    "verdict": "DEPLOYED_NOT_LIVE_TIMEOUT_GUARD_RUNTIME_VERIFIED_AUTHENTICATED_QUERY_NOT_VERIFIED"
+    "verdict": "BRANCH_READY_FOR_PR_NOT_LIVE_FULL_EVAL_PENDING_DOCKER"
   },
   "latest_reconciliation_validation": {
     "date": "2026-06-03",
