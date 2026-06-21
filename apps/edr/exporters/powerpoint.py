@@ -10,6 +10,13 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
+from apps.edr.graph.report_policy import (
+    SEC_DELAY_ANALYSIS,
+    SEC_FINANCIAL_SNAPSHOT,
+    SEC_ROOT_CAUSES,
+    policy_for,
+)
+
 _BRAND_BLUE = RGBColor(0x1F, 0x38, 0x64)
 _WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 _ACCENT = RGBColor(0xCC, 0xCC, 0xFF)
@@ -27,15 +34,25 @@ def to_powerpoint(report: dict) -> bytes:
     query = report.get("query") or report.get("question", "N/A")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    policy = policy_for(report.get("report_type", "executive_decision"))
 
     _title_slide(prs, query, request_id, project_code)
     _summary_slide(prs, report)
-    _financial_slide(prs, report)
+    if policy.renders(SEC_FINANCIAL_SNAPSHOT):
+        _financial_slide(prs, report)
     _findings_slide(prs, report)
-    _causes_delay_slide(prs, report)
+    if policy.renders(SEC_ROOT_CAUSES) or policy.renders(SEC_DELAY_ANALYSIS):
+        _causes_delay_slide(prs, report, include_root=policy.renders(SEC_ROOT_CAUSES), include_delay=policy.renders(SEC_DELAY_ANALYSIS))
     _actions_slide(prs, report)
     _conflicts_missing_slide(prs, report)
-    _status_slide(prs, request_id, project_code, qg_status, generated_at)
+    _status_slide(
+        prs,
+        request_id,
+        project_code,
+        qg_status,
+        generated_at,
+        include_financial=policy.renders(SEC_FINANCIAL_SNAPSHOT),
+    )
 
     buf = io.BytesIO()
     prs.save(buf)
@@ -136,16 +153,20 @@ def _findings_slide(prs: Presentation, report: dict) -> None:
     _fill_content(slide, bullets or ["No findings available."])
 
 
-def _causes_delay_slide(prs: Presentation, report: dict) -> None:
+def _causes_delay_slide(
+    prs: Presentation, report: dict, *, include_root: bool, include_delay: bool
+) -> None:
     slide = _content_slide(prs)
     _set_slide_title(slide, "Root Causes & Delay Analysis")
     bullets: list[str] = []
-    for item in report.get("root_causes", []):
-        text = item.get("text", str(item)) if isinstance(item, dict) else str(item)
-        bullets.append(f"Root Cause: {text}")
-    for item in report.get("delay_analysis", []):
-        text = item.get("text", str(item)) if isinstance(item, dict) else str(item)
-        bullets.append(f"Delay: {text}")
+    if include_root:
+        for item in report.get("root_causes", []):
+            text = item.get("text", str(item)) if isinstance(item, dict) else str(item)
+            bullets.append(f"Root Cause: {text}")
+    if include_delay:
+        for item in report.get("delay_analysis", []):
+            text = item.get("text", str(item)) if isinstance(item, dict) else str(item)
+            bullets.append(f"Delay: {text}")
     _fill_content(slide, bullets or ["No data available."])
 
 
@@ -180,6 +201,8 @@ def _status_slide(
     project_code: str,
     qg_status: str,
     generated_at: str,
+    *,
+    include_financial: bool,
 ) -> None:
     slide = _content_slide(prs)
     _set_slide_title(slide, "Report Status")
@@ -188,9 +211,10 @@ def _status_slide(
         f"Request ID: {request_id}",
         f"Project: {project_code}",
         f"Generated: {generated_at}",
-        "All financial values sourced from Odoo ERP only.",
         "This presentation is for executive review only.",
     ]
+    if include_financial:
+        bullets.insert(4, "All financial values sourced from Odoo ERP only.")
     _fill_content(slide, bullets)
 
 

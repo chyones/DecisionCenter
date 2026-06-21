@@ -34,6 +34,14 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from apps.edr.graph.report_policy import (
+    SEC_CONTRACTUAL,
+    SEC_DELAY_ANALYSIS,
+    SEC_FINANCIAL_SNAPSHOT,
+    SEC_ROOT_CAUSES,
+    policy_for,
+)
+
 # ---------------------------------------------------------------------------
 # Arabic font registration (OFL-licensed Amiri)
 # ---------------------------------------------------------------------------
@@ -158,11 +166,18 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    policy = policy_for(report_type)
 
     has_arabic = language == "ar" or _contains_arabic(query) or _contains_arabic(str(report))
     body_font = _ARABIC_FONT if (has_arabic and _ARABIC_FONT) else "Helvetica"
     s = _styles(body_font)
     story: list = []
+    section_no = 0
+
+    def _heading(title: str) -> Paragraph:
+        nonlocal section_no
+        section_no += 1
+        return Paragraph(f"{section_no}. {title}", s["h1"])
 
     story.append(Paragraph(f"{report_title} — {project_name} — {project_code}", s["title"]))
     story.append(Spacer(1, 0.3 * cm))
@@ -186,7 +201,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     story.append(Spacer(1, 0.5 * cm))
 
     # 1. Executive Summary
-    story.append(Paragraph("1. Executive Summary", s["h1"]))
+    story.append(_heading("Executive Summary"))
     summary = report.get("executive_summary", [])
     if isinstance(summary, str):
         story.append(Paragraph(summary, s["body"]))
@@ -201,62 +216,73 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
     else:
         story.append(Paragraph("No summary available.", s["body"]))
 
-    # 2. Financial Snapshot — Odoo
-    story.append(Paragraph("2. Financial Snapshot — Odoo", s["h1"]))
-    fs = report.get("financial_snapshot") or {}
-    if isinstance(fs, dict):
-        budget = fs.get("budget") or {}
-        actual = fs.get("actual_cost") or {}
-        variance = fs.get("variance") or {}
-        currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
+    # Financial Snapshot — Odoo
+    if policy.renders(SEC_FINANCIAL_SNAPSHOT):
+        story.append(_heading("Financial Snapshot — Odoo"))
+        fs = report.get("financial_snapshot") or {}
+        if isinstance(fs, dict):
+            budget = fs.get("budget") or {}
+            actual = fs.get("actual_cost") or {}
+            variance = fs.get("variance") or {}
+            currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
 
-        def _fv(node: dict, label: str) -> list:
-            if not isinstance(node, dict):
-                return [label, "Not available", "—"]
-            v = node.get("value")
-            c = node.get("currency", currency)
-            src = node.get("evidence_id") or "—"
-            val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
-            return [label, val_str, src]
+            def _fv(node: dict, label: str) -> list:
+                if not isinstance(node, dict):
+                    return [label, "Not available", "—"]
+                v = node.get("value")
+                c = node.get("currency", currency)
+                src = node.get("evidence_id") or "—"
+                val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
+                return [label, val_str, src]
 
-        variance_row = ["Variance", "Not available", "—"]
-        if isinstance(variance, dict):
-            v = variance.get("value")
-            c = variance.get("currency", currency)
-            formula = variance.get("formula", "")
-            val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
-            variance_row = ["Variance", f"{val_str}{' (' + formula + ')' if formula else ''}", "—"]
+            variance_row = ["Variance", "Not available", "—"]
+            if isinstance(variance, dict):
+                v = variance.get("value")
+                c = variance.get("currency", currency)
+                formula = variance.get("formula", "")
+                val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
+                variance_row = [
+                    "Variance",
+                    f"{val_str}{' (' + formula + ')' if formula else ''}",
+                    "—",
+                ]
 
-        fin_table = Table(
-            [
-                ["Item", "Value", "Source"],
-                _fv(budget, "Budget"),
-                _fv(actual, "Actual Cost"),
-                variance_row,
-            ],
-            colWidths=[3.5 * cm, 10 * cm, 3 * cm],
-        )
-        fin_table.setStyle(_TBL_HEADER)
-        story.append(fin_table)
-    else:
-        story.append(Paragraph("Financial data not available.", s["body"]))
-    story.append(Spacer(1, 0.3 * cm))
-
-    is_data_report = report_type in ("salary_payroll", "data_report")
+            fin_table = Table(
+                [
+                    ["Item", "Value", "Source"],
+                    _fv(budget, "Budget"),
+                    _fv(actual, "Actual Cost"),
+                    variance_row,
+                ],
+                colWidths=[3.5 * cm, 10 * cm, 3 * cm],
+            )
+            fin_table.setStyle(_TBL_HEADER)
+            story.append(fin_table)
+        else:
+            story.append(Paragraph("Financial data not available.", s["body"]))
+        story.append(Spacer(1, 0.3 * cm))
 
     # 3–7. Findings sections
     section_specs = [
-        ("3. Key Findings", "key_findings"),
-        ("7. Recommended Actions — Proposal Only", "recommended_actions"),
+        ("Key Findings", "key_findings"),
+        ("Recommended Actions — Proposal Only", "recommended_actions"),
     ]
-    if not is_data_report:
+    if policy.renders(SEC_ROOT_CAUSES):
         section_specs[1:1] = [
-            ("4. Root Causes", "root_causes"),
-            ("5. Delay Analysis", "delay_analysis"),
-            ("6. Contractual / Commercial Implications", "contractual_implications"),
+            ("Root Causes", "root_causes"),
+        ]
+    if policy.renders(SEC_DELAY_ANALYSIS):
+        insert_at = len(section_specs) - 1
+        section_specs[insert_at:insert_at] = [
+            ("Delay Analysis", "delay_analysis"),
+        ]
+    if policy.renders(SEC_CONTRACTUAL):
+        insert_at = len(section_specs) - 1
+        section_specs[insert_at:insert_at] = [
+            ("Contractual / Commercial Implications", "contractual_implications"),
         ]
     for heading, key in section_specs:
-        story.append(Paragraph(heading, s["h1"]))
+        story.append(_heading(heading))
         items = report.get(key, [])
         if items:
             for item in items:
@@ -274,7 +300,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
             story.append(Paragraph("Not available.", s["body"]))
 
     # 8. Conflicting Evidence
-    story.append(Paragraph("8. Conflicting Evidence", s["h1"]))
+    story.append(_heading("Conflicting Evidence"))
     conflicts = report.get("conflicts", [])
     if conflicts:
         for c in conflicts:
@@ -291,7 +317,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
         story.append(Paragraph("No conflicting evidence detected.", s["body"]))
 
     # 9. Missing Data / Assumptions
-    story.append(Paragraph("9. Missing Data / Assumptions", s["h1"]))
+    story.append(_heading("Missing Data / Assumptions"))
     missing = report.get("missing_data", [])
     if missing:
         for item in missing:
@@ -312,7 +338,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
             story.append(Paragraph(f"• {item}", s["bullet"]))
 
     # 10. Sources
-    story.append(Paragraph("10. Sources", s["h1"]))
+    story.append(_heading("Sources"))
     sources = report.get("sources", [])
     if sources:
         src_rows = [["ID", "Type", "Title", "Reference", "Date", "Confidence"]]
@@ -338,7 +364,7 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
         story.append(Paragraph("No sources cited.", s["body"]))
 
     # 11. Quality Gate Status
-    story.append(Paragraph("11. Quality Gate Status", s["h1"]))
+    story.append(_heading("Quality Gate Status"))
     story.append(Paragraph(f"Status: <b>{qg_status}</b>", s["body"]))
 
     story.append(Spacer(1, 1.0 * cm))

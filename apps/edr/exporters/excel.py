@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from apps.edr.graph.report_policy import (
+    SEC_CONTRACTUAL,
+    SEC_DELAY_ANALYSIS,
+    SEC_FINANCIAL_SNAPSHOT,
+    SEC_ROOT_CAUSES,
+    policy_for,
+)
+
 _HEADER_FILL = PatternFill("solid", fgColor="1F3864")
 _HEADER_FONT = Font(bold=True, color="FFFFFF")
 _BOLD_FONT = Font(bold=True)
@@ -38,6 +46,7 @@ def to_excel(report: dict) -> bytes:
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    policy = policy_for(report.get("report_type", "executive_decision"))
 
     # ── Sheet 1: Summary ──────────────────────────────────────────────────────
     ws = wb.active
@@ -66,31 +75,32 @@ def to_excel(report: dict) -> bytes:
     _set_col_widths(ws, [25, 80])
 
     # ── Sheet 2: Financial Snapshot ───────────────────────────────────────────
-    ws_fin = wb.create_sheet("Financial Snapshot")
-    _header_row(ws_fin, ["Item", "Value", "Currency", "Evidence ID", "Status"])
-    fs = report.get("financial_snapshot") or {}
-    for r, (label, node) in enumerate([
-        ("Budget", (fs.get("budget") or {}) if isinstance(fs, dict) else {}),
-        ("Actual Cost", (fs.get("actual_cost") or {}) if isinstance(fs, dict) else {}),
-    ], start=2):
-        ws_fin.cell(row=r, column=1, value=label)
-        if isinstance(node, dict):
-            ws_fin.cell(row=r, column=2, value=node.get("value"))
-            ws_fin.cell(row=r, column=3, value=node.get("currency", "AED"))
-            ws_fin.cell(row=r, column=4, value=node.get("evidence_id") or "—")
-            ws_fin.cell(row=r, column=5, value=node.get("status", "not_available"))
-        else:
-            ws_fin.cell(row=r, column=2, value="Not available")
+    if policy.renders(SEC_FINANCIAL_SNAPSHOT):
+        ws_fin = wb.create_sheet("Financial Snapshot")
+        _header_row(ws_fin, ["Item", "Value", "Currency", "Evidence ID", "Status"])
+        fs = report.get("financial_snapshot") or {}
+        for r, (label, node) in enumerate([
+            ("Budget", (fs.get("budget") or {}) if isinstance(fs, dict) else {}),
+            ("Actual Cost", (fs.get("actual_cost") or {}) if isinstance(fs, dict) else {}),
+        ], start=2):
+            ws_fin.cell(row=r, column=1, value=label)
+            if isinstance(node, dict):
+                ws_fin.cell(row=r, column=2, value=node.get("value"))
+                ws_fin.cell(row=r, column=3, value=node.get("currency", "AED"))
+                ws_fin.cell(row=r, column=4, value=node.get("evidence_id") or "—")
+                ws_fin.cell(row=r, column=5, value=node.get("status", "not_available"))
+            else:
+                ws_fin.cell(row=r, column=2, value="Not available")
 
-    if isinstance(fs, dict):
-        variance = fs.get("variance") or {}
-        if isinstance(variance, dict):
-            ws_fin.cell(row=4, column=1, value="Variance")
-            ws_fin.cell(row=4, column=2, value=variance.get("value"))
-            ws_fin.cell(row=4, column=3, value=variance.get("currency", "AED"))
-            ws_fin.cell(row=4, column=4, value=variance.get("formula") or "—")
-            ws_fin.cell(row=4, column=5, value="calculated")
-    _set_col_widths(ws_fin, [15, 18, 10, 20, 16])
+        if isinstance(fs, dict):
+            variance = fs.get("variance") or {}
+            if isinstance(variance, dict):
+                ws_fin.cell(row=4, column=1, value="Variance")
+                ws_fin.cell(row=4, column=2, value=variance.get("value"))
+                ws_fin.cell(row=4, column=3, value=variance.get("currency", "AED"))
+                ws_fin.cell(row=4, column=4, value=variance.get("formula") or "—")
+                ws_fin.cell(row=4, column=5, value="calculated")
+        _set_col_widths(ws_fin, [15, 18, 10, 20, 16])
 
     # ── Sheet 3: Sources ──────────────────────────────────────────────────────
     ws_src = wb.create_sheet("Sources")
@@ -131,13 +141,22 @@ def to_excel(report: dict) -> bytes:
     ws_audit = wb.create_sheet("Audit Data")
     _header_row(ws_audit, ["Section", "Finding", "Confidence", "Evidence IDs"])
     audit_row = 2
-    for section_name, key in [
+    audit_sections = [
         ("Key Findings", "key_findings"),
-        ("Root Causes", "root_causes"),
-        ("Delay Analysis", "delay_analysis"),
-        ("Contractual Implications", "contractual_implications"),
         ("Recommended Actions", "recommended_actions"),
-    ]:
+    ]
+    if policy.renders(SEC_ROOT_CAUSES):
+        audit_sections[1:1] = [("Root Causes", "root_causes")]
+    if policy.renders(SEC_DELAY_ANALYSIS):
+        insert_at = len(audit_sections) - 1
+        audit_sections[insert_at:insert_at] = [("Delay Analysis", "delay_analysis")]
+    if policy.renders(SEC_CONTRACTUAL):
+        insert_at = len(audit_sections) - 1
+        audit_sections[insert_at:insert_at] = [
+            ("Contractual Implications", "contractual_implications")
+        ]
+
+    for section_name, key in audit_sections:
         for item in report.get(key, []):
             if isinstance(item, dict):
                 ws_audit.cell(row=audit_row, column=1, value=section_name)
