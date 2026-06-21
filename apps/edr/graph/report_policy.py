@@ -42,6 +42,7 @@ CHK_TIMEOUT_SEMANTICS = "timeout_semantics"
 CHK_MANAGEMENT_QUESTION_ANSWER = "management_question_answer"
 CHK_INTENT_CORRECTNESS = "intent_correctness"
 CHK_IRRELEVANT_SECTIONS = "irrelevant_sections"
+CHK_RAW_FILENAME = "raw_filename"
 
 #: Checks every report runs regardless of type. (Connector-coverage gating is
 #: applied unconditionally in node_13.run and is intentionally not listed here.)
@@ -55,6 +56,7 @@ BASELINE_CHECKS: tuple[str, ...] = (
     CHK_PROJECT_IDENTITY,
     CHK_CONFIDENCE,
     CHK_TIMEOUT_SEMANTICS,
+    CHK_RAW_FILENAME,
 )
 
 # Numbered + special sections in render order, for the full executive shape.
@@ -195,7 +197,7 @@ POLICY: dict[str, ReportPolicy] = {
     "document_search": ReportPolicy(
         report_type="document_search",
         sections=_DOCUMENT_SECTIONS,
-        qg_checks=BASELINE_CHECKS,
+        qg_checks=BASELINE_CHECKS + (CHK_INTENT_CORRECTNESS, CHK_IRRELEVANT_SECTIONS),
         sources_required=("sharepoint",),
     ),
     "general_project_status": ReportPolicy(
