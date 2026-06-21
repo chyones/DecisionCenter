@@ -717,30 +717,25 @@ def _enrich_management_question_answer(report: dict, state: DecisionState) -> No
         }
 
     findings = [f for f in (report.get("key_findings") or []) if isinstance(f, dict)]
-    if findings:
-        first_text = (
-            findings[0].get("text", "").strip() or "No specific analytical finding available."
-        )
-        first_eids = _flatten_eids(findings[0].get("evidence_ids", []))
-    else:
-        first_text = "No specific analytical finding available."
-        first_eids = []
+    first_eids = _flatten_eids(findings[0].get("evidence_ids", [])) if findings else []
 
+    # Deterministic fallback must not present raw evidence as a synthesized
+    # decision; state honestly that automated synthesis did not complete.
     if not (mqa.get("executive_answer") or "").strip() or _is_placeholder_text(
         mqa.get("executive_answer", "")
     ):
-        mqa["executive_answer"] = f"The most prominent issue is: {first_text}"
+        mqa["executive_answer"] = (
+            "Automated decision analysis could not be completed for this request. "
+            "A reviewer must validate the retrieved evidence before a recommendation is issued."
+        )
 
     why = mqa.get("why_biggest_problem")
     if not isinstance(why, list) or len(why) < 3 or all(_is_placeholder_text(b) for b in why):
-        bullets = []
-        for f in findings[:3]:
-            t = (f.get("text") or "").strip()
-            if t and not _is_placeholder_text(t):
-                bullets.append(t)
-        while len(bullets) < 3:
-            bullets.append("Additional evidence review is needed to substantiate this issue.")
-        mqa["why_biggest_problem"] = bullets[:5]
+        mqa["why_biggest_problem"] = [
+            "Automated synthesis did not complete for this request.",
+            "The retrieved evidence is catalogued in the Sources section for analyst review.",
+            "A reviewer must confirm the facts before a management decision is taken.",
+        ]
 
     bi = mqa.setdefault("business_impact", {})
     if not isinstance(bi, dict):
@@ -869,17 +864,11 @@ def _basic_executive_summary(
         else (f"Project {state.project_code}" if state.project_code else "the requested project")
     )
 
-    first_ev = (doc_ev + email_ev)[0] if (doc_ev or email_ev) else {}
-    first_finding = (first_ev.get("excerpt") or first_ev.get("title") or "").strip()
-    if not first_finding:
-        first_finding = "the retrieved evidence points to an issue requiring management attention"
-    if len(first_finding) > 250:
-        first_finding = first_finding[:250] + "..."
-
     claim = (
-        f"For {project_label}, the most prominent issue is: {first_finding}. "
-        "Management should review the cited records and decide on the appropriate next steps. "
-        "Quantified schedule or cost impact cannot be stated because baselines were not found in the records."
+        f"Automated analysis for {project_label} could not be completed for this request. "
+        f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
+        "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
+        "impact is not available from the records."
     )
     return [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
@@ -969,6 +958,22 @@ def _build_salary_availability_report(
         "If Odoo is the source: confirmed analytic/accounting line query for labor cost by employee.",
     ]
 
+    sources = []
+    for idx, ev in enumerate(evidence, start=1):
+        if not isinstance(ev, dict):
+            continue
+        sources.append(
+            {
+                "source_id": ev.get("evidence_id", f"S{idx}"),
+                "source_type": ev.get("source_type", "sharepoint"),
+                "title": ev.get("title", "Untitled"),
+                "reference": ev.get("source_uri", "—"),
+                "date": ev.get("timestamp") or "—",
+                "confidence": ev.get("confidence", "low"),
+                "used_in": ["What Was Checked"],
+            }
+        )
+
     executive = []
     if checked_findings:
         executive.append(
@@ -1038,7 +1043,7 @@ def _build_salary_availability_report(
         },
         "missing_data": missing_data or ["No salary/payroll evidence available."],
         "conflicts": [],
-        "sources": [],
+        "sources": sources,
         "what_was_checked": what_was_checked,
         "required_data": required_data,
         "connector_coverage": coverage.report_section(state),
@@ -1085,13 +1090,13 @@ def _build_report_from_evidence(
 
     for idx, ev in enumerate(doc_ev + email_ev, start=1):
         eid = ev.get("evidence_id", f"ev_{idx:06d}")
-        excerpt = ev.get("excerpt", "")
         stype = ev.get("source_type", "sharepoint")
         confidence = ev.get("confidence", "medium")
+        title = ev.get("title") or "Untitled"
         finding = {
-            "text": excerpt[:200] + "..." if len(excerpt) > 200 else excerpt,
+            "text": f"Retrieved {stype} evidence pending analyst review: {title}",
             "evidence_ids": [eid],
-            "confidence": confidence,
+            "confidence": "low",
         }
         tags = [t.lower() for t in ev.get("tags", [])]
         if any(t in tags for t in ("delay", "eot", "schedule")):
@@ -1336,12 +1341,11 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
         project_label = f"Project {state.project_code}"
     else:
         project_label = "the requested project"
-    first_finding = findings[0].get("text", "")[:250]
-
     claim = (
-        f"For {project_label}, the most prominent issue is: {first_finding}. "
-        "Management should review the cited records and decide on the appropriate next steps. "
-        "Quantified schedule or cost impact cannot be stated because baselines were not found in the records."
+        f"Automated analysis for {project_label} could not be completed for this request. "
+        f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
+        "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
+        "impact is not available from the records."
     )
     report["executive_summary"] = [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
