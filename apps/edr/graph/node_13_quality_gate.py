@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from apps.edr.graph import coverage
+from apps.edr.graph import report_policy as rp
 from apps.edr.graph.intent import classify_report_type
 from apps.edr.graph.state import DecisionState
 from apps.edr.schemas.quality_gate import ClaimCheck, QualityGateResult
@@ -553,33 +554,36 @@ async def run(state: DecisionState) -> DecisionState:
     evidence = state.evidence
     evidence_ids = {e.get("evidence_id", "") for e in evidence if isinstance(e, dict)}
 
-    claim_checks = _check_claims(report, evidence_ids)
-    financial_checks = _check_financials(report, evidence_ids)
-    source_checks = _check_sources(report, evidence_ids)
-    conflict_checks = _check_conflicts(report)
-    summary_checks = _check_executive_summary(report, evidence)
-    search_summary_checks = _check_search_summary_patterns(report)
-    mqa_checks = _check_management_question_answer(report, state.query)
-    identity_checks = _check_project_identity(report)
-    intent_checks = _check_intent_correctness(report, state.query)
-    irrelevant_checks = _check_irrelevant_sections(report, state.query)
-    confidence_checks = _check_confidence_against_evidence(report, evidence, state)
-    timeout_semantic_checks = _check_timeout_semantics(report, state)
-
-    all_checks = (
-        claim_checks
-        + financial_checks
-        + source_checks
-        + conflict_checks
-        + summary_checks
-        + search_summary_checks
-        + mqa_checks
-        + identity_checks
-        + intent_checks
-        + irrelevant_checks
-        + confidence_checks
-        + timeout_semantic_checks
+    # Per-type quality-gate profile: the ReportPolicy decides which check
+    # families apply. Order is preserved so the emitted check list is identical
+    # to the previous unconditional sequence for every report type (the
+    # type-specific checks already self-gated and returned [] otherwise).
+    report_type = report.get("report_type") or classify_report_type(state.query)
+    policy = rp.policy_for(report_type)
+    check_runners = (
+        (rp.CHK_CLAIMS, lambda: _check_claims(report, evidence_ids)),
+        (rp.CHK_FINANCIALS, lambda: _check_financials(report, evidence_ids)),
+        (rp.CHK_SOURCES, lambda: _check_sources(report, evidence_ids)),
+        (rp.CHK_CONFLICTS, lambda: _check_conflicts(report)),
+        (rp.CHK_EXECUTIVE_SUMMARY, lambda: _check_executive_summary(report, evidence)),
+        (rp.CHK_SEARCH_SUMMARY, lambda: _check_search_summary_patterns(report)),
+        (
+            rp.CHK_MANAGEMENT_QUESTION_ANSWER,
+            lambda: _check_management_question_answer(report, state.query),
+        ),
+        (rp.CHK_PROJECT_IDENTITY, lambda: _check_project_identity(report)),
+        (rp.CHK_INTENT_CORRECTNESS, lambda: _check_intent_correctness(report, state.query)),
+        (rp.CHK_IRRELEVANT_SECTIONS, lambda: _check_irrelevant_sections(report, state.query)),
+        (
+            rp.CHK_CONFIDENCE,
+            lambda: _check_confidence_against_evidence(report, evidence, state),
+        ),
+        (rp.CHK_TIMEOUT_SEMANTICS, lambda: _check_timeout_semantics(report, state)),
     )
+    all_checks: list[ClaimCheck] = []
+    for _check_name, _run_check in check_runners:
+        if policy.runs_check(_check_name):
+            all_checks += _run_check()
 
     unsupported = [c for c in all_checks if c.verdict == "unsupported"]
     needs_review = [c for c in all_checks if c.verdict == "needs_review"]
