@@ -80,10 +80,11 @@ _FULL_SECTIONS: tuple[str, ...] = (
     SEC_SOURCES,
     SEC_QUALITY_GATE,
 )
-# Salary / data reports omit Root Causes / Delay / Contractual (current renderer).
+# Salary / data reports are focused extracts: they omit Root Causes / Delay /
+# Contractual AND the financial snapshot (an all-"Not available" budget table
+# is noise on an HR/data extract).
 _DATA_SECTIONS: tuple[str, ...] = (
     SEC_EXECUTIVE_SUMMARY,
-    SEC_FINANCIAL_SNAPSHOT,
     SEC_KEY_FINDINGS,
     SEC_RECOMMENDED_ACTIONS,
     SEC_CONFLICTS,

@@ -63,15 +63,20 @@ def test_baseline_checks_apply_to_every_type():
 
 
 def test_sections_match_current_renderer_shape():
-    # Salary/data omit Root Causes / Delay / Contractual; full reports keep them.
+    # Salary/data are focused extracts: omit Root Causes / Delay / Contractual
+    # AND the financial snapshot. Full reports keep all of them.
     for rt in ("salary_payroll", "data_report"):
         secs = rp.sections_for(rt)
         assert rp.SEC_ROOT_CAUSES not in secs
         assert rp.SEC_DELAY_ANALYSIS not in secs
         assert rp.SEC_CONTRACTUAL not in secs
-        # Financial snapshot is still present today (behaviour-preserving).
-        assert rp.SEC_FINANCIAL_SNAPSHOT in secs
+        assert rp.SEC_FINANCIAL_SNAPSHOT not in secs
 
     full = rp.sections_for("general_project_status")
-    for sec in (rp.SEC_ROOT_CAUSES, rp.SEC_DELAY_ANALYSIS, rp.SEC_CONTRACTUAL):
+    for sec in (
+        rp.SEC_ROOT_CAUSES,
+        rp.SEC_DELAY_ANALYSIS,
+        rp.SEC_CONTRACTUAL,
+        rp.SEC_FINANCIAL_SNAPSHOT,
+    ):
         assert sec in full

@@ -1,14 +1,23 @@
 """Markdown exporter. Spec: Section 29 (report structure, 11 required sections).
 
-Numbered body sections are emitted through a running counter so that when a
-report type suppresses sections (e.g. salary/data reports omit Root Causes /
-Delay / Contractual), the remaining sections stay contiguously numbered instead
-of leaving visible gaps (1, 2, 3, 7, ...). Full reports are unchanged (1..11).
+Section presence is driven by the per-type ReportPolicy (apps/edr/graph/
+report_policy.py): full reports render all sections (1..11); salary/data reports
+omit Root Causes / Delay / Contractual AND the financial snapshot (an
+all-"Not available" budget table is noise on an HR/data extract). Numbered
+headings flow through a running counter so suppressed sections never leave a gap.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+from apps.edr.graph.report_policy import (
+    SEC_CONTRACTUAL,
+    SEC_DELAY_ANALYSIS,
+    SEC_FINANCIAL_SNAPSHOT,
+    SEC_ROOT_CAUSES,
+    policy_for,
+)
 
 
 def to_markdown(report: dict) -> str:
@@ -25,6 +34,7 @@ def to_markdown(report: dict) -> str:
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    policy = policy_for(report_type)
 
     lines += [
         f"# {report_title} — {project_name} — {project_code}",
@@ -124,42 +134,43 @@ def to_markdown(report: dict) -> str:
         )
         lines.append("")
 
-    # Financial Snapshot — Odoo
-    lines.append(heading("Financial Snapshot — Odoo"))
-    lines.append("")
-    fs = report.get("financial_snapshot") or {}
-    if isinstance(fs, dict):
-        budget = fs.get("budget") or {}
-        actual = fs.get("actual_cost") or {}
-        variance = fs.get("variance") or {}
-        currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
-        lines += [
-            "| Item | Value | Source |",
-            "|---|---|---|",
-            _fin_row("Budget", budget, currency),
-            _fin_row("Actual Cost", actual, currency),
-        ]
-        if isinstance(variance, dict):
-            v = variance.get("value")
-            c = variance.get("currency", currency)
-            formula = variance.get("formula", "")
-            val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
-            formula_note = f" *(Formula: {formula})*" if formula else ""
-            lines.append(f"| Variance | {val_str}{formula_note} | — |")
-    else:
-        lines.append("_Financial data not available._")
-    if isinstance(fs, dict) and fs.get("note"):
+    # Financial Snapshot — Odoo (only for report types that include it)
+    if policy.renders(SEC_FINANCIAL_SNAPSHOT):
+        lines.append(heading("Financial Snapshot — Odoo"))
         lines.append("")
-        lines.append(f"> {fs['note']}.")
-    lines.append("")
+        fs = report.get("financial_snapshot") or {}
+        if isinstance(fs, dict):
+            budget = fs.get("budget") or {}
+            actual = fs.get("actual_cost") or {}
+            variance = fs.get("variance") or {}
+            currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
+            lines += [
+                "| Item | Value | Source |",
+                "|---|---|---|",
+                _fin_row("Budget", budget, currency),
+                _fin_row("Actual Cost", actual, currency),
+            ]
+            if isinstance(variance, dict):
+                v = variance.get("value")
+                c = variance.get("currency", currency)
+                formula = variance.get("formula", "")
+                val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
+                formula_note = f" *(Formula: {formula})*" if formula else ""
+                lines.append(f"| Variance | {val_str}{formula_note} | — |")
+        else:
+            lines.append("_Financial data not available._")
+        if isinstance(fs, dict) and fs.get("note"):
+            lines.append("")
+            lines.append(f"> {fs['note']}.")
+        lines.append("")
 
-    is_data_report = report_type in ("salary_payroll", "data_report")
-
-    # Findings sections
+    # Findings sections (presence per report-type policy)
     _findings_section(lines, heading("Key Findings"), report.get("key_findings", []))
-    if not is_data_report:
+    if policy.renders(SEC_ROOT_CAUSES):
         _findings_section(lines, heading("Root Causes"), report.get("root_causes", []))
+    if policy.renders(SEC_DELAY_ANALYSIS):
         _findings_section(lines, heading("Delay Analysis"), report.get("delay_analysis", []))
+    if policy.renders(SEC_CONTRACTUAL):
         _findings_section(
             lines,
             heading("Contractual / Commercial Implications"),

@@ -54,16 +54,19 @@ def test_full_report_numbered_contiguously_one_to_eleven():
 def test_data_report_has_no_numbering_gap():
     md = to_markdown(_base_report("data_report"))
     nums = _numbered(md)
-    # Root Causes / Delay / Contractual suppressed -> fewer sections, still contiguous.
+    # Root Causes / Delay / Contractual / Financial Snapshot suppressed ->
+    # fewer sections, still contiguous.
     assert nums == list(range(1, len(nums) + 1)), nums
     assert "Root Causes" not in md
     assert "Delay Analysis" not in md
-    # The old bug: "## 7. Recommended Actions" while 4/5/6 were missing.
+    assert "Financial Snapshot" not in md
+    # exec(1), key findings(2), recommended actions(3), ...
+    assert "## 3. Recommended Actions — Proposal Only" in md
     assert "## 7. Recommended Actions" not in md
-    assert "## 4. Recommended Actions — Proposal Only" in md
 
 
 def test_salary_report_has_no_numbering_gap():
     md = to_markdown(_base_report("salary_payroll"))
     nums = _numbered(md)
     assert nums == list(range(1, len(nums) + 1)), nums
+    assert "Financial Snapshot" not in md
