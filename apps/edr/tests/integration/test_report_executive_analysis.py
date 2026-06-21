@@ -332,6 +332,14 @@ async def test_non_management_query_does_not_require_mqa() -> None:
         "request_id": "r-mqa-004",
         "project_code": "PRJ-MARFA",
         "query": "What is the project status?",
+        "project_identity": {
+            "project_code": "PRJ-MARFA",
+            "project_name": "Construction of Civil Defense building in Al Marfa",
+            "identity_source": "approved project registry",
+            "identity_confidence": "verified",
+            "missing_identity_evidence": [],
+            "conflict_notes": [],
+        },
         "executive_summary": [
             {
                 "claim": "The project is currently on track based on the latest status report.",

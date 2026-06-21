@@ -1,8 +1,23 @@
-"""Markdown exporter. Spec: Section 29 (report structure, 11 required sections)."""
+"""Markdown exporter. Spec: Section 29 (report structure, 11 required sections).
+
+Section presence is driven by the per-type ReportPolicy (apps/edr/graph/
+report_policy.py): full reports render all sections (1..11); salary/data reports
+omit Root Causes / Delay / Contractual AND the financial snapshot (an
+all-"Not available" budget table is noise on an HR/data extract). Numbered
+headings flow through a running counter so suppressed sections never leave a gap.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+from apps.edr.graph.report_policy import (
+    SEC_CONTRACTUAL,
+    SEC_DELAY_ANALYSIS,
+    SEC_FINANCIAL_SNAPSHOT,
+    SEC_ROOT_CAUSES,
+    policy_for,
+)
 
 
 def to_markdown(report: dict) -> str:
@@ -11,18 +26,25 @@ def to_markdown(report: dict) -> str:
 
     request_id = report.get("request_id", "N/A")
     project_code = report.get("project_code") or "N/A"
+    pid = report.get("project_identity") or {}
+    project_name = pid.get("project_name") or project_code
+    report_type = report.get("report_type", "executive_decision")
+    report_title = report_type.replace("_", " ").title()
     query = report.get("query") or report.get("question", "N/A")
     language = report.get("language", "en")
     qg_status = report.get("quality_gate_status", "not_run")
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    policy = policy_for(report_type)
 
     lines += [
-        "# Executive Decision Report",
+        f"# {report_title} — {project_name} — {project_code}",
         "",
         "| Field | Value |",
         "|---|---|",
         f"| Request ID | {request_id} |",
-        f"| Project | {project_code} |",
+        f"| Project Name | {project_name} |",
+        f"| Project Code | {project_code} |",
+        f"| Report Type | {report_type} |",
         f"| Language | {language} |",
         f"| Quality Gate | {qg_status} |",
         f"| Evidence Completeness | {report.get('evidence_completeness', 'n/a')} |",
@@ -34,11 +56,19 @@ def to_markdown(report: dict) -> str:
         "",
     ]
 
+    # Running section counter so numbered headings stay contiguous regardless of
+    # which sections a given report type includes.
+    _counter = {"n": 0}
+
+    def heading(title: str) -> str:
+        _counter["n"] += 1
+        return f"## {_counter['n']}. {title}"
+
     # 0. Connector Coverage — every enabled source, attempted/zero made visible
     _coverage_section(lines, report)
 
-    # 1. Executive Summary
-    lines.append("## 1. Executive Summary")
+    # Executive Summary
+    lines.append(heading("Executive Summary"))
     lines.append("")
     summary = report.get("executive_summary", [])
     if isinstance(summary, str):
@@ -55,7 +85,7 @@ def to_markdown(report: dict) -> str:
         lines.append("_No summary available._")
     lines.append("")
 
-    # 1b. Management Question Answer (executive decision memo)
+    # Management Question Answer (executive decision memo) — unnumbered insert
     mqa = report.get("management_question_answer") or {}
     if isinstance(mqa, dict) and mqa.get("executive_answer"):
         lines.append("## Management Question Answer")
@@ -104,46 +134,50 @@ def to_markdown(report: dict) -> str:
         )
         lines.append("")
 
-    # 2. Financial Snapshot — Odoo
-    lines.append("## 2. Financial Snapshot — Odoo")
-    lines.append("")
-    fs = report.get("financial_snapshot") or {}
-    if isinstance(fs, dict):
-        budget = fs.get("budget") or {}
-        actual = fs.get("actual_cost") or {}
-        variance = fs.get("variance") or {}
-        currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
-        lines += [
-            "| Item | Value | Source |",
-            "|---|---|---|",
-            _fin_row("Budget", budget, currency),
-            _fin_row("Actual Cost", actual, currency),
-        ]
-        if isinstance(variance, dict):
-            v = variance.get("value")
-            c = variance.get("currency", currency)
-            formula = variance.get("formula", "")
-            val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
-            formula_note = f" *(Formula: {formula})*" if formula else ""
-            lines.append(f"| Variance | {val_str}{formula_note} | — |")
-    else:
-        lines.append("_Financial data not available._")
-    if isinstance(fs, dict) and fs.get("note"):
+    # Financial Snapshot — Odoo (only for report types that include it)
+    if policy.renders(SEC_FINANCIAL_SNAPSHOT):
+        lines.append(heading("Financial Snapshot — Odoo"))
         lines.append("")
-        lines.append(f"> {fs['note']}.")
-    lines.append("")
+        fs = report.get("financial_snapshot") or {}
+        if isinstance(fs, dict):
+            budget = fs.get("budget") or {}
+            actual = fs.get("actual_cost") or {}
+            variance = fs.get("variance") or {}
+            currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
+            lines += [
+                "| Item | Value | Source |",
+                "|---|---|---|",
+                _fin_row("Budget", budget, currency),
+                _fin_row("Actual Cost", actual, currency),
+            ]
+            if isinstance(variance, dict):
+                v = variance.get("value")
+                c = variance.get("currency", currency)
+                formula = variance.get("formula", "")
+                val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
+                formula_note = f" *(Formula: {formula})*" if formula else ""
+                lines.append(f"| Variance | {val_str}{formula_note} | — |")
+        else:
+            lines.append("_Financial data not available._")
+        if isinstance(fs, dict) and fs.get("note"):
+            lines.append("")
+            lines.append(f"> {fs['note']}.")
+        lines.append("")
 
-    # 3–7. Findings sections
-    _findings_section(lines, "## 3. Key Findings", report.get("key_findings", []))
-    _findings_section(lines, "## 4. Root Causes", report.get("root_causes", []))
-    _findings_section(lines, "## 5. Delay Analysis", report.get("delay_analysis", []))
-    _findings_section(
-        lines,
-        "## 6. Contractual / Commercial Implications",
-        report.get("contractual_implications", []),
-    )
+    # Findings sections (presence per report-type policy)
+    _findings_section(lines, heading("Key Findings"), report.get("key_findings", []))
+    if policy.renders(SEC_ROOT_CAUSES):
+        _findings_section(lines, heading("Root Causes"), report.get("root_causes", []))
+    if policy.renders(SEC_DELAY_ANALYSIS):
+        _findings_section(lines, heading("Delay Analysis"), report.get("delay_analysis", []))
+    if policy.renders(SEC_CONTRACTUAL):
+        _findings_section(
+            lines,
+            heading("Contractual / Commercial Implications"),
+            report.get("contractual_implications", []),
+        )
 
-    lines.append("## 7. Recommended Actions — Proposal Only")
+    lines.append(heading("Recommended Actions — Proposal Only"))
     lines.append("")
     actions = report.get("recommended_actions", [])
     if actions:
@@ -160,8 +194,8 @@ def to_markdown(report: dict) -> str:
         lines.append("_No recommended actions._")
     lines.append("")
 
-    # 8. Conflicting Evidence
-    lines.append("## 8. Conflicting Evidence")
+    # Conflicting Evidence
+    lines.append(heading("Conflicting Evidence"))
     lines.append("")
     conflicts = report.get("conflicts", [])
     if conflicts:
@@ -180,8 +214,8 @@ def to_markdown(report: dict) -> str:
         lines.append("_No conflicting evidence detected._")
     lines.append("")
 
-    # 9. Missing Data / Assumptions
-    lines.append("## 9. Missing Data / Assumptions")
+    # Missing Data / Assumptions
+    lines.append(heading("Missing Data / Assumptions"))
     lines.append("")
     missing = report.get("missing_data", [])
     if missing:
@@ -191,8 +225,24 @@ def to_markdown(report: dict) -> str:
         lines.append("_No missing data._")
     lines.append("")
 
-    # 10. Sources
-    lines.append("## 10. Sources")
+    # What was checked / required data (salary/payroll availability reports) — unnumbered
+    what_checked = report.get("what_was_checked", [])
+    if what_checked:
+        lines.append("## What Was Checked")
+        lines.append("")
+        for item in what_checked:
+            lines.append(f"- {item}")
+        lines.append("")
+    required = report.get("required_data", [])
+    if required:
+        lines.append("## Required Data / Next Steps")
+        lines.append("")
+        for item in required:
+            lines.append(f"- {item}")
+        lines.append("")
+
+    # Sources
+    lines.append(heading("Sources"))
     lines.append("")
     sources = report.get("sources", [])
     if sources:
@@ -213,8 +263,8 @@ def to_markdown(report: dict) -> str:
         lines.append("_No sources cited._")
     lines.append("")
 
-    # 11. Quality Gate Status
-    lines.append("## 11. Quality Gate Status")
+    # Quality Gate Status
+    lines.append(heading("Quality Gate Status"))
     lines.append("")
     lines.append(f"**Status:** `{qg_status}`")
     lines.append("")

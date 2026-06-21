@@ -88,7 +88,7 @@ test.describe('Modal focus trap', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           request_id: 'test-req-001',
-          state: 'staging',
+          state: 'running',
           current_node: 5,
           is_terminal: false,
           quality_gate: 'passed',

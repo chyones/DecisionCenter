@@ -279,6 +279,9 @@ def test_financial_note_when_no_verified_cost(monkeypatch):
     class _R:
         content = json.dumps(valid_report)
         cost_usd = 0.0
+        model = "test-model"
+        input_tokens = 1
+        output_tokens = 1
 
     async def fake_llm(*a, **k):
         return _R()
@@ -306,6 +309,15 @@ def _gate_state(cov: dict, evidence_ids=("sp-1",)):
     state = _state()
     state.evidence = [{"evidence_id": e, "source_type": "sharepoint"} for e in evidence_ids]
     state.report_json = {
+        "project_code": "PRJ-001",
+        "project_identity": {
+            "project_code": "PRJ-001",
+            "project_name": PROJECT_NAME,
+            "identity_source": "approved project registry",
+            "identity_confidence": "verified",
+            "missing_identity_evidence": [],
+            "conflict_notes": [],
+        },
         "key_findings": [{"text": "t", "evidence_ids": list(evidence_ids), "confidence": "high"}],
         "financial_snapshot": {}, "sources": [], "conflicts": [],
     }

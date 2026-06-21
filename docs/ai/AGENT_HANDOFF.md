@@ -18,6 +18,35 @@
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); live UAT evidence exists but remains partial/not go-live proof, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
 
+## 2026-06-21 Report Pipeline Policy Parity Branch
+
+Branch `fix/report-pipeline-slice-0-1` is anchored at
+`c0f27b845403b1aa2d81833aaf9b89b9091e7680` after exporter parity and a
+frontend accessibility fixture correction. It is ready for review/merge
+verification. It remains `NOT_LIVE`; Slice 7 is still approval-gated.
+
+Branch scope completed:
+
+- Intent SSOT routes Quality Gate checks through `report_type` / classifier.
+- Odoo `f_*` cost extraction was corrected without starting extended Odoo
+  source work.
+- Markdown section numbering is dynamic and policy-driven.
+- Professional fallback floor prevents filename-only fallback analysis from
+  becoming report content.
+- Salary reports populate sources.
+- `ReportPolicy` registry now drives section policy and Quality Gate profiles.
+- DOCX, PDF, PPTX, and Excel exports now honor `ReportPolicy.sections`, so
+  salary/data reports omit irrelevant Financial Snapshot, Root Causes, Delay,
+  and Contractual output.
+- Frontend accessibility coverage now mocks a cancelable running report status
+  before opening the Cancel confirmation dialog, so the focus-trap test verifies
+  the dialog instead of clicking a disabled control.
+
+Explicitly not changed: JSON behavior, LIVE state, production status, ownCloud,
+new financial/risk/delay/document report types, and extended Odoo source work.
+`must_not_deploy` remains `true` except for an explicitly requested
+NOT_LIVE-only deploy operation.
+
 ## 2026-06-18 Query Composer Timeout Deploy Verification
 
 Current `origin/main` commit `513314df977fa7d7acd3f8501313c22b5a6fcd4f`

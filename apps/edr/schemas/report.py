@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +85,17 @@ class ManagementQuestionAnswer(BaseModel):
     missing_evidence_or_assumptions: str = ""
 
 
+class ProjectIdentity(BaseModel):
+    """Verified real project identity used in every report/export/fallback."""
+
+    project_code: str
+    project_name: str
+    identity_source: str
+    identity_confidence: Literal["verified", "partial", "not_verified"] = "not_verified"
+    missing_identity_evidence: list[str] = Field(default_factory=list)
+    conflict_notes: list[str] = Field(default_factory=list)
+
+
 class ExecutiveDecisionReport(BaseModel):
     """Canonical internal JSON report. All export formats derive from this model.
 
@@ -93,6 +104,7 @@ class ExecutiveDecisionReport(BaseModel):
 
     request_id: str
     project_code: str | None = None
+    project_identity: ProjectIdentity = Field(default_factory=ProjectIdentity)
     query: str
     language: str = "en"
     executive_summary: list[SummaryClaim] = Field(default_factory=list)
@@ -109,3 +121,7 @@ class ExecutiveDecisionReport(BaseModel):
     conflicts: list[ConflictItem] = Field(default_factory=list)
     sources: list[SourceEntry] = Field(default_factory=list)
     quality_gate_status: Literal["passed", "failed", "needs_review", "not_run"] = "not_run"
+    report_type: str = "executive_decision"
+    connector_coverage: list[dict[str, Any]] = Field(default_factory=list)
+    what_was_checked: list[str] = Field(default_factory=list)
+    required_data: list[str] = Field(default_factory=list)
