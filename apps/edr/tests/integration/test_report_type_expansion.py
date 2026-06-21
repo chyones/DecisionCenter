@@ -1,9 +1,10 @@
-"""Block A tests — expanded report-type resolver.
+"""Block A/B tests — expanded report-type resolver + per-type prompt modes.
 
 classify_report_type now emits financial / risk / delay / document_search in
 addition to the original four. One resolver, documented precedence:
 salary -> management(decision framing) -> financial -> risk -> delay ->
-document_search -> data_report -> general.
+document_search -> data_report -> general. node_12 selects a dedicated prompt
+mode per type.
 """
 
 from __future__ import annotations
@@ -83,3 +84,31 @@ def test_existing_types_unchanged():
     assert c("give me salary report by staff name and file id") == "salary_payroll"
     assert c("give me a table of all log entries by id") == "data_report"
     assert c("what is the current status of the project") == "general_project_status"
+
+
+def test_prompt_mode_per_type():
+    """node_12 selects a dedicated prompt mode for every report type (Block B)."""
+    from apps.edr.graph.node_12_draft_json import _build_prompt
+    from apps.edr.graph.project_identity import ProjectIdentity
+    from apps.edr.graph.state import DecisionState
+
+    pid = ProjectIdentity(
+        project_code="PRJ-001",
+        project_name="Test",
+        identity_source="registry",
+        identity_confidence="verified",
+    )
+    st = DecisionState(request_id="r", user_id="u", query="q", role="executive", project_code="PRJ-001")
+    markers = {
+        "financial": "FINANCIAL REPORT MODE",
+        "risk": "RISK REPORT MODE",
+        "delay": "DELAY REPORT MODE",
+        "document_search": "DOCUMENT SEARCH MODE",
+        "management_question": "MANAGEMENT QUESTION MODE",
+        "salary_payroll": "SALARY / PAYROLL DATA REPORT MODE",
+        "data_report": "DATA REPORT MODE",
+        "general_project_status": "GENERAL PROJECT STATUS MODE",
+    }
+    for rt, marker in markers.items():
+        prompt = _build_prompt(st, [], report_type=rt, project_identity=pid)
+        assert marker in prompt, rt

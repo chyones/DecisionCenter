@@ -385,6 +385,54 @@ def _build_prompt(
             "- Cite evidence_ids for every row/fact.\n"
             "- If data is unavailable, explain which sources were checked and what is required.\n"
         )
+    elif report_type == "financial":
+        intent_instruction = (
+            "FINANCIAL REPORT MODE — The user asked for project financials.\n"
+            "- Separate and LABEL distinct figures: contract value/estimate, actual cost, "
+            "committed cost, purchase orders, invoices, supplier/subcontractor cost, and "
+            "labor/salary (only if available). NEVER merge them into one number.\n"
+            "- Every financial number MUST carry an Odoo evidence_id; if a figure has no "
+            "Odoo evidence, mark it not_available. Do NOT fabricate budget, cost, or salary.\n"
+            "- If an Odoo source timed out say 'inconclusive'; if a model/source is not "
+            "mapped say 'source not accessible' — NEVER 'no data' or 'empty'.\n"
+            "- DO NOT generate management_question_answer or 'biggest problem' framing.\n"
+            "- Omit root_causes/delay_analysis/contractual_implications.\n"
+            "- executive_summary states what financial data IS and IS NOT available, with "
+            "every figure bound to its Odoo evidence_id.\n"
+        )
+    elif report_type == "risk":
+        intent_instruction = (
+            "RISK REPORT MODE — The user asked about project risks/claims/exposure.\n"
+            "- Surface the risk view via key_findings (one per risk), root_causes, and "
+            "contractual_implications; tie each to a specific evidence_id.\n"
+            "- DO NOT use the financial snapshot or management decision-memo framing.\n"
+            "- DO NOT fabricate risks; if no risk evidence is found, say so and list what "
+            "was checked in missing_data.\n"
+            "- Confidence must reflect evidence quality; cap it when sources are partial or "
+            "timed out.\n"
+        )
+    elif report_type == "delay":
+        intent_instruction = (
+            "DELAY REPORT MODE — The user asked about schedule delay / EOT / time impact.\n"
+            "- Populate delay_analysis with specific delay events (revisions, EOT, "
+            "extensions, slippage) tied to evidence_ids, and root_causes where supported.\n"
+            "- DO NOT use the financial snapshot, contractual_implications, or management "
+            "decision-memo framing unless the evidence is specifically contractual.\n"
+            "- If no delay events are found, say so explicitly and add to missing_data; do "
+            "NOT invent delays.\n"
+            "- Timed-out sources are 'inconclusive', never 'no data'.\n"
+        )
+    elif report_type == "document_search":
+        intent_instruction = (
+            "DOCUMENT SEARCH MODE — The user asked to find or list documents.\n"
+            "- Return a compact list of the located documents in key_findings (title + "
+            "reference), each with an evidence_id; put full references in sources.\n"
+            "- DO NOT generate financial_snapshot, management_question_answer, root_causes, "
+            "delay_analysis, or contractual_implications.\n"
+            "- This is a retrieval/listing answer: do NOT analyse or infer conclusions.\n"
+            "- If nothing matched, say which sources were searched and that no matching "
+            "documents were found.\n"
+        )
     else:
         intent_instruction = (
             "GENERAL PROJECT STATUS MODE — Provide a concise project status summary.\n"
