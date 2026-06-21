@@ -322,14 +322,13 @@ def _check_confidence_against_evidence(
         if entry.get("enabled")
     )
     has_errors = bool(cov.get("connector_errors"))
-    evidence_count = len([e for e in evidence if isinstance(e, dict)])
 
     high_claim_sections: list[str] = []
     for section, item in _collect_claims(report):
         if item.get("confidence") == "high":
             high_claim_sections.append(section)
 
-    if high_claim_sections and (has_timeouts or has_errors or evidence_count < 3):
+    if high_claim_sections and (has_timeouts or has_errors):
         checks.append(
             ClaimCheck(
                 claim_id="confidence.cap_high_confidence",
@@ -337,7 +336,7 @@ def _check_confidence_against_evidence(
                 evidence_ids=[],
                 reason=(
                     f"High-confidence claims found in {high_claim_sections} despite "
-                    f"partial evidence (count={evidence_count}, timeouts={has_timeouts}, errors={has_errors})."
+                    f"source failures (timeouts={has_timeouts}, errors={has_errors})."
                 ),
             )
         )

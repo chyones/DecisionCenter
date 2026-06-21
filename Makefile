@@ -16,7 +16,10 @@ smoke:
 	docker compose exec app pytest -q apps/edr/tests/smoke
 
 test:
-	docker compose exec app pytest -q
+	docker compose exec app pytest -q -m "not slow"
+
+test-slow:
+	docker compose exec app pytest -q -m "slow"
 
 eval:
 	docker compose exec app python -m apps.edr.evaluation.run --suite goldenset

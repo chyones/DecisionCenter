@@ -1295,8 +1295,11 @@ async def run(state: DecisionState) -> DecisionState:
     state.cost_accumulated_usd += result.cost_usd
     state.outputs["node_12_cost_usd"] = result.cost_usd
     print(
-        f"[NODE12] llm response request_id={state.request_id} model={result.model} "
-        f"input_tokens={result.input_tokens} output_tokens={result.output_tokens} content_chars={len(result.content)}",
+        f"[NODE12] llm response request_id={state.request_id} "
+        f"model={getattr(result, 'model', 'unknown')} "
+        f"input_tokens={getattr(result, 'input_tokens', 0)} "
+        f"output_tokens={getattr(result, 'output_tokens', 0)} "
+        f"content_chars={len(result.content)}",
         file=sys.stderr,
         flush=True,
     )

@@ -125,6 +125,15 @@ async def test_run_case_qg_pass() -> None:
             ],
             "report_json": {
                 "request_id": "r1",
+                "report_type": "general_project_status",
+                "project_identity": {
+                    "project_code": "PRJ-001",
+                    "project_name": "Construction of Civil Defense building in Al Marfa",
+                    "identity_source": "approved project registry",
+                    "identity_confidence": "verified",
+                    "missing_identity_evidence": [],
+                    "conflict_notes": [],
+                },
                 "executive_summary": [
                     {"claim": "Budget is 1M.", "evidence_ids": ["ev_001"], "confidence": "high"}
                 ],
@@ -253,6 +262,7 @@ def test_compute_metrics_with_unauthorized() -> None:
     assert metrics["refusal_accuracy"] == 1.0
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_runner_enforces_min_pass_rate() -> None:
     from apps.edr.evaluation.run import main
@@ -280,6 +290,7 @@ async def test_runner_regression_on_bad_suite(tmp_path: Path) -> None:
     assert result == 1
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_runner_threshold_exit_non_zero() -> None:
     from apps.edr.evaluation.run import main

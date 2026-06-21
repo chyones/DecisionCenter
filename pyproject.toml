@@ -56,3 +56,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["apps/edr/tests"]
+markers = [
+    "slow: tests that are too slow for the default `make test` run (e.g., full goldenset evaluation)",
+]

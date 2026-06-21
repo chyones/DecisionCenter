@@ -15,6 +15,9 @@ COPY docs ./docs
 COPY scripts ./scripts
 COPY n8n ./n8n
 COPY .github ./.github
+COPY docker-compose.yml Caddyfile .gitignore ./
+COPY Dockerfile ./
+COPY frontend/src ./frontend/src
 
 RUN pip install --no-cache-dir -e ".[dev]"
 
