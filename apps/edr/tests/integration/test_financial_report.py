@@ -9,6 +9,8 @@ with synthetic evidence; live data stays gated behind ODOO_EXTENDED_SOURCES_ENAB
 
 from __future__ import annotations
 
+from apps.edr.exporters.markdown import to_markdown
+from apps.edr.graph.node_13_quality_gate import _check_financials
 from apps.edr.graph.node_12_draft_json import (
     _enforce_financial_categories,
     _extract_odoo_context,
@@ -50,6 +52,9 @@ def _po(eid, amount):
     }
 
 
+# --- C1: data layer ---------------------------------------------------------
+
+
 def test_schema_accepts_distinct_figures():
     fs = FinancialSnapshot()
     assert hasattr(fs, "contract_value") and hasattr(fs, "estimate") and hasattr(fs, "committed_cost")
@@ -66,16 +71,10 @@ def test_contract_estimate_and_committed_from_odoo_evidence():
     assert fs["contract_value"]["status"] == "available"
     assert fs["contract_value"]["value"] == 5000000.0
     assert fs["contract_value"]["evidence_id"] == "odoo-project-project-14602"
-
     assert fs["estimate"]["value"] == 4800000.0
-    assert fs["estimate"]["evidence_id"] == "odoo-project-project-14602"
-
-    # Committed = sum of PO amount_total, bound to a real PO evidence_id.
     assert fs["committed_cost"]["status"] == "available"
     assert fs["committed_cost"]["value"] == 200000.0
     assert fs["committed_cost"]["evidence_id"] in {"odoo-purchase-order-40181", "odoo-purchase-order-40155"}
-
-    # Figures are kept distinct — never merged into one number.
     assert fs["contract_value"]["value"] != fs["estimate"]["value"] != fs["committed_cost"]["value"]
 
 
@@ -91,9 +90,64 @@ def test_no_financial_evidence_stays_not_available():
 
 
 def test_committed_not_fabricated_when_evidence_id_absent_from_pack():
-    # PO present in the prompt list but its id is NOT in the validated evidence pack.
     odoo_ev = [_po("odoo-purchase-order-99999", 50000.0)]
     ctx = _extract_odoo_context(odoo_ev)
     report = _blank_fs()
     _enforce_financial_categories(report, ctx, odoo_ev, evidence_ids=set())
     assert report["financial_snapshot"]["committed_cost"]["status"] == "not_available"
+
+
+# --- C2: renderer + quality gate -------------------------------------------
+
+
+def _available(value, eid):
+    return {"value": value, "currency": "AED", "evidence_id": eid, "status": "available"}
+
+
+def test_markdown_renders_distinct_financial_rows():
+    report = {
+        "report_type": "financial",
+        "project_identity": {"project_name": "Test", "project_code": "PRJ-001"},
+        "financial_snapshot": {
+            "contract_value": _available(5000000.0, "ev_p"),
+            "estimate": _available(4800000.0, "ev_p"),
+            "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "actual_cost": _available(57000.0, "ev_a"),
+            "committed_cost": _available(200000.0, "ev_po"),
+            "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
+        },
+        "executive_summary": [], "key_findings": [], "recommended_actions": [],
+        "conflicts": [], "missing_data": [], "sources": [], "connector_coverage": [],
+        "quality_gate_status": "passed",
+    }
+    md = to_markdown(report)
+    for label in ("Contract Value", "Estimate", "Actual Cost", "Committed Cost"):
+        assert label in md, label
+    assert "5,000,000.00 AED" in md
+
+
+def test_qg_binds_each_available_financial_figure():
+    report = {
+        "financial_snapshot": {
+            "contract_value": _available(5000000.0, "missing-id"),  # not in pack
+            "estimate": _available(4800000.0, "ev_proj"),
+            "committed_cost": _available(200000.0, "ev_po"),
+            "actual_cost": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "budget": {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"},
+            "variance": {"value": None, "currency": "AED", "formula": None, "evidence_ids": []},
+        }
+    }
+    by = {c.claim_id: c.verdict for c in _check_financials(report, evidence_ids={"ev_proj", "ev_po"})}
+    assert by.get("financial_snapshot.contract_value") == "unsupported"
+    assert "financial_snapshot.estimate" not in by
+    assert "financial_snapshot.committed_cost" not in by
+
+
+def test_qg_skips_inconclusive_financial_figure():
+    report = {
+        "financial_snapshot": {
+            "contract_value": {"value": None, "currency": "AED", "evidence_id": None, "status": "inconclusive"},
+        }
+    }
+    checks = _check_financials(report, evidence_ids=set())
+    assert not any(c.claim_id == "financial_snapshot.contract_value" for c in checks)

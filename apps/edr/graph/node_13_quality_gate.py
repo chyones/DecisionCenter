@@ -87,12 +87,14 @@ def _check_financials(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
     if not isinstance(fs, dict):
         return checks
 
-    for field in ("budget", "actual_cost"):
+    for field in ("budget", "contract_value", "estimate", "actual_cost", "committed_cost"):
         node = fs.get(field)
         if not isinstance(node, dict):
             continue
         status = node.get("status", "not_available")
-        if status == "not_available":
+        # Only "available" figures must be evidence-bound; not_available and
+        # "inconclusive" (e.g. Odoo timeout) carry no number to validate.
+        if status != "available":
             continue
         eid = node.get("evidence_id")
         if not eid:

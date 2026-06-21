@@ -147,8 +147,11 @@ def to_markdown(report: dict) -> str:
             lines += [
                 "| Item | Value | Source |",
                 "|---|---|---|",
+                _fin_row("Contract Value", fs.get("contract_value") or {}, currency),
+                _fin_row("Estimate", fs.get("estimate") or {}, currency),
                 _fin_row("Budget", budget, currency),
                 _fin_row("Actual Cost", actual, currency),
+                _fin_row("Committed Cost", fs.get("committed_cost") or {}, currency),
             ]
             if isinstance(variance, dict):
                 v = variance.get("value")
