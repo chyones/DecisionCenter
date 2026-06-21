@@ -21,7 +21,8 @@
 ## 2026-06-21 Report Pipeline Policy Parity Branch
 
 Branch `fix/report-pipeline-slice-0-1` is anchored at
-`468d54862d8835076416537602ec6dd23c262a46` and is ready for review/merge
+`c0f27b845403b1aa2d81833aaf9b89b9091e7680` after exporter parity and a
+frontend accessibility fixture correction. It is ready for review/merge
 verification. It remains `NOT_LIVE`; Slice 7 is still approval-gated.
 
 Branch scope completed:
@@ -37,6 +38,9 @@ Branch scope completed:
 - DOCX, PDF, PPTX, and Excel exports now honor `ReportPolicy.sections`, so
   salary/data reports omit irrelevant Financial Snapshot, Root Causes, Delay,
   and Contractual output.
+- Frontend accessibility coverage now mocks a cancelable running report status
+  before opening the Cancel confirmation dialog, so the focus-trap test verifies
+  the dialog instead of clicking a disabled control.
 
 Explicitly not changed: JSON behavior, LIVE state, production status, ownCloud,
 new financial/risk/delay/document report types, and extended Odoo source work.

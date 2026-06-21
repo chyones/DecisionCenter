@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "468d54862d8835076416537602ec6dd23c262a46",
+  "current_commit": "c0f27b845403b1aa2d81833aaf9b89b9091e7680",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -85,15 +85,16 @@
     "name": "Report pipeline policy parity",
     "status": "BRANCH_READY_FOR_REVIEW_NOT_LIVE",
     "branch": "fix/report-pipeline-slice-0-1",
-    "head": "468d54862d8835076416537602ec6dd23c262a46",
-    "summary": "Report generation now uses a ReportPolicy registry as the single section-policy source for Markdown, DOCX, PDF, PPTX, Excel, and Quality Gate profiles. Salary/data reports suppress irrelevant Financial Snapshot, Root Causes, Delay, and Contractual sections while management/general reports keep the full structure.",
+    "head": "c0f27b845403b1aa2d81833aaf9b89b9091e7680",
+    "summary": "Report generation now uses a ReportPolicy registry as the single section-policy source for Markdown, DOCX, PDF, PPTX, Excel, and Quality Gate profiles. Salary/data reports suppress irrelevant Financial Snapshot, Root Causes, Delay, and Contractual sections while management/general reports keep the full structure. The frontend accessibility cancel-dialog fixture now uses a cancelable running status so it tests the focus trap without clicking a disabled Cancel control.",
     "evidence": [
       "apps/edr/tests/integration/test_report_policy.py",
       "apps/edr/tests/integration/test_markdown_section_numbering.py",
       "apps/edr/tests/integration/test_exporter_policy_sections.py",
       "apps/edr/tests/integration/test_project_identity_and_salary_intent.py",
       "apps/edr/tests/integration/test_odoo_financial_extraction.py",
-      "apps/edr/tests/integration/test_fallback_professional_floor.py"
+      "apps/edr/tests/integration/test_fallback_professional_floor.py",
+      "frontend/e2e/accessibility.spec.ts"
     ],
     "not_changed": "production_status, must_not_deploy, LIVE state, ownCloud, Odoo extended source work, new financial/risk/delay/document report types",
     "operator_steps_pending": "Branch review, merge to main, and an explicitly requested NOT_LIVE-only deploy remain pending. LIVE must stay disabled."
@@ -131,9 +132,9 @@
   },
   "latest_local_validation": {
     "date": "2026-06-21",
-    "context": "Report pipeline policy parity branch fix/report-pipeline-slice-0-1 at pushed code head 468d54862d8835076416537602ec6dd23c262a46. Governance anchor refreshed for branch review, and goldenset node_13/workflow fixtures now carry verified project_identity so the strengthened Quality Gate project-identity contract is exercised without unrelated missing-identity failures. No deployment, merge, production_status change, LIVE enablement, ownCloud work, extended Odoo source work, or new financial/risk/delay/document report type work occurred in this validation step.",
-    "head": "468d54862d8835076416537602ec6dd23c262a46",
-    "branches": "fix/report-pipeline-slice-0-1 tracking origin/fix/report-pipeline-slice-0-1 after exporter commit push",
+    "context": "Report pipeline policy parity branch fix/report-pipeline-slice-0-1 at pushed head c0f27b845403b1aa2d81833aaf9b89b9091e7680. Governance anchor refreshed for branch review, goldenset node_13/workflow fixtures now carry verified project_identity, and the frontend accessibility cancel-dialog fixture uses a running/cancelable mocked status. No deployment, merge, production_status change, LIVE enablement, ownCloud work, extended Odoo source work, or new financial/risk/delay/document report type work occurred in this validation step.",
+    "head": "c0f27b845403b1aa2d81833aaf9b89b9091e7680",
+    "branches": "fix/report-pipeline-slice-0-1 tracking origin/fix/report-pipeline-slice-0-1 after accessibility fixture fix push",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -142,7 +143,7 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; targeted report-pipeline/evaluation tests passed 44 with 2 slow tests deselected; evaluation non-slow tests passed 11 with 2 slow tests deselected. Host goldenset runner was interrupted because workflow cases require Compose-network services such as minio/postgres; rerun full eval inside Docker after NOT_LIVE deploy.",
+    "tests": "ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; python3 scripts/agent_postflight.py --allow-no-evidence clean; targeted report-pipeline/evaluation tests passed 44 with 2 slow tests deselected; evaluation non-slow tests passed 11 with 2 slow tests deselected; frontend npm run lint passed; npx playwright test e2e/accessibility.spec.ts passed 15 across Chromium/Firefox/WebKit. Host full backend suite was interrupted after 144 passed and 16 deselected because later integration paths require Compose-network services such as minio/postgres; rerun full backend/eval inside Docker after NOT_LIVE deploy.",
     "doc_drift": "clean",
     "ai_context": "clean",
     "verdict": "BRANCH_READY_FOR_PR_NOT_LIVE_FULL_EVAL_PENDING_DOCKER"
