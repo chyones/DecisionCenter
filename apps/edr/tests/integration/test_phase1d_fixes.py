@@ -140,7 +140,9 @@ def test_build_project_query_falls_back_to_name_when_no_numeric_id() -> None:
         "PRJ-001",
     )
     assert json.loads(domain) == [["name", "=", "Al Marfa CD"]]
-    assert json.loads(fields) == ["name", "date_start", "date", "user_id", "partner_id"]
+    assert json.loads(fields) == [
+        "name", "date_start", "date", "user_id", "partner_id", "wo_amount", "estimation_amount",
+    ]
 
 
 # ---------------------------------------------------------------------------

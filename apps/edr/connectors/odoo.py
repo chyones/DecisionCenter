@@ -15,7 +15,11 @@ from apps.edr.schemas.evidence import EvidenceObject
 # project.project columns proven to exist on the live Odoo instance. budget /
 # actual_cost are NOT columns on project.project (financial data lives in
 # account.analytic.line) — requesting them makes search_read return nothing.
-PROJECT_FIELDS = ["name", "date_start", "date", "user_id", "partner_id"]
+PROJECT_FIELDS = [
+    "name", "date_start", "date", "user_id", "partner_id",
+    # Real contract/estimate columns proven on the live instance (audit 2026-06-16):
+    "wo_amount", "estimation_amount",
+]
 
 # account.analytic.line columns proven to exist on the live Odoo instance.
 # These carry real posted cost lines (amount is negative for costs).

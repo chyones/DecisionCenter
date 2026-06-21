@@ -13,7 +13,7 @@ class FinancialValue(BaseModel):
     value: float | None = None
     currency: str = "AED"
     evidence_id: str | None = None
-    status: Literal["available", "not_available"] = "not_available"
+    status: Literal["available", "not_available", "inconclusive"] = "not_available"
 
 
 class FinancialVariance(BaseModel):
@@ -24,8 +24,23 @@ class FinancialVariance(BaseModel):
 
 
 class FinancialSnapshot(BaseModel):
+    """Distinct project financial figures — never merged into one number.
+
+    Each figure is sourced and evidence-bound independently:
+    - budget: legacy field; not present as an Odoo column (kept not_available).
+    - contract_value: project.project wo_amount (work-order/contract value).
+    - estimate: project.project estimation_amount.
+    - actual_cost: posted account.analytic.line cost total.
+    - committed_cost: purchase orders / PO lines (open commitments).
+    - variance: derived comparison (only when its inputs are evidence-bound).
+    Labour/supplier/invoice detail is surfaced as findings, not collapsed here.
+    """
+
     budget: FinancialValue = Field(default_factory=FinancialValue)
+    contract_value: FinancialValue = Field(default_factory=FinancialValue)
+    estimate: FinancialValue = Field(default_factory=FinancialValue)
     actual_cost: FinancialValue = Field(default_factory=FinancialValue)
+    committed_cost: FinancialValue = Field(default_factory=FinancialValue)
     variance: FinancialVariance = Field(default_factory=FinancialVariance)
 
 

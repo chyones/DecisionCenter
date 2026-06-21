@@ -608,6 +608,97 @@ def _enforce_financial_from_odoo(report: dict, odoo_ctx: dict, evidence_ids: set
             actual["evidence_id"] = None
 
 
+# Extended-source financial categories: category -> ordered candidate f_* amount fields.
+_COMMITTED_CATEGORIES = ("purchase_orders", "purchase_order_lines")
+_COMMITTED_AMOUNT_FIELDS = ("f_amount_total", "f_price_subtotal", "f_price_total", "f_amount_untaxed")
+
+
+def _fin_node(fs: dict, key: str) -> dict:
+    node = fs.get(key)
+    if not isinstance(node, dict):
+        node = {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"}
+        fs[key] = node
+    return node
+
+
+def _set_fin_available(fs: dict, key: str, value: float, evidence_id: str) -> None:
+    node = _fin_node(fs, key)
+    node["value"] = value
+    node["currency"] = "AED"
+    node["evidence_id"] = evidence_id
+    node["status"] = "available"
+
+
+def _sum_odoo_category(
+    odoo_evidence: list[dict],
+    categories: tuple[str, ...],
+    amount_fields: tuple[str, ...],
+    evidence_ids: set[str],
+) -> tuple[float | None, str | None]:
+    """Sum one financial category from tagged extended Odoo evidence.
+
+    Read-only; never fabricates. Sums only explicit f_* amount metadata on
+    evidence the pack actually contains. Returns (total, evidence_id) or
+    (None, None) when no backed amount exists.
+    """
+    total = 0.0
+    found = False
+    eid: str | None = None
+    for ev in odoo_evidence:
+        meta = ev.get("metadata") or {}
+        if meta.get("odoo_category") not in categories:
+            continue
+        amt = None
+        for field in amount_fields:
+            amt = _coerce_number(meta.get(field))
+            if amt is not None:
+                break
+        if amt is None:
+            continue
+        total += amt
+        found = True
+        cand = ev.get("evidence_id")
+        if eid is None and cand in evidence_ids:
+            eid = cand
+    if found and eid:
+        return round(total, 2), eid
+    return None, None
+
+
+def _enforce_financial_categories(
+    report: dict,
+    odoo_ctx: dict,
+    odoo_evidence: list[dict],
+    evidence_ids: set[str],
+) -> None:
+    """Populate distinct financial figures from Odoo without mixing or fabricating.
+
+    Each figure is set only when a real Odoo evidence_id backs it; otherwise it
+    stays not_available. contract_value/estimate come from the project.project
+    record; committed_cost from purchase orders / PO lines (extended sources).
+    """
+    fs = report.get("financial_snapshot")
+    if not isinstance(fs, dict):
+        return
+    cv, cv_eid = odoo_ctx.get("contract_value"), odoo_ctx.get("contract_value_evidence_id")
+    if cv is not None and cv_eid in evidence_ids:
+        _set_fin_available(fs, "contract_value", cv, cv_eid)
+    else:
+        _fin_node(fs, "contract_value")
+    est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
+    if est is not None and est_eid in evidence_ids:
+        _set_fin_available(fs, "estimate", est, est_eid)
+    else:
+        _fin_node(fs, "estimate")
+    committed, c_eid = _sum_odoo_category(
+        odoo_evidence, _COMMITTED_CATEGORIES, _COMMITTED_AMOUNT_FIELDS, evidence_ids
+    )
+    if committed is not None and c_eid:
+        _set_fin_available(fs, "committed_cost", committed, c_eid)
+    else:
+        _fin_node(fs, "committed_cost")
+
+
 def _normalize_financial_snapshot(report: dict) -> None:
     """Move any top-level financial keys into the canonical financial_snapshot block.
 
@@ -1635,8 +1726,10 @@ async def run(state: DecisionState) -> DecisionState:
 
     # Post-LLM deterministic corrections
     evidence_ids = {e.get("evidence_id", "") for e in state.evidence if isinstance(e, dict)}
-    odoo_ctx = _extract_odoo_context([e for e in state.evidence if e.get("source_type") == "odoo"])
+    _odoo_evidence = [e for e in state.evidence if e.get("source_type") == "odoo"]
+    odoo_ctx = _extract_odoo_context(_odoo_evidence)
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
+    _enforce_financial_categories(report, odoo_ctx, _odoo_evidence, evidence_ids)
     _remap_evidence_ids(report, state.evidence)
     _enforce_missing_data(report, odoo_ctx)
     _enforce_executive_summary(report, state)
