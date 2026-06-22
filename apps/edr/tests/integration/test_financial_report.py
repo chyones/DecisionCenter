@@ -178,3 +178,23 @@ def test_financial_fallback_summary_is_evidence_bound():
     ids = {e["evidence_id"] for e in ev}
     assert es[0]["evidence_ids"] and all(eid in ids for eid in es[0]["evidence_ids"])
     assert "financial figures" in es[0]["claim"].lower()
+
+
+def test_variance_derived_from_estimate_and_actual():
+    report = _blank_fs()
+    report["financial_snapshot"]["actual_cost"] = _available(-57000.0, "ev_a")  # signed cost
+    ev = [_project_record()]  # estimate 4.8M bound to the project record
+    ctx = _extract_odoo_context(ev)
+    _enforce_financial_categories(report, ctx, ev, {"odoo-project-project-14602", "ev_a"})
+    var = report["financial_snapshot"]["variance"]
+    assert var["value"] == round(4800000.0 - 57000.0, 2)
+    assert var["formula"] == "estimate - actual_cost"
+    assert set(var["evidence_ids"]) == {"odoo-project-project-14602", "ev_a"}
+
+
+def test_variance_not_derived_without_both_inputs():
+    report = _blank_fs()  # actual_cost not_available
+    ev = [_project_record()]
+    ctx = _extract_odoo_context(ev)
+    _enforce_financial_categories(report, ctx, ev, {"odoo-project-project-14602"})
+    assert report["financial_snapshot"]["variance"]["value"] is None

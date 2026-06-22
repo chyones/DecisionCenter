@@ -698,6 +698,29 @@ def _enforce_financial_categories(
     else:
         _fin_node(fs, "committed_cost")
 
+    # Derived variance: estimate (cost baseline) vs actual cost spent. Evidence-
+    # bound; only when BOTH inputs are available. Contract value (revenue/WO) and
+    # committed cost are never folded into this comparison.
+    est_node = fs.get("estimate") if isinstance(fs.get("estimate"), dict) else {}
+    act_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+    var_node = fs.get("variance")
+    if not isinstance(var_node, dict):
+        var_node = {"value": None, "currency": "AED", "formula": None, "evidence_ids": []}
+        fs["variance"] = var_node
+    if (
+        est_node.get("status") == "available"
+        and act_node.get("status") == "available"
+        and est_node.get("value") is not None
+        and act_node.get("value") is not None
+    ):
+        spent = abs(act_node["value"])
+        var_node["value"] = round(est_node["value"] - spent, 2)
+        var_node["currency"] = "AED"
+        var_node["formula"] = "estimate - actual_cost"
+        var_node["evidence_ids"] = [
+            e for e in (est_node.get("evidence_id"), act_node.get("evidence_id")) if e
+        ]
+
 
 def _normalize_financial_snapshot(report: dict) -> None:
     """Move any top-level financial keys into the canonical financial_snapshot block.
