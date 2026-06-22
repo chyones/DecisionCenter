@@ -16,6 +16,7 @@ from apps.edr.graph.report_policy import (
     SEC_DELAY_ANALYSIS,
     SEC_FINANCIAL_SNAPSHOT,
     SEC_ROOT_CAUSES,
+    SEC_SOURCES,
     policy_for,
 )
 
@@ -244,33 +245,28 @@ def to_markdown(report: dict) -> str:
             lines.append(f"- {item}")
         lines.append("")
 
-    # Sources
-    lines.append(heading("Sources"))
-    lines.append("")
-    sources = report.get("sources", [])
-    if sources:
-        for src in sources:
-            if isinstance(src, dict):
-                sid = src.get("source_id", "S?")
-                used_in = ", ".join(src.get("used_in", [])) or "—"
-                lines += [
-                    f"**[{sid}]** Source Type: {src.get('source_type', '—')}",
-                    f"- Title: {src.get('title', '—')}",
-                    f"- Reference: {src.get('reference', '—')}",
-                    f"- Date: {src.get('date') or '—'}",
-                    f"- Confidence: {src.get('confidence', '—')}",
-                    f"- Used in: {used_in}",
-                    "",
-                ]
-    else:
-        lines.append("_No sources cited._")
-    lines.append("")
-
     # Quality Gate Status
     lines.append(heading("Quality Gate Status"))
     lines.append("")
     lines.append(f"**Status:** `{qg_status}`")
     lines.append("")
+
+    # Appendix — Sources (condensed; kept out of the main body)
+    appendix_sources = report.get("sources", [])
+    if policy.renders(SEC_SOURCES) and appendix_sources:
+        lines.append("## Appendix — Sources")
+        lines.append("")
+        for src in appendix_sources:
+            if not isinstance(src, dict):
+                continue
+            sid = src.get("source_id", "S?")
+            lines.append(
+                f"- **[{sid}]** `{src.get('source_type', '—')}` — {src.get('title', '—')} — "
+                f"{src.get('reference', '—')} *(date: {src.get('date') or '—'}; "
+                f"confidence: {src.get('confidence', '—')})*"
+            )
+        lines.append("")
+
     lines += [
         "---",
         "",

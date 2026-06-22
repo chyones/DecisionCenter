@@ -242,6 +242,10 @@ _FILENAME_RE = re.compile(
     r"^[\w\-.()' &]+\.(pdf|xlsx|xls|docx|doc|pptx|ppt|dwg|dxf|jpe?g|png|csv|zip|rar|txt)$",
     re.IGNORECASE,
 )
+_FILENAME_EMBEDDED_RE = re.compile(
+    r"\b[\w\-]+\.(pdf|xlsx|xls|docx|doc|pptx|ppt|dwg|dxf|jpe?g|png|csv|zip|rar|txt)\b",
+    re.IGNORECASE,
+)
 
 
 def _check_raw_filename_findings(report: dict) -> list[ClaimCheck]:
@@ -255,14 +259,14 @@ def _check_raw_filename_findings(report: dict) -> list[ClaimCheck]:
             if not isinstance(item, dict):
                 continue
             text = (item.get("text") or item.get("claim") or "").strip()
-            if text and _FILENAME_RE.match(text):
+            if text and (_FILENAME_RE.match(text) or _FILENAME_EMBEDDED_RE.search(text)):
                 eids = item.get("evidence_ids", [])
                 checks.append(
                     ClaimCheck(
                         claim_id=f"{section}[{idx}].raw_filename",
                         verdict="needs_review",
                         evidence_ids=eids if isinstance(eids, list) else [],
-                        reason="Finding is a raw filename, not synthesized analysis.",
+                        reason="Finding contains a raw filename rather than synthesized analysis.",
                     )
                 )
     return checks

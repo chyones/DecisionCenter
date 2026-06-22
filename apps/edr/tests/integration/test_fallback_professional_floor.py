@@ -56,13 +56,13 @@ def test_fallback_summary_does_not_present_raw_evidence_as_conclusion():
     assert not any("BOQ" in b for b in mqa["why_biggest_problem"])
 
 
-def test_fallback_key_findings_are_neutral_not_raw_excerpt():
+def test_fallback_key_findings_do_not_surface_filenames():
     s = _state("status", [dict(_DOC_EV)])
     rep = _build_report_from_evidence(s, resolve_project_identity(s))
-    kf = rep["key_findings"][0]
-    assert kf["text"].startswith("Retrieved sharepoint evidence")
-    assert kf["confidence"] == "low"
-    assert kf["evidence_ids"] == ["ev_sp_1"]
+    # Filenames/titles are never surfaced as key findings; the document is
+    # listed in Sources instead (key_findings stays empty without LLM synthesis).
+    assert all("BOQ Revision 4.xlsx" not in (f.get("text", "") or "") for f in rep.get("key_findings", []))
+    assert "BOQ Revision 4.xlsx" in {s_.get("title") for s_ in rep.get("sources", [])}
 
 
 def test_salary_availability_report_cites_checked_sources():

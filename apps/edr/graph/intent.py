@@ -62,7 +62,10 @@ _FINANCIAL_RE = re.compile(
     r"cost\s+overrun|financial|finance|invoice|invoices|vendor\s+bill|"
     r"purchase\s+order|purchase\s+orders|\blpo\b|\brfq\b|procurement|"
     r"payment|payments|variance|expenditure|spend|spending|"
-    r"supplier\s+cost|subcontractor|account\s+move)\b",
+    r"supplier\s+cost|subcontractor|account\s+move|"
+    # Arabic financial terms (expenses/cost/budget/financial/invoice/payment/procurement)
+    r"مصاريف|مصروف|مصروفات|نفقات|تكلفة|تكاليف|التكلفة|التكاليف|ميزانية|الميزانية|"
+    r"مالي|مالية|المالية|فاتورة|فواتير|دفعة|دفعات|مدفوعات|مشتريات)\b",
     re.IGNORECASE,
 )
 

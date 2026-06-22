@@ -30,6 +30,12 @@ except Exception:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
+_FILENAME_LIKE = re.compile(
+    r"\b[\w\-]+\.(pdf|xlsx?|docx?|pptx?|dwg|dxf|jpe?g|png|csv|zip|rar|txt)\b",
+    re.IGNORECASE,
+)
+
+
 def _coerce_number(value) -> float | None:
     """Coerce a scalar to float, rejecting bools and non-numeric strings."""
     if isinstance(value, bool):
@@ -681,12 +687,12 @@ def _enforce_financial_categories(
     if not isinstance(fs, dict):
         return
     cv, cv_eid = odoo_ctx.get("contract_value"), odoo_ctx.get("contract_value_evidence_id")
-    if cv is not None and cv_eid in evidence_ids:
+    if cv not in (None, 0) and cv_eid in evidence_ids:
         _set_fin_available(fs, "contract_value", cv, cv_eid)
     else:
         _fin_node(fs, "contract_value")
     est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
-    if est is not None and est_eid in evidence_ids:
+    if est not in (None, 0) and est_eid in evidence_ids:
         _set_fin_available(fs, "estimate", est, est_eid)
     else:
         _fin_node(fs, "estimate")
@@ -710,7 +716,7 @@ def _enforce_financial_categories(
     if (
         est_node.get("status") == "available"
         and act_node.get("status") == "available"
-        and est_node.get("value") is not None
+        and est_node.get("value")  # non-zero estimate baseline only
         and act_node.get("value") is not None
     ):
         spent = abs(act_node["value"])
@@ -1030,18 +1036,42 @@ def _basic_executive_summary(
             "is not available from the records."
         )
 
-    # Document/email-backed report: state that synthesis did not complete.
+    # 1) Lead with the verified Odoo financial position when figures exist —
+    #    regardless of whether documents/email were also retrieved. Uses the
+    #    real numbers (not "synthesis unavailable"), each bound to its record.
+    fin_eids: list[str] = []
+    parts: list[str] = []
+    cv, cv_eid = odoo_ctx.get("contract_value"), odoo_ctx.get("contract_value_evidence_id")
+    if cv not in (None, 0) and cv_eid:
+        parts.append(f"contract value {cv:,.0f} AED")
+        fin_eids.append(cv_eid)
+    est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
+    if est not in (None, 0) and est_eid:
+        parts.append(f"cost estimate {est:,.0f} AED")
+        fin_eids.append(est_eid)
+    if (
+        odoo_ctx.get("has_amount")
+        and odoo_ctx.get("total_amount") is not None
+        and odoo_ctx.get("best_evidence_id")
+    ):
+        parts.append(f"actual cost to date {abs(odoo_ctx['total_amount']):,.0f} AED")
+        fin_eids.append(odoo_ctx["best_evidence_id"])
+    if parts:
+        fin_eids = list(dict.fromkeys(fin_eids))[:5]
+        claim = (
+            f"For {project_label}, the verified Odoo financial position is: {'; '.join(parts)} "
+            "(see the Financial Snapshot, each figure bound to its Odoo record). A full analytical "
+            "narrative requires analyst review."
+        )
+        return [{"claim": claim, "evidence_ids": fin_eids, "confidence": "low"}]
+
+    # 2) No financial figures: document/email-backed -> synthesis pending.
     doc_email_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
     if doc_email_eids:
         return [{"claim": _generic(len(doc_email_eids)), "evidence_ids": doc_email_eids, "confidence": "low"}]
 
-    # Odoo-only report (e.g. financial): cite the verified Odoo financial evidence
-    # so the summary is non-empty and evidence-bound (no empty-summary QG failure).
+    # 3) Odoo-only with no usable figures: cite the project record(s).
     odoo_ids: list[str] = []
-    for key in ("contract_value_evidence_id", "estimate_evidence_id", "best_evidence_id"):
-        v = odoo_ctx.get(key)
-        if v:
-            odoo_ids.append(v)
     for rec in odoo_ctx.get("project_records", []):
         rid = rec.get("evidence_id") if isinstance(rec, dict) else None
         if rid:
@@ -1049,23 +1079,7 @@ def _basic_executive_summary(
     odoo_ids = list(dict.fromkeys(odoo_ids))[:3]
     if not odoo_ids:
         return []
-
-    fin_bits: list[str] = []
-    if odoo_ctx.get("contract_value") is not None:
-        fin_bits.append("contract value")
-    if odoo_ctx.get("estimate") is not None:
-        fin_bits.append("estimate")
-    if odoo_ctx.get("has_amount"):
-        fin_bits.append("actual cost")
-    if fin_bits:
-        claim = (
-            f"For {project_label}, verified Odoo financial figures are present and bound to their "
-            f"records: {', '.join(fin_bits)} (see Financial Snapshot). Further analytical synthesis "
-            "was not automated and requires reviewer validation."
-        )
-    else:
-        claim = _generic(len(odoo_ids))
-    return [{"claim": claim, "evidence_ids": odoo_ids, "confidence": "low"}]
+    return [{"claim": _generic(len(odoo_ids)), "evidence_ids": odoo_ids, "confidence": "low"}]
 
 
 def _source_coverage_note(source: str, source_info: dict) -> str:
@@ -1286,20 +1300,23 @@ def _build_report_from_evidence(
     for idx, ev in enumerate(doc_ev + email_ev, start=1):
         eid = ev.get("evidence_id", f"ev_{idx:06d}")
         stype = ev.get("source_type", "sharepoint")
-        confidence = ev.get("confidence", "medium")
-        title = ev.get("title") or "Untitled"
-        finding = {
-            "text": f"Retrieved {stype} evidence pending analyst review: {title}",
-            "evidence_ids": [eid],
-            "confidence": "low",
-        }
-        tags = [t.lower() for t in ev.get("tags", [])]
-        if any(t in tags for t in ("delay", "eot", "schedule")):
-            delay_analysis.append(finding)
-        elif any(t in tags for t in ("contract", "claim", "risk")):
-            contractual_implications.append(finding)
-        else:
-            key_findings.append(finding)
+        # Surface the document CONTENT excerpt as a finding — never its filename/
+        # title. Skip when the excerpt is empty or is itself a filename (those
+        # documents are listed in the Sources appendix only).
+        excerpt = (ev.get("excerpt") or "").strip()
+        if excerpt and not _FILENAME_LIKE.search(excerpt):
+            finding = {
+                "text": excerpt[:200] + ("..." if len(excerpt) > 200 else ""),
+                "evidence_ids": [eid],
+                "confidence": "low",
+            }
+            tags = [tg.lower() for tg in ev.get("tags", [])]
+            if any(tg in tags for tg in ("delay", "eot", "schedule")):
+                delay_analysis.append(finding)
+            elif any(tg in tags for tg in ("contract", "claim", "risk")):
+                contractual_implications.append(finding)
+            else:
+                key_findings.append(finding)
         sources_list.append(
             {
                 "source_id": f"S{idx}",
@@ -1307,8 +1324,8 @@ def _build_report_from_evidence(
                 "title": ev.get("title", "Untitled"),
                 "reference": ev.get("source_uri", "—"),
                 "date": ev.get("timestamp") or "—",
-                "confidence": confidence,
-                "used_in": ["Key Findings"],
+                "confidence": ev.get("confidence", "medium"),
+                "used_in": ["Sources"],
             }
         )
 
