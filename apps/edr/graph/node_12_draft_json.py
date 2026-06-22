@@ -988,10 +988,6 @@ def _basic_executive_summary(
     This summary is intentionally low-confidence and tells the reviewer that
     automated synthesis failed — it does NOT invent analytical conclusions.
     """
-    ref_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
-    if not ref_eids:
-        return []
-
     project_name = (
         project_identity.project_name
         if project_identity and project_identity.project_name not in ("", "Not verified")
@@ -1003,13 +999,50 @@ def _basic_executive_summary(
         else (f"Project {state.project_code}" if state.project_code else "the requested project")
     )
 
-    claim = (
-        f"Automated analysis for {project_label} could not be completed for this request. "
-        f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
-        "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
-        "impact is not available from the records."
-    )
-    return [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
+    def _generic(n: int) -> str:
+        return (
+            f"Automated analysis for {project_label} could not be completed for this request. "
+            f"{n} retrieved evidence item(s) are catalogued in the Sources section for reviewer "
+            "validation; no automated conclusion is asserted. Quantified schedule or cost impact "
+            "is not available from the records."
+        )
+
+    # Document/email-backed report: state that synthesis did not complete.
+    doc_email_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
+    if doc_email_eids:
+        return [{"claim": _generic(len(doc_email_eids)), "evidence_ids": doc_email_eids, "confidence": "low"}]
+
+    # Odoo-only report (e.g. financial): cite the verified Odoo financial evidence
+    # so the summary is non-empty and evidence-bound (no empty-summary QG failure).
+    odoo_ids: list[str] = []
+    for key in ("contract_value_evidence_id", "estimate_evidence_id", "best_evidence_id"):
+        v = odoo_ctx.get(key)
+        if v:
+            odoo_ids.append(v)
+    for rec in odoo_ctx.get("project_records", []):
+        rid = rec.get("evidence_id") if isinstance(rec, dict) else None
+        if rid:
+            odoo_ids.append(rid)
+    odoo_ids = list(dict.fromkeys(odoo_ids))[:3]
+    if not odoo_ids:
+        return []
+
+    fin_bits: list[str] = []
+    if odoo_ctx.get("contract_value") is not None:
+        fin_bits.append("contract value")
+    if odoo_ctx.get("estimate") is not None:
+        fin_bits.append("estimate")
+    if odoo_ctx.get("has_amount"):
+        fin_bits.append("actual cost")
+    if fin_bits:
+        claim = (
+            f"For {project_label}, verified Odoo financial figures are present and bound to their "
+            f"records: {', '.join(fin_bits)} (see Financial Snapshot). Further analytical synthesis "
+            "was not automated and requires reviewer validation."
+        )
+    else:
+        claim = _generic(len(odoo_ids))
+    return [{"claim": claim, "evidence_ids": odoo_ids, "confidence": "low"}]
 
 
 def _source_coverage_note(source: str, source_info: dict) -> str:

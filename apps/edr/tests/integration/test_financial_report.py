@@ -151,3 +151,30 @@ def test_qg_skips_inconclusive_financial_figure():
     }
     checks = _check_financials(report, evidence_ids=set())
     assert not any(c.claim_id == "financial_snapshot.contract_value" for c in checks)
+
+
+def test_financial_fallback_summary_is_evidence_bound():
+    """Odoo-only fallback (no docs/email, no LLM) still yields a bound exec summary."""
+    from apps.edr.graph.node_12_draft_json import _build_report_from_evidence
+    from apps.edr.graph.project_identity import resolve_project_identity
+    from apps.edr.graph.state import DecisionState
+
+    analytic = {
+        "evidence_id": "odoo-account-analytic-line-9", "source_type": "odoo", "title": "Concrete",
+        "excerpt": "name: Concrete; amount: -57000.0; date: 2026-03-01",
+        "source_uri": "https://erp/web#id=9&model=account.analytic.line",
+        "metadata": {"model": "account.analytic.line", "f_amount": -57000.0, "f_date": "2026-03-01"},
+        "confidence": "high",
+    }
+    ev = [_project_record(), analytic, _po("odoo-purchase-order-40181", 120000.0)]
+    s = DecisionState(
+        request_id="r", user_id="u", query="what is the actual cost and budget variance",
+        role="executive", project_code="PRJ-001", allowed_projects=["PRJ-001"],
+        evidence=[dict(e) for e in ev],
+    )
+    rep = _build_report_from_evidence(s, resolve_project_identity(s))
+    es = rep["executive_summary"]
+    assert es, "Odoo-only financial fallback must still produce an executive summary"
+    ids = {e["evidence_id"] for e in ev}
+    assert es[0]["evidence_ids"] and all(eid in ids for eid in es[0]["evidence_ids"])
+    assert "financial figures" in es[0]["claim"].lower()
