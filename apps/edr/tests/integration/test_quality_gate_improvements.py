@@ -28,11 +28,21 @@ def test_synthesized_finding_not_flagged():
     assert _check_raw_filename_findings(report) == []
 
 
-def test_framed_fallback_text_not_flagged():
-    # The professional fallback floor frames the filename — that must NOT trip the check.
+def test_embedded_filename_in_finding_is_flagged():
+    # A finding that embeds a filename (even if "framed") is not analysis -> flagged.
     report = {
         "key_findings": [
             {"text": "Retrieved sharepoint evidence pending analyst review: BOQ Revision 4.xlsx", "evidence_ids": ["e1"]}
+        ]
+    }
+    checks = _check_raw_filename_findings(report)
+    assert any(c.claim_id.endswith(".raw_filename") and c.verdict == "needs_review" for c in checks)
+
+
+def test_framed_text_without_filename_not_flagged():
+    report = {
+        "key_findings": [
+            {"text": "Synthesis pending analyst review of the retrieved project documents.", "evidence_ids": ["e1"]}
         ]
     }
     assert _check_raw_filename_findings(report) == []

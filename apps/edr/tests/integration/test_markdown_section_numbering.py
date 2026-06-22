@@ -48,7 +48,7 @@ def _base_report(report_type: str) -> dict:
 def test_full_report_numbered_contiguously_one_to_eleven():
     md = to_markdown(_base_report("general_project_status"))
     nums = _numbered(md)
-    assert nums == list(range(1, 12)), nums  # 1..11, no gaps
+    assert nums == list(range(1, 11)), nums  # 1..10 (Sources moved to an appendix), no gaps
 
 
 def test_data_report_has_no_numbering_gap():

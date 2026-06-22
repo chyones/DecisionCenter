@@ -177,7 +177,8 @@ def test_financial_fallback_summary_is_evidence_bound():
     assert es, "Odoo-only financial fallback must still produce an executive summary"
     ids = {e["evidence_id"] for e in ev}
     assert es[0]["evidence_ids"] and all(eid in ids for eid in es[0]["evidence_ids"])
-    assert "financial figures" in es[0]["claim"].lower()
+    claim = es[0]["claim"].lower()
+    assert "financial position" in claim and "contract value" in claim
 
 
 def test_variance_derived_from_estimate_and_actual():
