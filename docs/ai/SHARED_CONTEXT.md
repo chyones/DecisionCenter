@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `3822aabfbefdf47a5702e9cebe43fa4a75535495` (GitHub `main` PR #6 merge; repo state checked 2026-06-18)
+- Current verified commit (anchor): `d6111d0c08b69da10de5fc0c01565e3ca828f728` (financial UAT evidence-filter defect fix; local branch checked 2026-06-22)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,36 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence exists but remains partial/not go-live proof; operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-06-22 Financial Arabic UAT Defect Fix
+
+Branch `fix/financial-uat-evidence-filter` fixes only the current UAT defect for
+Arabic query `تقرير عن مصاريف المشروع` at local fix commit
+`d6111d0c08b69da10de5fc0c01565e3ca828f728`.
+
+The fix keeps production `NOT_LIVE`, keeps `must_not_deploy=true`, does not
+enable `ODOO_EXTENDED_SOURCES_ENABLED`, does not change Al Marfa / Al Mirfa
+project naming, and does not add new features.
+
+Implemented scope:
+
+- Arabic financial query expansion now searches controlled financial evidence
+  terms.
+- Financial SharePoint/email retrieval filters to BOQ, payment certificate,
+  invoice, purchase order/LPO, cost report, variation, budget, procurement, and
+  payment context; schedules, drawings, QAQC, MIR, method statements, technical
+  submittals, and test reports are excluded unless explicitly requested.
+- node_12 forces clean Odoo-led financial synthesis when only Odoo financial
+  data is usable.
+- Quality Gate fails visible report-body raw filenames as unsupported; filenames
+  and URLs remain allowed only in Sources appendix.
+
+Validation: targeted tests `46 passed`; smoke `2 passed`; backend `make test`
+`930 passed, 3 skipped, 2 deselected`; goldenset `68/68 passed`, `0 failed`,
+`100.00%` pass rate, `94.12%` precision; frontend lint/build passed; frontend UI
+`78 passed`; ruff, compileall, doc drift, and AI context checks passed.
+`make phase2a-e2e` remains blocked by production `APP_ENV` guard in the running
+NOT_LIVE container and is not part of this defect's acceptance proof.
 
 ## 2026-06-21 Report Pipeline Policy Parity Branch
 
