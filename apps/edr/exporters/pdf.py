@@ -250,8 +250,11 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
             fin_table = Table(
                 [
                     ["Item", "Value", "Source"],
+                    _fv(fs.get("contract_value") or {}, "Contract Value"),
+                    _fv(fs.get("estimate") or {}, "Estimate"),
                     _fv(budget, "Budget"),
                     _fv(actual, "Actual Cost"),
+                    _fv(fs.get("committed_cost") or {}, "Committed Cost"),
                     variance_row,
                 ],
                 colWidths=[3.5 * cm, 10 * cm, 3 * cm],
