@@ -30,6 +30,12 @@ except Exception:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
+_FILENAME_LIKE = re.compile(
+    r"\b[\w\-]+\.(pdf|xlsx?|docx?|pptx?|dwg|dxf|jpe?g|png|csv|zip|rar|txt)\b",
+    re.IGNORECASE,
+)
+
+
 def _coerce_number(value) -> float | None:
     """Coerce a scalar to float, rejecting bools and non-numeric strings."""
     if isinstance(value, bool):
@@ -1292,13 +1298,29 @@ def _build_report_from_evidence(
     sources_list: list[dict] = []
 
     for idx, ev in enumerate(doc_ev + email_ev, start=1):
-        # Fallback (no LLM) does NOT surface raw filenames/titles as findings;
-        # source documents are listed in the Sources appendix only. key_findings
-        # stays empty unless the LLM synthesised real analytical findings.
+        eid = ev.get("evidence_id", f"ev_{idx:06d}")
+        stype = ev.get("source_type", "sharepoint")
+        # Surface the document CONTENT excerpt as a finding — never its filename/
+        # title. Skip when the excerpt is empty or is itself a filename (those
+        # documents are listed in the Sources appendix only).
+        excerpt = (ev.get("excerpt") or "").strip()
+        if excerpt and not _FILENAME_LIKE.search(excerpt):
+            finding = {
+                "text": excerpt[:200] + ("..." if len(excerpt) > 200 else ""),
+                "evidence_ids": [eid],
+                "confidence": "low",
+            }
+            tags = [tg.lower() for tg in ev.get("tags", [])]
+            if any(tg in tags for tg in ("delay", "eot", "schedule")):
+                delay_analysis.append(finding)
+            elif any(tg in tags for tg in ("contract", "claim", "risk")):
+                contractual_implications.append(finding)
+            else:
+                key_findings.append(finding)
         sources_list.append(
             {
                 "source_id": f"S{idx}",
-                "source_type": ev.get("source_type", "sharepoint"),
+                "source_type": stype,
                 "title": ev.get("title", "Untitled"),
                 "reference": ev.get("source_uri", "—"),
                 "date": ev.get("timestamp") or "—",
