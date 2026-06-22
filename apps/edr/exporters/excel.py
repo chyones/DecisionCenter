@@ -79,10 +79,14 @@ def to_excel(report: dict) -> bytes:
         ws_fin = wb.create_sheet("Financial Snapshot")
         _header_row(ws_fin, ["Item", "Value", "Currency", "Evidence ID", "Status"])
         fs = report.get("financial_snapshot") or {}
-        for r, (label, node) in enumerate([
+        _fin_rows = [
+            ("Contract Value", (fs.get("contract_value") or {}) if isinstance(fs, dict) else {}),
+            ("Estimate", (fs.get("estimate") or {}) if isinstance(fs, dict) else {}),
             ("Budget", (fs.get("budget") or {}) if isinstance(fs, dict) else {}),
             ("Actual Cost", (fs.get("actual_cost") or {}) if isinstance(fs, dict) else {}),
-        ], start=2):
+            ("Committed Cost", (fs.get("committed_cost") or {}) if isinstance(fs, dict) else {}),
+        ]
+        for r, (label, node) in enumerate(_fin_rows, start=2):
             ws_fin.cell(row=r, column=1, value=label)
             if isinstance(node, dict):
                 ws_fin.cell(row=r, column=2, value=node.get("value"))
@@ -95,11 +99,12 @@ def to_excel(report: dict) -> bytes:
         if isinstance(fs, dict):
             variance = fs.get("variance") or {}
             if isinstance(variance, dict):
-                ws_fin.cell(row=4, column=1, value="Variance")
-                ws_fin.cell(row=4, column=2, value=variance.get("value"))
-                ws_fin.cell(row=4, column=3, value=variance.get("currency", "AED"))
-                ws_fin.cell(row=4, column=4, value=variance.get("formula") or "—")
-                ws_fin.cell(row=4, column=5, value="calculated")
+                vr = 2 + len(_fin_rows)
+                ws_fin.cell(row=vr, column=1, value="Variance")
+                ws_fin.cell(row=vr, column=2, value=variance.get("value"))
+                ws_fin.cell(row=vr, column=3, value=variance.get("currency", "AED"))
+                ws_fin.cell(row=vr, column=4, value=variance.get("formula") or "—")
+                ws_fin.cell(row=vr, column=5, value="calculated")
         _set_col_widths(ws_fin, [15, 18, 10, 20, 16])
 
     # ── Sheet 3: Sources ──────────────────────────────────────────────────────

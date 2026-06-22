@@ -25,7 +25,7 @@ from apps.edr.graph.state import DecisionState
 
 SALARY_QUERY = "give me salary report by staff name and file id for this project"
 MGMT_QUERY = "what is the biggest problem for this project"
-DATA_QUERY = "list all delay analysis reports by date for this project"
+DATA_QUERY = "give me a table of all log entries by id for this project"
 
 
 def _make_state(query: str, project_code: str = "PRJ-001") -> DecisionState:

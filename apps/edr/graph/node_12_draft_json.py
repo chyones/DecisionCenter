@@ -385,6 +385,54 @@ def _build_prompt(
             "- Cite evidence_ids for every row/fact.\n"
             "- If data is unavailable, explain which sources were checked and what is required.\n"
         )
+    elif report_type == "financial":
+        intent_instruction = (
+            "FINANCIAL REPORT MODE — The user asked for project financials.\n"
+            "- Separate and LABEL distinct figures: contract value/estimate, actual cost, "
+            "committed cost, purchase orders, invoices, supplier/subcontractor cost, and "
+            "labor/salary (only if available). NEVER merge them into one number.\n"
+            "- Every financial number MUST carry an Odoo evidence_id; if a figure has no "
+            "Odoo evidence, mark it not_available. Do NOT fabricate budget, cost, or salary.\n"
+            "- If an Odoo source timed out say 'inconclusive'; if a model/source is not "
+            "mapped say 'source not accessible' — NEVER 'no data' or 'empty'.\n"
+            "- DO NOT generate management_question_answer or 'biggest problem' framing.\n"
+            "- Omit root_causes/delay_analysis/contractual_implications.\n"
+            "- executive_summary states what financial data IS and IS NOT available, with "
+            "every figure bound to its Odoo evidence_id.\n"
+        )
+    elif report_type == "risk":
+        intent_instruction = (
+            "RISK REPORT MODE — The user asked about project risks/claims/exposure.\n"
+            "- Surface the risk view via key_findings (one per risk), root_causes, and "
+            "contractual_implications; tie each to a specific evidence_id.\n"
+            "- DO NOT use the financial snapshot or management decision-memo framing.\n"
+            "- DO NOT fabricate risks; if no risk evidence is found, say so and list what "
+            "was checked in missing_data.\n"
+            "- Confidence must reflect evidence quality; cap it when sources are partial or "
+            "timed out.\n"
+        )
+    elif report_type == "delay":
+        intent_instruction = (
+            "DELAY REPORT MODE — The user asked about schedule delay / EOT / time impact.\n"
+            "- Populate delay_analysis with specific delay events (revisions, EOT, "
+            "extensions, slippage) tied to evidence_ids, and root_causes where supported.\n"
+            "- DO NOT use the financial snapshot, contractual_implications, or management "
+            "decision-memo framing unless the evidence is specifically contractual.\n"
+            "- If no delay events are found, say so explicitly and add to missing_data; do "
+            "NOT invent delays.\n"
+            "- Timed-out sources are 'inconclusive', never 'no data'.\n"
+        )
+    elif report_type == "document_search":
+        intent_instruction = (
+            "DOCUMENT SEARCH MODE — The user asked to find or list documents.\n"
+            "- Return a compact list of the located documents in key_findings (title + "
+            "reference), each with an evidence_id; put full references in sources.\n"
+            "- DO NOT generate financial_snapshot, management_question_answer, root_causes, "
+            "delay_analysis, or contractual_implications.\n"
+            "- This is a retrieval/listing answer: do NOT analyse or infer conclusions.\n"
+            "- If nothing matched, say which sources were searched and that no matching "
+            "documents were found.\n"
+        )
     else:
         intent_instruction = (
             "GENERAL PROJECT STATUS MODE — Provide a concise project status summary.\n"
@@ -558,6 +606,120 @@ def _enforce_financial_from_odoo(report: dict, odoo_ctx: dict, evidence_ids: set
             actual["status"] = "not_available"
             actual["value"] = None
             actual["evidence_id"] = None
+
+
+# Extended-source financial categories: category -> ordered candidate f_* amount fields.
+_COMMITTED_CATEGORIES = ("purchase_orders", "purchase_order_lines")
+_COMMITTED_AMOUNT_FIELDS = ("f_amount_total", "f_price_subtotal", "f_price_total", "f_amount_untaxed")
+
+
+def _fin_node(fs: dict, key: str) -> dict:
+    node = fs.get(key)
+    if not isinstance(node, dict):
+        node = {"value": None, "currency": "AED", "evidence_id": None, "status": "not_available"}
+        fs[key] = node
+    return node
+
+
+def _set_fin_available(fs: dict, key: str, value: float, evidence_id: str) -> None:
+    node = _fin_node(fs, key)
+    node["value"] = value
+    node["currency"] = "AED"
+    node["evidence_id"] = evidence_id
+    node["status"] = "available"
+
+
+def _sum_odoo_category(
+    odoo_evidence: list[dict],
+    categories: tuple[str, ...],
+    amount_fields: tuple[str, ...],
+    evidence_ids: set[str],
+) -> tuple[float | None, str | None]:
+    """Sum one financial category from tagged extended Odoo evidence.
+
+    Read-only; never fabricates. Sums only explicit f_* amount metadata on
+    evidence the pack actually contains. Returns (total, evidence_id) or
+    (None, None) when no backed amount exists.
+    """
+    total = 0.0
+    found = False
+    eid: str | None = None
+    for ev in odoo_evidence:
+        meta = ev.get("metadata") or {}
+        if meta.get("odoo_category") not in categories:
+            continue
+        amt = None
+        for field in amount_fields:
+            amt = _coerce_number(meta.get(field))
+            if amt is not None:
+                break
+        if amt is None:
+            continue
+        total += amt
+        found = True
+        cand = ev.get("evidence_id")
+        if eid is None and cand in evidence_ids:
+            eid = cand
+    if found and eid:
+        return round(total, 2), eid
+    return None, None
+
+
+def _enforce_financial_categories(
+    report: dict,
+    odoo_ctx: dict,
+    odoo_evidence: list[dict],
+    evidence_ids: set[str],
+) -> None:
+    """Populate distinct financial figures from Odoo without mixing or fabricating.
+
+    Each figure is set only when a real Odoo evidence_id backs it; otherwise it
+    stays not_available. contract_value/estimate come from the project.project
+    record; committed_cost from purchase orders / PO lines (extended sources).
+    """
+    fs = report.get("financial_snapshot")
+    if not isinstance(fs, dict):
+        return
+    cv, cv_eid = odoo_ctx.get("contract_value"), odoo_ctx.get("contract_value_evidence_id")
+    if cv is not None and cv_eid in evidence_ids:
+        _set_fin_available(fs, "contract_value", cv, cv_eid)
+    else:
+        _fin_node(fs, "contract_value")
+    est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
+    if est is not None and est_eid in evidence_ids:
+        _set_fin_available(fs, "estimate", est, est_eid)
+    else:
+        _fin_node(fs, "estimate")
+    committed, c_eid = _sum_odoo_category(
+        odoo_evidence, _COMMITTED_CATEGORIES, _COMMITTED_AMOUNT_FIELDS, evidence_ids
+    )
+    if committed is not None and c_eid:
+        _set_fin_available(fs, "committed_cost", committed, c_eid)
+    else:
+        _fin_node(fs, "committed_cost")
+
+    # Derived variance: estimate (cost baseline) vs actual cost spent. Evidence-
+    # bound; only when BOTH inputs are available. Contract value (revenue/WO) and
+    # committed cost are never folded into this comparison.
+    est_node = fs.get("estimate") if isinstance(fs.get("estimate"), dict) else {}
+    act_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+    var_node = fs.get("variance")
+    if not isinstance(var_node, dict):
+        var_node = {"value": None, "currency": "AED", "formula": None, "evidence_ids": []}
+        fs["variance"] = var_node
+    if (
+        est_node.get("status") == "available"
+        and act_node.get("status") == "available"
+        and est_node.get("value") is not None
+        and act_node.get("value") is not None
+    ):
+        spent = abs(act_node["value"])
+        var_node["value"] = round(est_node["value"] - spent, 2)
+        var_node["currency"] = "AED"
+        var_node["formula"] = "estimate - actual_cost"
+        var_node["evidence_ids"] = [
+            e for e in (est_node.get("evidence_id"), act_node.get("evidence_id")) if e
+        ]
 
 
 def _normalize_financial_snapshot(report: dict) -> None:
@@ -849,10 +1011,6 @@ def _basic_executive_summary(
     This summary is intentionally low-confidence and tells the reviewer that
     automated synthesis failed — it does NOT invent analytical conclusions.
     """
-    ref_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
-    if not ref_eids:
-        return []
-
     project_name = (
         project_identity.project_name
         if project_identity and project_identity.project_name not in ("", "Not verified")
@@ -864,13 +1022,50 @@ def _basic_executive_summary(
         else (f"Project {state.project_code}" if state.project_code else "the requested project")
     )
 
-    claim = (
-        f"Automated analysis for {project_label} could not be completed for this request. "
-        f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
-        "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
-        "impact is not available from the records."
-    )
-    return [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
+    def _generic(n: int) -> str:
+        return (
+            f"Automated analysis for {project_label} could not be completed for this request. "
+            f"{n} retrieved evidence item(s) are catalogued in the Sources section for reviewer "
+            "validation; no automated conclusion is asserted. Quantified schedule or cost impact "
+            "is not available from the records."
+        )
+
+    # Document/email-backed report: state that synthesis did not complete.
+    doc_email_eids = [e.get("evidence_id") for e in (doc_ev + email_ev)[:3] if e.get("evidence_id")]
+    if doc_email_eids:
+        return [{"claim": _generic(len(doc_email_eids)), "evidence_ids": doc_email_eids, "confidence": "low"}]
+
+    # Odoo-only report (e.g. financial): cite the verified Odoo financial evidence
+    # so the summary is non-empty and evidence-bound (no empty-summary QG failure).
+    odoo_ids: list[str] = []
+    for key in ("contract_value_evidence_id", "estimate_evidence_id", "best_evidence_id"):
+        v = odoo_ctx.get(key)
+        if v:
+            odoo_ids.append(v)
+    for rec in odoo_ctx.get("project_records", []):
+        rid = rec.get("evidence_id") if isinstance(rec, dict) else None
+        if rid:
+            odoo_ids.append(rid)
+    odoo_ids = list(dict.fromkeys(odoo_ids))[:3]
+    if not odoo_ids:
+        return []
+
+    fin_bits: list[str] = []
+    if odoo_ctx.get("contract_value") is not None:
+        fin_bits.append("contract value")
+    if odoo_ctx.get("estimate") is not None:
+        fin_bits.append("estimate")
+    if odoo_ctx.get("has_amount"):
+        fin_bits.append("actual cost")
+    if fin_bits:
+        claim = (
+            f"For {project_label}, verified Odoo financial figures are present and bound to their "
+            f"records: {', '.join(fin_bits)} (see Financial Snapshot). Further analytical synthesis "
+            "was not automated and requires reviewer validation."
+        )
+    else:
+        claim = _generic(len(odoo_ids))
+    return [{"claim": claim, "evidence_ids": odoo_ids, "confidence": "low"}]
 
 
 def _source_coverage_note(source: str, source_info: dict) -> str:
@@ -1587,8 +1782,10 @@ async def run(state: DecisionState) -> DecisionState:
 
     # Post-LLM deterministic corrections
     evidence_ids = {e.get("evidence_id", "") for e in state.evidence if isinstance(e, dict)}
-    odoo_ctx = _extract_odoo_context([e for e in state.evidence if e.get("source_type") == "odoo"])
+    _odoo_evidence = [e for e in state.evidence if e.get("source_type") == "odoo"]
+    odoo_ctx = _extract_odoo_context(_odoo_evidence)
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
+    _enforce_financial_categories(report, odoo_ctx, _odoo_evidence, evidence_ids)
     _remap_evidence_ids(report, state.evidence)
     _enforce_missing_data(report, odoo_ctx)
     _enforce_executive_summary(report, state)

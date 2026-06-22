@@ -1,7 +1,22 @@
 """Intent / report-type classification helpers.
 
-Deterministic, fast classification used in addition to the LLM intent node so
-post-processing and quality-gate checks have an authoritative report_type.
+Single deterministic resolver (``classify_report_type``) used by node_02, node_12
+(prompt mode), node_13 (quality-gate profile) and the renderer (sections). The
+Quality Gate must NOT re-detect intent separately — it reads ``report_type``.
+
+Precedence (most specific / most sensitive first):
+    1. salary_payroll      — HR/payroll data (most sensitive)
+    2. management_question — decision framing ("biggest problem", "should we decide")
+    3. financial           — budget/cost/PO/invoice/payment/procurement
+    4. risk                — risk register / claims / exposure / LD
+    5. delay               — delay / EOT / slippage / behind schedule
+    6. document_search     — retrieve a document/drawing/submittal/letter/RFI
+    7. data_report         — generic list/table/export extraction
+    8. general_project_status (fallback)
+
+A decision question wins over its domain (e.g. "what is the biggest financial
+problem" -> management_question, not financial), because it must read as a
+decision memo regardless of subject.
 """
 
 from __future__ import annotations
@@ -40,6 +55,43 @@ _SALARY_PAYROLL_DATA_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Financial reporting patterns (budget/actual/committed/PO/invoice/payment/...).
+_FINANCIAL_RE = re.compile(
+    r"\b(budget|estimate|estimation|contract\s+value|wo\s+amount|work\s+order\s+value|"
+    r"cost|costs|actual\s+cost|committed\s+cost|cost\s+report|cost\s+breakdown|"
+    r"cost\s+overrun|financial|finance|invoice|invoices|vendor\s+bill|"
+    r"purchase\s+order|purchase\s+orders|\blpo\b|\brfq\b|procurement|"
+    r"payment|payments|variance|expenditure|spend|spending|"
+    r"supplier\s+cost|subcontractor|account\s+move)\b",
+    re.IGNORECASE,
+)
+
+# Risk register / claims / exposure patterns.
+_RISK_RE = re.compile(
+    r"\b(risk|risks|risk\s+register|exposure|liability|liabilities|"
+    r"claim|claims|dispute|disputes|contractual\s+risk|contract\s+risk|"
+    r"penalty|penalties|liquidated\s+damages|\blds?\b|mitigation)\b",
+    re.IGNORECASE,
+)
+
+# Delay / time-impact patterns.
+_DELAY_RE = re.compile(
+    r"\b(delay|delays|delayed|eot|extension\s+of\s+time|"
+    r"behind\s+schedule|slippage|overdue|programme\s+slippage|"
+    r"schedule\s+delay|time\s+impact|late\s+completion|critical\s+path)\b",
+    re.IGNORECASE,
+)
+
+# Document-retrieval patterns: a retrieval verb adjacent to a document noun.
+_DOCUMENT_SEARCH_RE = re.compile(
+    r"\b(find|locate|search|where\s+is|show\s+me|retrieve|latest|copy\s+of|attach)\b"
+    r"[^.?!]*\b(document|documents|drawing|drawings|submittal|submittals|"
+    r"letter|letters|transmittal|transmittals|\brfi\b|minutes|specification|"
+    r"datasheet|certificate)\b|"
+    r"\b(document\s+search|drawing\s+register|submittal\s+log|transmittal\s+log)\b",
+    re.IGNORECASE,
+)
+
 # Generic data extraction / tabular report patterns.
 _DATA_REPORT_RE = re.compile(
     r"\b(give\s+me|list|table|export|generate|produce|download|create)\s+.*\b(report|"
@@ -52,13 +104,22 @@ _DATA_REPORT_RE = re.compile(
 def classify_report_type(query: str) -> str:
     """Return the authoritative report type for a user query.
 
-    Values: management_question, salary_payroll, data_report, general_project_status
+    Values: salary_payroll, management_question, financial, risk, delay,
+    document_search, data_report, general_project_status.
     """
     q = (query or "").lower()
     if _SALARY_PAYROLL_RE.search(q):
         return "salary_payroll"
     if _MANAGEMENT_QUESTION_RE.search(q):
         return "management_question"
+    if _FINANCIAL_RE.search(q):
+        return "financial"
+    if _RISK_RE.search(q):
+        return "risk"
+    if _DELAY_RE.search(q):
+        return "delay"
+    if _DOCUMENT_SEARCH_RE.search(q):
+        return "document_search"
     if _DATA_REPORT_RE.search(q):
         return "data_report"
     return "general_project_status"

@@ -87,12 +87,14 @@ def _check_financials(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
     if not isinstance(fs, dict):
         return checks
 
-    for field in ("budget", "actual_cost"):
+    for field in ("budget", "contract_value", "estimate", "actual_cost", "committed_cost"):
         node = fs.get(field)
         if not isinstance(node, dict):
             continue
         status = node.get("status", "not_available")
-        if status == "not_available":
+        # Only "available" figures must be evidence-bound; not_available and
+        # "inconclusive" (e.g. Odoo timeout) carry no number to validate.
+        if status != "available":
             continue
         eid = node.get("evidence_id")
         if not eid:
@@ -236,6 +238,36 @@ def _check_project_identity(report: dict) -> list[ClaimCheck]:
     return checks
 
 
+_FILENAME_RE = re.compile(
+    r"^[\w\-.()' &]+\.(pdf|xlsx|xls|docx|doc|pptx|ppt|dwg|dxf|jpe?g|png|csv|zip|rar|txt)$",
+    re.IGNORECASE,
+)
+
+
+def _check_raw_filename_findings(report: dict) -> list[ClaimCheck]:
+    """Flag findings/summary claims that are a raw filename rather than analysis."""
+    checks: list[ClaimCheck] = []
+    for section in ("executive_summary", "key_findings"):
+        items = report.get(section, [])
+        if not isinstance(items, list):
+            continue
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("text") or item.get("claim") or "").strip()
+            if text and _FILENAME_RE.match(text):
+                eids = item.get("evidence_ids", [])
+                checks.append(
+                    ClaimCheck(
+                        claim_id=f"{section}[{idx}].raw_filename",
+                        verdict="needs_review",
+                        evidence_ids=eids if isinstance(eids, list) else [],
+                        reason="Finding is a raw filename, not synthesized analysis.",
+                    )
+                )
+    return checks
+
+
 def _check_intent_correctness(report: dict, query: str) -> list[ClaimCheck]:
     """Ensure report type matches query intent and non-management reports do not use MQA framing."""
     checks: list[ClaimCheck] = []
@@ -243,7 +275,7 @@ def _check_intent_correctness(report: dict, query: str) -> list[ClaimCheck]:
     mqa = report.get("management_question_answer") or {}
     has_mqa_answer = isinstance(mqa, dict) and bool((mqa.get("executive_answer") or "").strip())
 
-    if report_type in ("salary_payroll", "data_report") and has_mqa_answer:
+    if report_type in ("salary_payroll", "data_report", "document_search") and has_mqa_answer:
         checks.append(
             ClaimCheck(
                 claim_id="intent.management_question_answer",
@@ -270,10 +302,14 @@ def _check_intent_correctness(report: dict, query: str) -> list[ClaimCheck]:
 
 
 def _check_irrelevant_sections(report: dict, query: str) -> list[ClaimCheck]:
-    """Data/salary reports should not include root_causes/delay_analysis/contractual_implications."""
+    """Reports must not carry sections that do not belong to their type.
+
+    - salary/data: no root_causes/delay_analysis/contractual_implications.
+    - document_search: also no financial snapshot (a retrieval/listing answer).
+    """
     checks: list[ClaimCheck] = []
     report_type = report.get("report_type", classify_report_type(query))
-    if report_type not in ("salary_payroll", "data_report"):
+    if report_type not in ("salary_payroll", "data_report", "document_search"):
         return checks
 
     irrelevant: list[str] = []
@@ -281,6 +317,13 @@ def _check_irrelevant_sections(report: dict, query: str) -> list[ClaimCheck]:
         data = report.get(section, [])
         if isinstance(data, list) and data:
             irrelevant.append(section)
+    if report_type == "document_search":
+        fs = report.get("financial_snapshot") or {}
+        if isinstance(fs, dict) and any(
+            isinstance(fs.get(k), dict) and fs[k].get("status") == "available"
+            for k in ("budget", "contract_value", "estimate", "actual_cost", "committed_cost")
+        ):
+            irrelevant.append("financial_snapshot")
 
     if irrelevant:
         checks.append(
@@ -567,6 +610,7 @@ async def run(state: DecisionState) -> DecisionState:
         (rp.CHK_CONFLICTS, lambda: _check_conflicts(report)),
         (rp.CHK_EXECUTIVE_SUMMARY, lambda: _check_executive_summary(report, evidence)),
         (rp.CHK_SEARCH_SUMMARY, lambda: _check_search_summary_patterns(report)),
+        (rp.CHK_RAW_FILENAME, lambda: _check_raw_filename_findings(report)),
         (
             rp.CHK_MANAGEMENT_QUESTION_ANSWER,
             lambda: _check_management_question_answer(report, state.query),

@@ -95,7 +95,14 @@ def to_word(report: dict) -> bytes:
             variance = fs.get("variance") or {}
             currency = (budget.get("currency") if isinstance(budget, dict) else None) or "AED"
 
-            fin_table = doc.add_table(rows=4, cols=3)
+            fin_rows = [
+                ("Contract Value", fs.get("contract_value") or {}),
+                ("Estimate", fs.get("estimate") or {}),
+                ("Budget", budget),
+                ("Actual Cost", actual),
+                ("Committed Cost", fs.get("committed_cost") or {}),
+            ]
+            fin_table = doc.add_table(rows=2 + len(fin_rows), cols=3)
             fin_table.style = "Table Grid"
             for i, h in enumerate(["Item", "Value", "Source"]):
                 fin_table.rows[0].cells[i].text = h
@@ -112,21 +119,20 @@ def to_word(report: dict) -> bytes:
                     row.cells[1].text = "Not available"
                     row.cells[2].text = "—"
 
-            _fill_fin_row(fin_table.rows[1], "Budget", budget)
-            _fill_fin_row(fin_table.rows[2], "Actual Cost", actual)
+            for _i, (_label, _node) in enumerate(fin_rows, start=1):
+                _fill_fin_row(fin_table.rows[_i], _label, _node)
 
-            fin_table.rows[3].cells[0].text = "Variance"
+            _vrow = fin_table.rows[1 + len(fin_rows)]
+            _vrow.cells[0].text = "Variance"
             if isinstance(variance, dict):
                 v = variance.get("value")
                 c = variance.get("currency", currency)
                 formula = variance.get("formula", "")
                 val_str = f"{v:,.2f} {c}" if v is not None else "Not available"
-                fin_table.rows[3].cells[1].text = (
-                    f"{val_str}{' (' + formula + ')' if formula else ''}"
-                )
+                _vrow.cells[1].text = f"{val_str}{' (' + formula + ')' if formula else ''}"
             else:
-                fin_table.rows[3].cells[1].text = "Not available"
-            fin_table.rows[3].cells[2].text = "—"
+                _vrow.cells[1].text = "Not available"
+            _vrow.cells[2].text = "—"
         else:
             doc.add_paragraph("Financial data not available.")
         doc.add_paragraph()
