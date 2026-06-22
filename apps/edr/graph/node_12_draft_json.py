@@ -10,6 +10,7 @@ import json
 import re
 
 from apps.edr.graph import coverage
+from apps.edr.graph.financial_evidence import filter_financial_evidence
 from apps.edr.graph.intent import (
     classify_report_type,
     is_management_question,
@@ -228,6 +229,10 @@ async def _apply_rerank(state: DecisionState, evidence: list[dict]) -> tuple[lis
     state.evidence is never modified here; only the prompt list is changed.
     """
     from apps.edr.config import settings
+
+    report_type = state.outputs.get("report_type", classify_report_type(state.query))
+    if report_type == "financial":
+        evidence = filter_financial_evidence(evidence, query=state.query)
 
     odoo_ev = [e for e in evidence if e.get("source_type") == "odoo"][:20]
     email_ev = [e for e in evidence if e.get("source_type") == "email"]
@@ -814,6 +819,137 @@ def _is_placeholder_text(text: str) -> bool:
     return False
 
 
+def _is_filename_or_title_only(ev: dict) -> bool:
+    """True when the visible text is only a filename/title surrogate."""
+    excerpt = str(ev.get("excerpt") or "").strip()
+    title = str(ev.get("title") or "").strip()
+    if not excerpt:
+        return True
+    if _FILENAME_LIKE.search(excerpt):
+        return True
+    if title and excerpt.lower() == title.lower():
+        return True
+    title_stem = re.sub(r"\.(pdf|xlsx?|docx?|pptx?|dwg|dxf|csv)$", "", title, flags=re.I)
+    title_tokens = set(re.findall(r"[a-z0-9]+", title_stem.lower()))
+    excerpt_tokens = set(re.findall(r"[a-z0-9]+", excerpt.lower()))
+    if title_tokens and excerpt_tokens and excerpt_tokens.issubset(title_tokens):
+        return True
+    return False
+
+
+def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
+    """Build executive-facing financial findings from Odoo-backed snapshot fields."""
+    fs = report.get("financial_snapshot") or {}
+    if not isinstance(fs, dict):
+        return []
+
+    findings: list[dict] = []
+    labels = (
+        ("contract_value", "contract value"),
+        ("estimate", "cost estimate"),
+        ("actual_cost", "actual cost to date"),
+        ("committed_cost", "committed cost"),
+    )
+    for key, label in labels:
+        node = fs.get(key)
+        if not isinstance(node, dict) or node.get("status") != "available":
+            continue
+        value = node.get("value")
+        eid = node.get("evidence_id")
+        if value is None or not eid:
+            continue
+        display_value = abs(value) if key == "actual_cost" else value
+        findings.append(
+            {
+                "text": f"Odoo shows {label} of {display_value:,.2f} AED.",
+                "evidence_ids": [eid],
+                "confidence": "medium",
+            }
+        )
+
+    variance = fs.get("variance")
+    if isinstance(variance, dict) and variance.get("value") is not None:
+        eids = _flatten_eids(variance.get("evidence_ids", []))
+        if eids:
+            findings.append(
+                {
+                    "text": (
+                        f"Variance against the Odoo cost estimate is "
+                        f"{variance['value']:,.2f} AED using {variance.get('formula') or 'verified inputs'}."
+                    ),
+                    "evidence_ids": eids,
+                    "confidence": "medium",
+                }
+            )
+    elif findings:
+        eids = [f["evidence_ids"][0] for f in findings if f.get("evidence_ids")]
+        findings.append(
+            {
+                "text": (
+                    "Budget or variance is not reported because no non-zero Odoo "
+                    "budget/estimate baseline was available for that calculation."
+                ),
+                "evidence_ids": list(dict.fromkeys(eids))[:2],
+                "confidence": "low",
+            }
+        )
+
+    if not findings:
+        project_ids = [
+            e.get("evidence_id")
+            for e in odoo_ctx.get("project_records", [])
+            if isinstance(e, dict) and e.get("evidence_id")
+        ]
+        if project_ids:
+            findings.append(
+                {
+                    "text": (
+                        "Odoo project evidence was found, but no usable Odoo cost, "
+                        "budget, purchase order, invoice, or payment amount was available."
+                    ),
+                    "evidence_ids": list(dict.fromkeys(project_ids))[:2],
+                    "confidence": "low",
+                }
+            )
+    return findings[:5]
+
+
+def _empty_management_question_answer() -> dict:
+    return {
+        "executive_answer": "",
+        "why_biggest_problem": [],
+        "evidence_used": [],
+        "business_impact": {
+            "schedule_impact": "",
+            "cost_commercial_impact": "",
+            "operational_client_impact": "",
+        },
+        "decision_required": "",
+        "recommended_action": {"specific_action": "", "owner_role": "", "timeframe": ""},
+        "risks_if_no_action": "",
+        "confidence": "low",
+        "missing_evidence_or_assumptions": "",
+    }
+
+
+def _force_financial_odoo_synthesis(
+    report: dict,
+    state: DecisionState,
+    odoo_ctx: dict,
+    project_identity: ProjectIdentity,
+) -> None:
+    """Keep financial reports executive-facing and Odoo-led."""
+    report["key_findings"] = _financial_snapshot_findings(report, odoo_ctx)
+    if odoo_ctx.get("project_records") or odoo_ctx.get("has_amount"):
+        report["executive_summary"] = _basic_executive_summary(
+            state, [], [], odoo_ctx, project_identity
+        )
+    report["root_causes"] = []
+    report["delay_analysis"] = []
+    report["contractual_implications"] = []
+    report["management_question_answer"] = _empty_management_question_answer()
+
+
 def _report_has_valid_claims(report: dict, evidence_ids: set[str]) -> bool:
     """Return True when the report has at least one real claim with valid evidence IDs."""
     if not isinstance(report, dict):
@@ -969,6 +1105,8 @@ def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
             missing.append(item)
             existing += " " + item.lower()
 
+    report_type = report.get("report_type")
+
     # Budget is always missing from analytic line records
     add(
         "Project budget (AED): not available in Odoo analytic line records",
@@ -986,8 +1124,8 @@ def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
             "actual cost",
             "actual_cost",
         )
-    # Delay if delay sections empty
-    if not report.get("delay_analysis") and not report.get("root_causes"):
+    # Delay if delay sections empty in report types that actually render delay/root cause sections.
+    if report_type not in ("financial", "salary_payroll", "data_report", "document_search") and not report.get("delay_analysis") and not report.get("root_causes"):
         add(
             "Delay analysis: no specific delay events extracted from available documents",
             "delay",
@@ -1267,7 +1405,11 @@ def _build_report_from_evidence(
     """Deterministic report builder used when no LLM key is available."""
     if project_identity is None:
         project_identity = resolve_project_identity(state)
-    evidence = state.evidence
+    report_type = state.outputs.get("report_type", classify_report_type(state.query))
+    if report_type == "financial":
+        evidence = filter_financial_evidence(state.evidence, query=state.query)
+    else:
+        evidence = state.evidence
     role = state.role or "unknown"
     can_see_finance = role in (
         "executive",
@@ -1304,7 +1446,11 @@ def _build_report_from_evidence(
         # title. Skip when the excerpt is empty or is itself a filename (those
         # documents are listed in the Sources appendix only).
         excerpt = (ev.get("excerpt") or "").strip()
-        if excerpt and not _FILENAME_LIKE.search(excerpt):
+        if (
+            report_type != "financial"
+            and excerpt
+            and not _is_filename_or_title_only(ev)
+        ):
             finding = {
                 "text": excerpt[:200] + ("..." if len(excerpt) > 200 else ""),
                 "evidence_ids": [eid],
@@ -1368,12 +1514,13 @@ def _build_report_from_evidence(
         ),
     }
 
-    return {
+    report = {
         "request_id": state.request_id,
         "project_code": state.project_code,
         "query": state.query,
         "language": "en",
         "project_identity": project_identity.to_dict(),
+        "report_type": report_type,
         "executive_summary": _basic_executive_summary(
             state, doc_ev, email_ev, odoo_ctx, project_identity
         ),
@@ -1393,6 +1540,11 @@ def _build_report_from_evidence(
         "sources": sources_list,
         "quality_gate_status": "not_run",
     }
+    evidence_ids = {e.get("evidence_id", "") for e in evidence if isinstance(e, dict)}
+    _enforce_financial_categories(report, odoo_ctx, odoo_ev, evidence_ids)
+    if report_type == "financial":
+        _force_financial_odoo_synthesis(report, state, odoo_ctx, project_identity)
+    return report
 
 
 def _remap_evidence_ids(report: dict, evidence: list[dict]) -> None:
@@ -1506,6 +1658,51 @@ def _remap_evidence_ids(report: dict, evidence: list[dict]) -> None:
             }
         )
     report["sources"] = new_sources
+
+
+def _rebuild_sources_from_citations(report: dict, evidence: list[dict]) -> None:
+    """Rebuild Sources from evidence IDs cited in the visible report body."""
+    cited: set[str] = set()
+    for section in (
+        "executive_summary",
+        "key_findings",
+        "root_causes",
+        "delay_analysis",
+        "contractual_implications",
+        "recommended_actions",
+    ):
+        for item in report.get(section, []):
+            if isinstance(item, dict):
+                cited.update(_flatten_eids(item.get("evidence_ids", [])))
+
+    fs = report.get("financial_snapshot") or {}
+    if isinstance(fs, dict):
+        for field in ("contract_value", "estimate", "actual_cost", "committed_cost"):
+            node = fs.get(field)
+            if isinstance(node, dict) and node.get("evidence_id"):
+                cited.add(str(node["evidence_id"]))
+        variance = fs.get("variance")
+        if isinstance(variance, dict):
+            cited.update(_flatten_eids(variance.get("evidence_ids", [])))
+
+    evidence_by_id = {e.get("evidence_id"): e for e in evidence if isinstance(e, dict)}
+    sources: list[dict] = []
+    for eid in sorted(cited):
+        ev = evidence_by_id.get(eid)
+        if not ev:
+            continue
+        sources.append(
+            {
+                "source_id": eid,
+                "source_type": ev.get("source_type", "sharepoint"),
+                "title": ev.get("title", "Untitled"),
+                "reference": ev.get("source_uri", "—"),
+                "date": ev.get("timestamp") or "—",
+                "confidence": ev.get("confidence", "medium"),
+                "used_in": ["Financial Snapshot" if ev.get("source_type") == "odoo" else "Key Findings"],
+            }
+        )
+    report["sources"] = sources
 
 
 def _flatten_eids(eids) -> list[str]:
@@ -1803,7 +2000,11 @@ async def run(state: DecisionState) -> DecisionState:
     odoo_ctx = _extract_odoo_context(_odoo_evidence)
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
     _enforce_financial_categories(report, odoo_ctx, _odoo_evidence, evidence_ids)
+    if report_type == "financial":
+        _force_financial_odoo_synthesis(report, state, odoo_ctx, project_identity)
     _remap_evidence_ids(report, state.evidence)
+    if report_type == "financial":
+        _rebuild_sources_from_citations(report, state.evidence)
     _enforce_missing_data(report, odoo_ctx)
     _enforce_executive_summary(report, state)
     _enrich_management_question_answer(report, state)

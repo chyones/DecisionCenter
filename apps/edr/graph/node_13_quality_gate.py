@@ -249,9 +249,16 @@ _FILENAME_EMBEDDED_RE = re.compile(
 
 
 def _check_raw_filename_findings(report: dict) -> list[ClaimCheck]:
-    """Flag findings/summary claims that are a raw filename rather than analysis."""
+    """Block visible report-body claims that leak raw filenames as analysis."""
     checks: list[ClaimCheck] = []
-    for section in ("executive_summary", "key_findings"):
+    for section in (
+        "executive_summary",
+        "key_findings",
+        "root_causes",
+        "delay_analysis",
+        "contractual_implications",
+        "recommended_actions",
+    ):
         items = report.get(section, [])
         if not isinstance(items, list):
             continue
@@ -264,9 +271,12 @@ def _check_raw_filename_findings(report: dict) -> list[ClaimCheck]:
                 checks.append(
                     ClaimCheck(
                         claim_id=f"{section}[{idx}].raw_filename",
-                        verdict="needs_review",
+                        verdict="unsupported",
                         evidence_ids=eids if isinstance(eids, list) else [],
-                        reason="Finding contains a raw filename rather than synthesized analysis.",
+                        reason=(
+                            "Visible report body contains a raw filename rather than "
+                            "executive-facing synthesized analysis."
+                        ),
                     )
                 )
     return checks

@@ -13,6 +13,8 @@ import re
 from apps.edr.config import settings
 from apps.edr.connectors.sharepoint import search_sharepoint
 from apps.edr.graph import coverage
+from apps.edr.graph.financial_evidence import filter_financial_evidence, financial_search_terms
+from apps.edr.graph.intent import classify_report_type
 from apps.edr.graph.state import DecisionState
 from apps.edr.rbac.project_mapping import ProjectMapping
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
@@ -47,6 +49,11 @@ def derive_search_terms(query: str, sp_config: dict, mapping: dict, project_code
     def add(t: str | None) -> None:
         if t and t.strip() and t.strip() not in terms:
             terms.append(t.strip())
+
+    if classify_report_type(query) == "financial":
+        for term in financial_search_terms(query):
+            add(term)
+        return terms or ["BOQ"]
 
     add(_query_keywords(query))
     add(mapping.get("project_name") or sp_config.get("project_name"))
@@ -83,7 +90,10 @@ async def run(state: DecisionState) -> DecisionState:
     evidence: list = []
     used_term = None
     try:
-        for term in terms[:_MAX_TERM_ATTEMPTS]:
+        max_attempts = 6 if classify_report_type(state.query) == "financial" else _MAX_TERM_ATTEMPTS
+        raw_count = 0
+        filtered_count = 0
+        for term in terms[:max_attempts]:
             tried.append(term)
             payload = {
                 "query": term,
@@ -91,7 +101,15 @@ async def run(state: DecisionState) -> DecisionState:
                 "site_id": sp_config.get("site_id"),
                 "drive_id": sp_config.get("drive_id"),
             }
-            evidence = await search_sharepoint(payload)
+            raw_evidence = await search_sharepoint(payload)
+            raw_count += len(raw_evidence)
+            if classify_report_type(state.query) == "financial":
+                evidence_dicts = [e.model_dump() for e in raw_evidence]
+                filtered_dicts = filter_financial_evidence(evidence_dicts, query=state.query)
+                filtered_count += len(filtered_dicts)
+                evidence = [e for e in raw_evidence if e.evidence_id in {d["evidence_id"] for d in filtered_dicts}]
+            else:
+                evidence = raw_evidence
             if evidence:
                 used_term = term
                 break
@@ -105,7 +123,13 @@ async def run(state: DecisionState) -> DecisionState:
             cov_status, cov_reason = "ok", ""
         else:
             cov_status = "zero_no_match"
-            cov_reason = f"No SharePoint documents matched terms tried: {tried}."
+            if classify_report_type(state.query) == "financial" and raw_count:
+                cov_reason = (
+                    "SharePoint returned documents, but none matched the financial "
+                    f"evidence policy after filtering (raw={raw_count}, kept={filtered_count})."
+                )
+            else:
+                cov_reason = f"No SharePoint documents matched terms tried: {tried}."
         coverage.record(state, "sharepoint", enabled=enabled, attempted=True,
                         status=cov_status, evidence_count=len(evidence), reason=cov_reason)
 
