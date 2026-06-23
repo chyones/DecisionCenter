@@ -58,7 +58,7 @@ def test_all_exporters_render_distinct_financial_figures():
     import openpyxl
     wb = openpyxl.load_workbook(BytesIO(results["xlsx"].content))
     cells = [str(c.value) for ws in wb.worksheets for row in ws.iter_rows() for c in row if c.value is not None]
-    assert "Contract Value" in cells and "Committed Cost" in cells
+    assert any("Contract Value" in c for c in cells) and any("Committed Cost" in c for c in cells)
 
     # PowerPoint
     from pptx import Presentation

@@ -132,8 +132,11 @@ def _financial_slide(prs: Presentation, report: dict) -> None:
         bullets.append(_fin_bullet("Contract Value", fs.get("contract_value") or {}, currency))
         bullets.append(_fin_bullet("Estimate", fs.get("estimate") or {}, currency))
         bullets.append(_fin_bullet("Budget", budget, currency))
-        bullets.append(_fin_bullet("Actual Cost", actual, currency))
-        bullets.append(_fin_bullet("Committed Cost", fs.get("committed_cost") or {}, currency))
+        bullets.append(_fin_bullet("Actual Cost (analytic/journal)", actual, currency))
+        bullets.append(_fin_bullet("Payroll / Staff", fs.get("payroll_cost") or {}, currency))
+        bullets.append(_fin_bullet("HR Expenses (petty cash/car/fuel)", fs.get("expense_cost") or {}, currency))
+        bullets.append(_fin_bullet("Committed Cost (LPO/PO)", fs.get("committed_cost") or {}, currency))
+        bullets.append(_fin_bullet("Total Incurred", fs.get("total_incurred") or {}, currency))
         if isinstance(variance, dict):
             v = variance.get("value")
             c = variance.get("currency", currency)

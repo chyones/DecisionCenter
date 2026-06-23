@@ -30,8 +30,11 @@ class FinancialSnapshot(BaseModel):
     - budget: legacy field; not present as an Odoo column (kept not_available).
     - contract_value: project.project wo_amount (work-order/contract value).
     - estimate: project.project estimation_amount.
-    - actual_cost: posted account.analytic.line cost total.
+    - actual_cost: posted account.analytic.line / account.move.line cost total.
+    - payroll_cost: project payroll / staff cost (hr.payslip.cost.allocation).
+    - expense_cost: HR expenses — petty cash, vehicle, fuel (hr.expense).
     - committed_cost: purchase orders / PO lines (open commitments).
+    - total_incurred: sum of evidence-backed incurred cost categories (see note).
     - variance: derived comparison (only when its inputs are evidence-bound).
     Labour/supplier/invoice detail is surfaced as findings, not collapsed here.
     """
@@ -40,8 +43,12 @@ class FinancialSnapshot(BaseModel):
     contract_value: FinancialValue = Field(default_factory=FinancialValue)
     estimate: FinancialValue = Field(default_factory=FinancialValue)
     actual_cost: FinancialValue = Field(default_factory=FinancialValue)
+    payroll_cost: FinancialValue = Field(default_factory=FinancialValue)
+    expense_cost: FinancialValue = Field(default_factory=FinancialValue)
     committed_cost: FinancialValue = Field(default_factory=FinancialValue)
+    total_incurred: FinancialValue = Field(default_factory=FinancialValue)
     variance: FinancialVariance = Field(default_factory=FinancialVariance)
+    note: str | None = None
 
 
 class FindingItem(BaseModel):
