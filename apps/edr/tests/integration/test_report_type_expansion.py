@@ -24,6 +24,7 @@ from apps.edr.graph.intent import classify_report_type as c
         "committed cost to date",
         "supplier cost breakdown",
         "procurement status",
+        "تقرير عن مصاريف المشروع",
     ],
 )
 def test_financial_queries(q):

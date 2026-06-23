@@ -235,6 +235,13 @@ If a required financial value is not present in Odoo, the report MUST state: Not
 
 The LLM MUST NOT calculate or infer missing financial numbers, with one narrow exception: a deterministic calculation where every input value comes from Odoo. In that case the formula MUST be shown in the report next to the result.
 
+For financial report intent, document and email retrieval MUST search and rank
+financial context only: BOQ / bill of quantities, payment certificate, invoice,
+purchase order / LPO, cost report, variation, budget, procurement, payment, and
+related Arabic financial terms. Unless explicitly requested, schedules,
+drawings, QAQC, MIRs, method statements, technical submittals, and test reports
+MUST be excluded from the financial evidence pack.
+
 The Odoo connector MUST run with a read-only API user.
 
 ### 4.5 CAD / DWG / DXF / IFC
@@ -988,6 +995,8 @@ This section is binding.
 
 - For underspecified queries, the system MAY apply HyDE using the Light tier (Haiku 4.5).
 - Expanded queries MUST be logged in the audit log alongside the original.
+- Arabic financial queries MUST expand to the controlled financial evidence
+  vocabulary before SharePoint/email retrieval and reranking.
 
 ### 19.7 Caching
 
@@ -1410,6 +1419,9 @@ The Markdown report MUST contain these sections in this order:
 
 - Every claim MUST reference a source number.
 - Every financial number MUST reference an Odoo source.
+- Key Findings MUST be synthesized analysis, never raw filenames or
+  title-only evidence. Filenames and URLs MAY appear in the Sources appendix
+  only.
 - Missing data MUST be explicit.
 - Assumptions MUST NOT appear unless clearly marked as user-provided.
 - Recommendations MUST be marked as proposals only.

@@ -10,10 +10,13 @@ with synthetic evidence; live data stays gated behind ODOO_EXTENDED_SOURCES_ENAB
 from __future__ import annotations
 
 from apps.edr.exporters.markdown import to_markdown
+from apps.edr.graph.financial_evidence import filter_financial_evidence
+from apps.edr.graph.node_05_sharepoint import derive_search_terms
 from apps.edr.graph.node_13_quality_gate import _check_financials
 from apps.edr.graph.node_12_draft_json import (
     _enforce_financial_categories,
     _extract_odoo_context,
+    _build_report_from_evidence,
 )
 from apps.edr.schemas.report import FinancialSnapshot
 
@@ -155,7 +158,6 @@ def test_qg_skips_inconclusive_financial_figure():
 
 def test_financial_fallback_summary_is_evidence_bound():
     """Odoo-only fallback (no docs/email, no LLM) still yields a bound exec summary."""
-    from apps.edr.graph.node_12_draft_json import _build_report_from_evidence
     from apps.edr.graph.project_identity import resolve_project_identity
     from apps.edr.graph.state import DecisionState
 
@@ -181,6 +183,69 @@ def test_financial_fallback_summary_is_evidence_bound():
     assert "financial position" in claim and "contract value" in claim
 
 
+def test_financial_sharepoint_terms_expand_arabic_and_avoid_project_name_fallback():
+    terms = derive_search_terms(
+        "تقرير عن مصاريف المشروع",
+        sp_config={"project_name": "Construction of Civil Defense building in Al Marfa"},
+        mapping={"project_name": "Construction of Civil Defense building in Al Marfa"},
+        project_code="PRJ-001",
+    )
+    assert "BOQ" in terms
+    assert "invoice" in terms
+    assert "Construction of Civil Defense building in Al Marfa" not in terms
+
+
+def test_financial_evidence_filter_keeps_financial_and_excludes_technical_noise():
+    evidence = [
+        {"evidence_id": "boq", "source_type": "sharepoint", "title": "BOQ Revision 4.xlsx", "excerpt": "BOQ civil works"},
+        {"evidence_id": "inv", "source_type": "email", "title": "Invoice approval", "excerpt": "Please approve invoice 55"},
+        {"evidence_id": "sched", "source_type": "sharepoint", "title": "Baseline Schedule.pdf", "excerpt": "programme update"},
+        {"evidence_id": "mir", "source_type": "sharepoint", "title": "MIR-221.pdf", "excerpt": "material inspection request"},
+        {"evidence_id": "method", "source_type": "sharepoint", "title": "Method Statement.pdf", "excerpt": "method statement"},
+    ]
+    kept = {e["evidence_id"] for e in filter_financial_evidence(evidence, query="تقرير عن مصاريف المشروع")}
+    assert kept == {"boq", "inv"}
+
+
+def test_financial_fallback_uses_clean_odoo_only_synthesis_when_documents_are_noise():
+    from apps.edr.graph.project_identity import resolve_project_identity
+    from apps.edr.graph.state import DecisionState
+
+    analytic = {
+        "evidence_id": "odoo-account-analytic-line-9",
+        "source_type": "odoo",
+        "title": "Concrete",
+        "excerpt": "name: Concrete; amount: -57000.0; date: 2026-03-01",
+        "source_uri": "https://erp/web#id=9&model=account.analytic.line",
+        "metadata": {"model": "account.analytic.line", "f_amount": -57000.0, "f_date": "2026-03-01"},
+        "confidence": "high",
+    }
+    noise = {
+        "evidence_id": "ev_schedule",
+        "source_type": "sharepoint",
+        "title": "Project_Schedule_Rev3.pdf",
+        "excerpt": "Project_Schedule_Rev3.pdf",
+        "source_uri": "https://sp/Project_Schedule_Rev3.pdf",
+        "confidence": "medium",
+    }
+    state = DecisionState(
+        request_id="r",
+        user_id="u",
+        query="تقرير عن مصاريف المشروع",
+        role="executive",
+        project_code="PRJ-001",
+        evidence=[_project_record(), analytic, noise],
+        outputs={"report_type": "financial"},
+    )
+    report = _build_report_from_evidence(state, resolve_project_identity(state))
+    key_text = " ".join(f.get("text", "") for f in report["key_findings"])
+    assert "Project_Schedule_Rev3.pdf" not in key_text
+    assert "Odoo shows actual cost to date" in key_text
+    md = to_markdown(report)
+    main_body = md.split("## Appendix — Sources")[0]
+    assert "Project_Schedule_Rev3.pdf" not in main_body
+
+
 def test_variance_derived_from_estimate_and_actual():
     report = _blank_fs()
     report["financial_snapshot"]["actual_cost"] = _available(-57000.0, "ev_a")  # signed cost
@@ -198,4 +263,14 @@ def test_variance_not_derived_without_both_inputs():
     ev = [_project_record()]
     ctx = _extract_odoo_context(ev)
     _enforce_financial_categories(report, ctx, ev, {"odoo-project-project-14602"})
+    assert report["financial_snapshot"]["variance"]["value"] is None
+
+
+def test_variance_not_derived_from_zero_estimate():
+    report = _blank_fs()
+    report["financial_snapshot"]["actual_cost"] = _available(-57000.0, "ev_a")
+    ev = [_project_record()]
+    ev[0]["metadata"] = {"model": "project.project", "f_estimation_amount": 0.0}
+    ctx = _extract_odoo_context(ev)
+    _enforce_financial_categories(report, ctx, ev, {"odoo-project-project-14602", "ev_a"})
     assert report["financial_snapshot"]["variance"]["value"] is None

@@ -15,6 +15,8 @@ RBAC: project *group* correspondence is project evidence (gated like SharePoint,
 from apps.edr.config import settings
 from apps.edr.connectors.email import search_email, search_group_conversations
 from apps.edr.graph import coverage
+from apps.edr.graph.financial_evidence import filter_financial_evidence, financial_search_query
+from apps.edr.graph.intent import classify_report_type
 from apps.edr.graph.state import DecisionState
 from apps.edr.rbac.roles import ROLE_PERMISSIONS, Role
 from apps.edr.rbac.project_mapping import ProjectMapping
@@ -30,6 +32,16 @@ def _perms(role: str | None):
     if not role:
         return None
     return ROLE_PERMISSIONS.get(Role(role))
+
+
+def _financial_filter_if_needed(state: DecisionState, evidence: list) -> tuple[list, int]:
+    """Return evidence narrowed to financial context for financial reports."""
+    if classify_report_type(state.query) != "financial":
+        return evidence, len(evidence)
+    raw_dicts = [e.model_dump() for e in evidence]
+    kept = filter_financial_evidence(raw_dicts, query=state.query)
+    kept_ids = {e["evidence_id"] for e in kept}
+    return [e for e in evidence if e.evidence_id in kept_ids], len(raw_dicts)
 
 
 async def _index(state: DecisionState, evidence: list) -> None:
@@ -73,6 +85,7 @@ async def run(state: DecisionState) -> DecisionState:
             evidence = await search_group_conversations(
                 group_id=group_id, group_mail=group_mail, project_code=state.project_code
             )
+            evidence, raw_count = _financial_filter_if_needed(state, evidence)
             state.evidence.extend([e.model_dump() for e in evidence])
             state.outputs["email_status"] = f"ok ({len(evidence)} items)"
             state.outputs["email_path"] = "group_conversations"
@@ -80,7 +93,13 @@ async def run(state: DecisionState) -> DecisionState:
                 cov_status, cov_reason = "ok", ""
             else:
                 cov_status = "zero_no_match"
-                cov_reason = f"Group mailbox {group_mail} has no conversations."
+                if classify_report_type(state.query) == "financial" and raw_count:
+                    cov_reason = (
+                        f"Group mailbox {group_mail} had conversations, but none matched "
+                        "the financial evidence policy after filtering."
+                    )
+                else:
+                    cov_reason = f"Group mailbox {group_mail} has no conversations."
             coverage.record(state, "email", enabled=enabled, attempted=True,
                             status=cov_status, evidence_count=len(evidence), reason=cov_reason)
             await _index(state, evidence)
@@ -122,17 +141,25 @@ async def run(state: DecisionState) -> DecisionState:
 
     try:
         payload: dict = {
-            "query": state.query,
+            "query": financial_search_query(state.query)
+            if classify_report_type(state.query) == "financial"
+            else state.query,
             "project_code": state.project_code,
             "user_mailbox": state.user_id,
             "allowed_mailboxes": state.allowed_mailboxes,
         }
         evidence = await search_email(payload)
+        evidence, raw_count = _financial_filter_if_needed(state, evidence)
         state.evidence.extend([e.model_dump() for e in evidence])
         state.outputs["email_status"] = f"ok ({len(evidence)} items)"
         state.outputs["email_path"] = "user_mailbox"
         cov_status = "ok" if evidence else "zero_no_match"
-        cov_reason = "" if evidence else "Mailbox search returned no messages."
+        if evidence:
+            cov_reason = ""
+        elif classify_report_type(state.query) == "financial" and raw_count:
+            cov_reason = "Mailbox search returned messages, but none matched the financial evidence policy after filtering."
+        else:
+            cov_reason = "Mailbox search returned no messages."
         coverage.record(state, "email", enabled=enabled, attempted=True,
                         status=cov_status, evidence_count=len(evidence), reason=cov_reason)
         await _index(state, evidence)

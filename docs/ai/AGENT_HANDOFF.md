@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `3822aabfbefdf47a5702e9cebe43fa4a75535495` (GitHub `main` PR #6 merge; repo state checked 2026-06-18)
+- **Current anchor:** `d6111d0c08b69da10de5fc0c01565e3ca828f728` (financial UAT evidence-filter defect fix; local branch checked 2026-06-22)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,48 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); live UAT evidence exists but remains partial/not go-live proof, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-06-22 Financial Arabic UAT Defect Fix
+
+Branch `fix/financial-uat-evidence-filter` is anchored at fix commit
+`d6111d0c08b69da10de5fc0c01565e3ca828f728`. It fixes only the current UAT
+defect for Arabic query `تقرير عن مصاريف المشروع`; it does not deploy, enable
+LIVE, enable `ODOO_EXTENDED_SOURCES_ENABLED`, change Al Marfa / Al Mirfa naming,
+or add new features.
+
+Implemented scope:
+
+- Arabic financial queries expand to a controlled financial evidence vocabulary
+  before SharePoint/email retrieval.
+- Financial SharePoint/email evidence is filtered to BOQ, payment certificate,
+  invoice, purchase order/LPO, cost report, variation, budget, procurement, and
+  payment context; schedules, drawings, QAQC, MIR, method statements, technical
+  submittals, and test reports are excluded unless explicitly requested.
+- node_12 uses clean Odoo-led financial synthesis when only Odoo financial data
+  is usable; Key Findings are never built from filename/title-only evidence.
+- Quality Gate treats visible report-body raw filenames as unsupported, so the
+  draft fails instead of being presented as usable.
+- Markdown keeps filenames/URLs in the Sources appendix only; the main body is
+  executive-facing and synthesized.
+
+Validation on 2026-06-22:
+
+- Targeted financial/QG/report-type tests: `46 passed`.
+- `make smoke`: `2 passed`.
+- `make test`: `930 passed, 3 skipped, 2 deselected`.
+- `make eval`: `68/68 passed`, `0 failed`, pass rate `100.00%`, precision
+  `94.12%`.
+- Frontend: `npm run lint` passed; `npm run build` passed with existing large
+  chunk warning; `npm run test:ui` passed `78` across Chromium/Firefox/WebKit.
+- `ruff check apps scripts`, `python3 -m compileall -q apps scripts`,
+  `check_doc_drift.py`, and `check_ai_context.py` passed.
+- `make phase2a-e2e` remains blocked by the production `APP_ENV` guard in the
+  running NOT_LIVE container; a one-off local/blank-Entra attempt reached
+  submission but hit the older harness expectation for `visited_nodes`.
+
+UAT sample for `تقرير عن مصاريف المشروع`: report type `financial`, Quality Gate
+`passed`, Key Findings are Odoo-backed financial statements, and
+`MAIN_BODY_HAS_FILENAME=False`.
 
 ## 2026-06-21 Report Pipeline Policy Parity Branch
 
