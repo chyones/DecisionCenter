@@ -253,14 +253,20 @@ def _build_story(report: dict, doc: BaseDocTemplate) -> tuple[list, bool]:
                     _fv(fs.get("contract_value") or {}, "Contract Value"),
                     _fv(fs.get("estimate") or {}, "Estimate"),
                     _fv(budget, "Budget"),
-                    _fv(actual, "Actual Cost"),
-                    _fv(fs.get("committed_cost") or {}, "Committed Cost"),
+                    _fv(actual, "Actual Cost (analytic/journal)"),
+                    _fv(fs.get("payroll_cost") or {}, "Payroll / Staff"),
+                    _fv(fs.get("expense_cost") or {}, "HR Expenses (petty cash/car/fuel)"),
+                    _fv(fs.get("committed_cost") or {}, "Committed Cost (LPO/PO)"),
+                    _fv(fs.get("total_incurred") or {}, "Total Incurred"),
                     variance_row,
                 ],
                 colWidths=[3.5 * cm, 10 * cm, 3 * cm],
             )
             fin_table.setStyle(_TBL_HEADER)
             story.append(fin_table)
+            if fs.get("note"):
+                story.append(Spacer(1, 0.15 * cm))
+                story.append(Paragraph(fs["note"], s["body"]))
         else:
             story.append(Paragraph("Financial data not available.", s["body"]))
         story.append(Spacer(1, 0.3 * cm))

@@ -240,7 +240,7 @@ def test_financial_fallback_uses_clean_odoo_only_synthesis_when_documents_are_no
     report = _build_report_from_evidence(state, resolve_project_identity(state))
     key_text = " ".join(f.get("text", "") for f in report["key_findings"])
     assert "Project_Schedule_Rev3.pdf" not in key_text
-    assert "Odoo shows actual cost to date" in key_text
+    assert "Odoo shows actual cost" in key_text
     md = to_markdown(report)
     main_body = md.split("## Appendix — Sources")[0]
     assert "Project_Schedule_Rev3.pdf" not in main_body

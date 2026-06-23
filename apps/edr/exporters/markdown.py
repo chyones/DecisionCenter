@@ -151,8 +151,11 @@ def to_markdown(report: dict) -> str:
                 _fin_row("Contract Value", fs.get("contract_value") or {}, currency),
                 _fin_row("Estimate", fs.get("estimate") or {}, currency),
                 _fin_row("Budget", budget, currency),
-                _fin_row("Actual Cost", actual, currency),
-                _fin_row("Committed Cost", fs.get("committed_cost") or {}, currency),
+                _fin_row("Actual Cost (analytic/journal)", actual, currency),
+                _fin_row("Payroll / Staff", fs.get("payroll_cost") or {}, currency),
+                _fin_row("HR Expenses (petty cash/car/fuel)", fs.get("expense_cost") or {}, currency),
+                _fin_row("Committed Cost (LPO/PO)", fs.get("committed_cost") or {}, currency),
+                _fin_row("Total Incurred", fs.get("total_incurred") or {}, currency),
             ]
             if isinstance(variance, dict):
                 v = variance.get("value")

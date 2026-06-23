@@ -196,6 +196,26 @@ def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
     contract_value, contract_eid = _project_amount(project_records, "f_wo_amount")
     estimate, estimate_eid = _project_amount(project_records, "f_estimation_amount")
 
+    # Incurred-cost categories carried in separate Odoo models (read loosely
+    # here for the executive summary; the snapshot re-binds them strictly).
+    payroll_amt, payroll_eid = _sum_odoo_category(
+        odoo_evidence, _PAYROLL_CATEGORIES, _PAYROLL_AMOUNT_FIELDS
+    )
+    expense_amt, expense_eid = _sum_odoo_category(
+        odoo_evidence, _EXPENSE_CATEGORIES, _EXPENSE_AMOUNT_FIELDS
+    )
+    payroll_cost = abs(payroll_amt) if payroll_amt is not None else None
+    expense_cost = abs(expense_amt) if expense_amt is not None else None
+    incurred: list[tuple[float, str | None]] = []
+    if has_amount and total_amount is not None:
+        incurred.append((abs(round(total_amount, 2)), best_evidence_id))
+    if payroll_cost is not None:
+        incurred.append((payroll_cost, payroll_eid))
+    if expense_cost is not None:
+        incurred.append((expense_cost, expense_eid))
+    total_incurred = round(sum(v for v, _ in incurred), 2) if incurred else None
+    total_incurred_eid = incurred[0][1] if incurred else None
+
     return {
         "project_records": project_records,
         "cost_count": len(cost_lines),
@@ -211,6 +231,14 @@ def _extract_odoo_context(odoo_evidence: list[dict]) -> dict:
         "contract_value_evidence_id": contract_eid,
         "estimate": estimate,
         "estimate_evidence_id": estimate_eid,
+        # Incurred-cost breakdown (analytic/journal is total_amount above).
+        "payroll_cost": payroll_cost,
+        "payroll_evidence_id": payroll_eid,
+        "expense_cost": expense_cost,
+        "expense_evidence_id": expense_eid,
+        "total_incurred": total_incurred,
+        "total_incurred_evidence_id": total_incurred_eid,
+        "incurred_component_count": len(incurred),
     }
 
 
@@ -622,6 +650,10 @@ def _enforce_financial_from_odoo(report: dict, odoo_ctx: dict, evidence_ids: set
 # Extended-source financial categories: category -> ordered candidate f_* amount fields.
 _COMMITTED_CATEGORIES = ("purchase_orders", "purchase_order_lines")
 _COMMITTED_AMOUNT_FIELDS = ("f_amount_total", "f_price_subtotal", "f_price_total", "f_amount_untaxed")
+_PAYROLL_CATEGORIES = ("payroll_cost_allocation",)
+_PAYROLL_AMOUNT_FIELDS = ("f_amount", "f_total")
+_EXPENSE_CATEGORIES = ("hr_expenses",)
+_EXPENSE_AMOUNT_FIELDS = ("f_total_amount", "f_unit_amount")
 
 
 def _fin_node(fs: dict, key: str) -> dict:
@@ -644,7 +676,7 @@ def _sum_odoo_category(
     odoo_evidence: list[dict],
     categories: tuple[str, ...],
     amount_fields: tuple[str, ...],
-    evidence_ids: set[str],
+    evidence_ids: set[str] | None = None,
 ) -> tuple[float | None, str | None]:
     """Sum one financial category from tagged extended Odoo evidence.
 
@@ -669,7 +701,7 @@ def _sum_odoo_category(
         total += amt
         found = True
         cand = ev.get("evidence_id")
-        if eid is None and cand in evidence_ids:
+        if eid is None and cand and (evidence_ids is None or cand in evidence_ids):
             eid = cand
     if found and eid:
         return round(total, 2), eid
@@ -709,27 +741,81 @@ def _enforce_financial_categories(
     else:
         _fin_node(fs, "committed_cost")
 
-    # Derived variance: estimate (cost baseline) vs actual cost spent. Evidence-
-    # bound; only when BOTH inputs are available. Contract value (revenue/WO) and
-    # committed cost are never folded into this comparison.
+    # Incurred-cost categories beyond analytic/journal lines: staff payroll and
+    # HR expenses (petty cash, vehicle, fuel). Each evidence-bound or left unset.
+    payroll = odoo_ctx.get("payroll_cost")
+    p_eid = odoo_ctx.get("payroll_evidence_id")
+    if payroll is not None and p_eid in evidence_ids:
+        _set_fin_available(fs, "payroll_cost", payroll, p_eid)
+    else:
+        _fin_node(fs, "payroll_cost")
+    expense = odoo_ctx.get("expense_cost")
+    e_eid = odoo_ctx.get("expense_evidence_id")
+    if expense is not None and e_eid in evidence_ids:
+        _set_fin_available(fs, "expense_cost", expense, e_eid)
+    else:
+        _fin_node(fs, "expense_cost")
+
+    # Total incurred = sum of the evidence-backed incurred-cost categories present
+    # in THIS evidence pack. Recomputed from the snapshot fields just set, so it
+    # never includes a figure that is not itself evidence-bound. Committed (LPO/PO)
+    # is a commitment, not spend, and is deliberately excluded.
+    incurred_parts = []
+    for _k in ("actual_cost", "payroll_cost", "expense_cost"):
+        _n = fs.get(_k)
+        if isinstance(_n, dict) and _n.get("status") == "available" and _n.get("value") is not None:
+            incurred_parts.append((_k, abs(_n["value"]), _n.get("evidence_id")))
+    if incurred_parts:
+        _total = round(sum(v for _, v, _ in incurred_parts), 2)
+        _set_fin_available(fs, "total_incurred", _total, incurred_parts[0][2])
+        if len(incurred_parts) > 1:
+            fs["note"] = (
+                "Total Incurred sums the evidence-backed cost categories retrieved this run "
+                "(" + ", ".join(k for k, _, _ in incurred_parts) + "). In Odoo, payroll and "
+                "HR expenses can also post journal/analytic lines, so this total may double-count "
+                "until reconciled against the analytic ledger. Committed (LPO/PO) cost is shown "
+                "separately and is not part of this total."
+            )
+    else:
+        _fin_node(fs, "total_incurred")
+
+    # Derived variance: estimate (cost baseline) vs incurred cost. Uses the
+    # broader Total Incurred only when the breakdown adds categories beyond the
+    # analytic/journal Actual Cost; otherwise the two are identical and the
+    # simpler formula is kept. Evidence-bound; only when BOTH inputs are
+    # available. Contract value (revenue/WO) and committed cost are never folded
+    # into this comparison.
     est_node = fs.get("estimate") if isinstance(fs.get("estimate"), dict) else {}
-    act_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+    _n_incurred = sum(
+        1
+        for _k in ("actual_cost", "payroll_cost", "expense_cost")
+        if isinstance(fs.get(_k), dict)
+        and fs[_k].get("status") == "available"
+        and fs[_k].get("value") is not None
+    )
+    _total_node = fs.get("total_incurred") if isinstance(fs.get("total_incurred"), dict) else {}
+    if _n_incurred > 1 and _total_node.get("status") == "available":
+        spent_node = _total_node
+        spent_formula = "estimate - total_incurred"
+    else:
+        spent_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+        spent_formula = "estimate - actual_cost"
     var_node = fs.get("variance")
     if not isinstance(var_node, dict):
         var_node = {"value": None, "currency": "AED", "formula": None, "evidence_ids": []}
         fs["variance"] = var_node
     if (
         est_node.get("status") == "available"
-        and act_node.get("status") == "available"
+        and spent_node.get("status") == "available"
         and est_node.get("value")  # non-zero estimate baseline only
-        and act_node.get("value") is not None
+        and spent_node.get("value") is not None
     ):
-        spent = abs(act_node["value"])
+        spent = abs(spent_node["value"])
         var_node["value"] = round(est_node["value"] - spent, 2)
         var_node["currency"] = "AED"
-        var_node["formula"] = "estimate - actual_cost"
+        var_node["formula"] = spent_formula
         var_node["evidence_ids"] = [
-            e for e in (est_node.get("evidence_id"), act_node.get("evidence_id")) if e
+            e for e in (est_node.get("evidence_id"), spent_node.get("evidence_id")) if e
         ]
 
 
@@ -847,8 +933,11 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
     labels = (
         ("contract_value", "contract value"),
         ("estimate", "cost estimate"),
-        ("actual_cost", "actual cost to date"),
-        ("committed_cost", "committed cost"),
+        ("actual_cost", "actual cost (analytic/journal) to date"),
+        ("payroll_cost", "payroll / staff cost"),
+        ("expense_cost", "expenses (petty cash, vehicle, fuel)"),
+        ("committed_cost", "committed cost (LPO/PO)"),
+        ("total_incurred", "total incurred cost to date"),
     )
     for key, label in labels:
         node = fs.get(key)
@@ -858,7 +947,12 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
         eid = node.get("evidence_id")
         if value is None or not eid:
             continue
-        display_value = abs(value) if key == "actual_cost" else value
+        display_value = (
+            abs(value)
+            if key
+            in ("actual_cost", "payroll_cost", "expense_cost", "total_incurred", "committed_cost")
+            else value
+        )
         findings.append(
             {
                 "text": f"Odoo shows {label} of {display_value:,.2f} AED.",
@@ -911,7 +1005,7 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
                     "confidence": "low",
                 }
             )
-    return findings[:5]
+    return findings[:8]
 
 
 def _empty_management_question_answer() -> dict:
@@ -1192,8 +1286,21 @@ def _basic_executive_summary(
         and odoo_ctx.get("total_amount") is not None
         and odoo_ctx.get("best_evidence_id")
     ):
-        parts.append(f"actual cost to date {abs(odoo_ctx['total_amount']):,.0f} AED")
+        parts.append(f"actual cost (analytic/journal) {abs(odoo_ctx['total_amount']):,.0f} AED")
         fin_eids.append(odoo_ctx["best_evidence_id"])
+    if odoo_ctx.get("payroll_cost") is not None and odoo_ctx.get("payroll_evidence_id"):
+        parts.append(f"payroll/staff cost {odoo_ctx['payroll_cost']:,.0f} AED")
+        fin_eids.append(odoo_ctx["payroll_evidence_id"])
+    if odoo_ctx.get("expense_cost") is not None and odoo_ctx.get("expense_evidence_id"):
+        parts.append(f"expenses (petty cash/vehicle/fuel) {odoo_ctx['expense_cost']:,.0f} AED")
+        fin_eids.append(odoo_ctx["expense_evidence_id"])
+    if (
+        odoo_ctx.get("incurred_component_count", 0) > 1
+        and odoo_ctx.get("total_incurred") is not None
+        and odoo_ctx.get("total_incurred_evidence_id")
+    ):
+        parts.append(f"total incurred {odoo_ctx['total_incurred']:,.0f} AED")
+        fin_eids.append(odoo_ctx["total_incurred_evidence_id"])
     if parts:
         fin_eids = list(dict.fromkeys(fin_eids))[:5]
         claim = (

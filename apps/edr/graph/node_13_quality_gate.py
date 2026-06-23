@@ -87,7 +87,16 @@ def _check_financials(report: dict, evidence_ids: set[str]) -> list[ClaimCheck]:
     if not isinstance(fs, dict):
         return checks
 
-    for field in ("budget", "contract_value", "estimate", "actual_cost", "committed_cost"):
+    for field in (
+        "budget",
+        "contract_value",
+        "estimate",
+        "actual_cost",
+        "payroll_cost",
+        "expense_cost",
+        "committed_cost",
+        "total_incurred",
+    ):
         node = fs.get(field)
         if not isinstance(node, dict):
             continue
@@ -335,7 +344,16 @@ def _check_irrelevant_sections(report: dict, query: str) -> list[ClaimCheck]:
         fs = report.get("financial_snapshot") or {}
         if isinstance(fs, dict) and any(
             isinstance(fs.get(k), dict) and fs[k].get("status") == "available"
-            for k in ("budget", "contract_value", "estimate", "actual_cost", "committed_cost")
+            for k in (
+                "budget",
+                "contract_value",
+                "estimate",
+                "actual_cost",
+                "payroll_cost",
+                "expense_cost",
+                "committed_cost",
+                "total_incurred",
+            )
         ):
             irrelevant.append("financial_snapshot")
 

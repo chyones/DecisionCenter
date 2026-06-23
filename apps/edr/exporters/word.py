@@ -99,8 +99,11 @@ def to_word(report: dict) -> bytes:
                 ("Contract Value", fs.get("contract_value") or {}),
                 ("Estimate", fs.get("estimate") or {}),
                 ("Budget", budget),
-                ("Actual Cost", actual),
-                ("Committed Cost", fs.get("committed_cost") or {}),
+                ("Actual Cost (analytic/journal)", actual),
+                ("Payroll / Staff", fs.get("payroll_cost") or {}),
+                ("HR Expenses (petty cash/car/fuel)", fs.get("expense_cost") or {}),
+                ("Committed Cost (LPO/PO)", fs.get("committed_cost") or {}),
+                ("Total Incurred", fs.get("total_incurred") or {}),
             ]
             fin_table = doc.add_table(rows=2 + len(fin_rows), cols=3)
             fin_table.style = "Table Grid"
@@ -133,6 +136,8 @@ def to_word(report: dict) -> bytes:
             else:
                 _vrow.cells[1].text = "Not available"
             _vrow.cells[2].text = "—"
+            if fs.get("note"):
+                doc.add_paragraph(fs["note"])
         else:
             doc.add_paragraph("Financial data not available.")
         doc.add_paragraph()

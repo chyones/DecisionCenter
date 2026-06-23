@@ -83,8 +83,11 @@ def to_excel(report: dict) -> bytes:
             ("Contract Value", (fs.get("contract_value") or {}) if isinstance(fs, dict) else {}),
             ("Estimate", (fs.get("estimate") or {}) if isinstance(fs, dict) else {}),
             ("Budget", (fs.get("budget") or {}) if isinstance(fs, dict) else {}),
-            ("Actual Cost", (fs.get("actual_cost") or {}) if isinstance(fs, dict) else {}),
-            ("Committed Cost", (fs.get("committed_cost") or {}) if isinstance(fs, dict) else {}),
+            ("Actual Cost (analytic/journal)", (fs.get("actual_cost") or {}) if isinstance(fs, dict) else {}),
+            ("Payroll / Staff", (fs.get("payroll_cost") or {}) if isinstance(fs, dict) else {}),
+            ("HR Expenses (petty cash/car/fuel)", (fs.get("expense_cost") or {}) if isinstance(fs, dict) else {}),
+            ("Committed Cost (LPO/PO)", (fs.get("committed_cost") or {}) if isinstance(fs, dict) else {}),
+            ("Total Incurred", (fs.get("total_incurred") or {}) if isinstance(fs, dict) else {}),
         ]
         for r, (label, node) in enumerate(_fin_rows, start=2):
             ws_fin.cell(row=r, column=1, value=label)
