@@ -664,6 +664,14 @@ def _fin_node(fs: dict, key: str) -> dict:
     return node
 
 
+def _reset_fin_unavailable(fs: dict, key: str) -> None:
+    node = _fin_node(fs, key)
+    node["value"] = None
+    node["currency"] = "AED"
+    node["evidence_id"] = None
+    node["status"] = "not_available"
+
+
 def _set_fin_available(fs: dict, key: str, value: float, evidence_id: str) -> None:
     node = _fin_node(fs, key)
     node["value"] = value
@@ -727,19 +735,19 @@ def _enforce_financial_categories(
     if cv not in (None, 0) and cv_eid in evidence_ids:
         _set_fin_available(fs, "contract_value", cv, cv_eid)
     else:
-        _fin_node(fs, "contract_value")
+        _reset_fin_unavailable(fs, "contract_value")
     est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
     if est not in (None, 0) and est_eid in evidence_ids:
         _set_fin_available(fs, "estimate", est, est_eid)
     else:
-        _fin_node(fs, "estimate")
+        _reset_fin_unavailable(fs, "estimate")
     committed, c_eid = _sum_odoo_category(
         odoo_evidence, _COMMITTED_CATEGORIES, _COMMITTED_AMOUNT_FIELDS, evidence_ids
     )
     if committed is not None and c_eid:
         _set_fin_available(fs, "committed_cost", committed, c_eid)
     else:
-        _fin_node(fs, "committed_cost")
+        _reset_fin_unavailable(fs, "committed_cost")
 
     # Incurred-cost categories beyond analytic/journal lines: staff payroll and
     # HR expenses (petty cash, vehicle, fuel). Each evidence-bound or left unset.
@@ -748,13 +756,13 @@ def _enforce_financial_categories(
     if payroll is not None and p_eid in evidence_ids:
         _set_fin_available(fs, "payroll_cost", payroll, p_eid)
     else:
-        _fin_node(fs, "payroll_cost")
+        _reset_fin_unavailable(fs, "payroll_cost")
     expense = odoo_ctx.get("expense_cost")
     e_eid = odoo_ctx.get("expense_evidence_id")
     if expense is not None and e_eid in evidence_ids:
         _set_fin_available(fs, "expense_cost", expense, e_eid)
     else:
-        _fin_node(fs, "expense_cost")
+        _reset_fin_unavailable(fs, "expense_cost")
 
     # Total incurred = sum of the evidence-backed incurred-cost categories present
     # in THIS evidence pack. Recomputed from the snapshot fields just set, so it
@@ -777,7 +785,7 @@ def _enforce_financial_categories(
                 "separately and is not part of this total."
             )
     else:
-        _fin_node(fs, "total_incurred")
+        _reset_fin_unavailable(fs, "total_incurred")
 
     # Derived variance: estimate (cost baseline) vs incurred cost. Uses the
     # broader Total Incurred only when the breakdown adds categories beyond the
@@ -794,11 +802,15 @@ def _enforce_financial_categories(
         and fs[_k].get("value") is not None
     )
     _total_node = fs.get("total_incurred") if isinstance(fs.get("total_incurred"), dict) else {}
-    if _n_incurred > 1 and _total_node.get("status") == "available":
+    actual_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+    if (
+        _total_node.get("status") == "available"
+        and (_n_incurred > 1 or actual_node.get("status") != "available")
+    ):
         spent_node = _total_node
         spent_formula = "estimate - total_incurred"
     else:
-        spent_node = fs.get("actual_cost") if isinstance(fs.get("actual_cost"), dict) else {}
+        spent_node = actual_node
         spent_formula = "estimate - actual_cost"
     var_node = fs.get("variance")
     if not isinstance(var_node, dict):

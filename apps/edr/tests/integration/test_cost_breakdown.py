@@ -177,6 +177,33 @@ def test_missing_categories_stay_not_available_partial_evidence():
     assert fs["expense_cost"]["status"] == "not_available"
 
 
+def test_missing_payroll_resets_llm_supplied_value_even_with_valid_evidence_id():
+    ev = [_project_record(), _analytic("odoo-account-analytic-line-1", -57636.55)]
+    evidence_ids = {e["evidence_id"] for e in ev}
+    ctx = _extract_odoo_context(ev)
+    report = _blank_fs()
+    report["financial_snapshot"]["actual_cost"] = {
+        "value": 57636.55,
+        "currency": "AED",
+        "evidence_id": "odoo-account-analytic-line-1",
+        "status": "available",
+    }
+    report["financial_snapshot"]["payroll_cost"] = {
+        "value": 4200000.0,
+        "currency": "AED",
+        "evidence_id": "odoo-account-analytic-line-1",
+        "status": "available",
+    }
+
+    _enforce_financial_categories(report, ctx, ev, evidence_ids=evidence_ids)
+
+    fs = report["financial_snapshot"]
+    assert fs["payroll_cost"]["status"] == "not_available"
+    assert fs["payroll_cost"]["value"] is None
+    assert fs["payroll_cost"]["evidence_id"] is None
+    assert fs["total_incurred"]["value"] == 57636.55
+
+
 def test_breakdown_not_fabricated_when_evidence_id_absent_from_pack():
     # Amount present on evidence object, but its id is not in the validated pack.
     ev = [_payroll("odoo-hr-payslip-cost-allocation-9", 4200000.0)]
@@ -200,6 +227,19 @@ def test_variance_uses_total_incurred_when_breakdown_present():
     var = fs["variance"]
     assert var["formula"] == "estimate - total_incurred"
     assert var["value"] == round(19000000.0 - (57636.55 + 4200000.0), 2)
+
+
+def test_variance_uses_total_incurred_when_actual_cost_absent():
+    ev = [
+        _project_record(),  # estimate 19,000,000
+        _payroll("odoo-hr-payslip-cost-allocation-1", 4200000.0),
+    ]
+    fs, _ = _build_with(ev)
+    var = fs["variance"]
+    assert fs["actual_cost"]["status"] == "not_available"
+    assert fs["total_incurred"]["status"] == "available"
+    assert var["formula"] == "estimate - total_incurred"
+    assert var["value"] == 14800000.0
 
 
 # --- findings + render + QG -------------------------------------------------
