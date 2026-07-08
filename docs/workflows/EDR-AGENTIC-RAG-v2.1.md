@@ -670,6 +670,30 @@ Internal report object:
       "evidence_id": null,
       "status": "available | not_available"
     },
+    "payroll_cost": {
+      "value": null,
+      "currency": "AED",
+      "evidence_id": null,
+      "status": "available | not_available"
+    },
+    "expense_cost": {
+      "value": null,
+      "currency": "AED",
+      "evidence_id": null,
+      "status": "available | not_available"
+    },
+    "committed_cost": {
+      "value": null,
+      "currency": "AED",
+      "evidence_id": null,
+      "status": "available | not_available"
+    },
+    "total_incurred": {
+      "value": null,
+      "currency": "AED",
+      "evidence_id": null,
+      "status": "available | not_available"
+    },
     "variance": {
       "value": null,
       "currency": "AED",
@@ -693,6 +717,9 @@ Rules:
 - Markdown MUST NOT be generated until the JSON passes the quality gate (Section 17).
 - Every list element that contains a claim MUST carry at least one `evidence_id`.
 - The Markdown report MUST be a deterministic projection of the JSON.
+- Odoo-derived financial fields MUST be reset to `not_available` when the current evidence pack does not contain a valid backing Odoo `evidence_id`; model-supplied stale numbers MUST NOT survive enforcement.
+- `total_incurred` is the sum of the evidence-backed incurred categories retrieved in the current run (`actual_cost`, `payroll_cost`, `expense_cost`) and MUST NOT include committed cost.
+- Variance MAY use `estimate - total_incurred` when `total_incurred` is evidence-backed and either multiple incurred categories are present or `actual_cost` is unavailable.
 
 ---
 

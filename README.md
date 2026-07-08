@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/deploy-Docker%20Compose-2496ED.svg)](https://docs.docker.com/compose/)
-[![Status](https://img.shields.io/badge/status-phase2c_complete_not_live-blue.svg)](#)
+[![Status](https://img.shields.io/badge/status-phase2d_in_progress_not_live-blue.svg)](#)
 
 ---
 
@@ -94,17 +94,24 @@ Single Hetzner CCX23 server. Everything runs in Docker Compose.
 
 Phase 0, Phase 1A, Phase 1B, Phase 1B.5, Phase 1C, Phase 1D, the
 Phase 1D-fixup, Phase 1E, Phase 1F, Phase 1G, Phase 1H, Phase 1I, and
-Phases 2A-2C are complete and production is `NOT_LIVE`. Phase 2D is the
-next allowed phase and is blocked pending explicit user approval.
+Phases 2A-2C are complete and production is `NOT_LIVE`. Phase 2D is
+approval-gated and in progress: Slices 1-6 are implemented, Slice 6 live-UAT
+evidence is operator-pending, and Slice 7 (Go-Live Gate) remains blocked until
+that evidence exists plus a separate explicit user approval is given.
 The phase-status table below is the authoritative marker for the current
 project state. Treat the files above as the current authority before changing
 code, workflows, schemas, or operational assumptions.
 
 Latest read-only audit verdict: **7/10** and
-`NOT_GO_LIVE_READY_BUT_HEALTHY`. Go-live blockers are: production frontend
-delivery path missing; production Entra/MSAL frontend auth missing; live
-integrations not proven; backup/restore evidence missing; production hardening
-evidence missing.
+`NOT_GO_LIVE_READY_BUT_HEALTHY`. Original audit blockers were: production
+frontend delivery path missing; production Entra/MSAL frontend auth missing;
+live integrations not proven; backup/restore evidence missing; production
+hardening evidence missing. Current governance/audit posture is
+`GOVERNANCE_BLOCKED_NOT_LIVE`: those original Phase-2C-era blockers have
+implementation coverage in Phase 2D Slices 1-5, but production still must
+remain `NOT_LIVE`. Remaining go-live blockers are real live UAT evidence,
+explicit Slice 7 approval, production credential rotation, and operator-side
+connector import/verification.
 
 ## AI Agent Operating Context
 

@@ -1,6 +1,6 @@
 {
   "project": "DecisionCenter",
-  "current_commit": "d6111d0c08b69da10de5fc0c01565e3ca828f728",
+  "current_commit": "f368c29d7c57c73d0387d927e439da3046020bfd",
   "status": "PHASE_2D_IN_PROGRESS_NOT_LIVE",
   "production_status": "NOT_LIVE",
   "last_completed_phase": "Phase 2C",
@@ -82,19 +82,19 @@
   "latest_report": "docs/execution/PHASE_2D_SLICE_6_REPORT.md",
   "latest_full_phase_report": "docs/execution/PHASE_2C_REPORT.md",
   "latest_feature": {
-    "name": "Financial UAT evidence filter",
+    "name": "Financial cost-breakdown reset guard",
     "status": "IMPLEMENTED_NOT_LIVE",
-    "branch": "fix/financial-uat-evidence-filter",
-    "head": "d6111d0c08b69da10de5fc0c01565e3ca828f728",
-    "summary": "Arabic financial report requests now expand to a controlled financial evidence vocabulary, SharePoint/email retrieval filters out non-financial technical evidence for financial reports, node_12 forces clean Odoo-led financial synthesis when Odoo is the only usable source, and Quality Gate fails visible raw filename leakage instead of presenting it as a usable draft.",
+    "branch": "fix/financial-cost-breakdown-reset",
+    "head": "f368c29d7c57c73d0387d927e439da3046020bfd",
+    "summary": "node_12 now resets Odoo-derived financial snapshot fields to not_available when the current evidence pack lacks a valid backing Odoo evidence_id, recomputes total_incurred only from evidence-backed incurred categories, and uses total_incurred for variance when appropriate. README status was refreshed for Phase 2D NOT_LIVE and generated local report captures are ignored.",
     "evidence": [
-      "apps/edr/graph/financial_evidence.py",
-      "apps/edr/tests/integration/test_report_type_expansion.py",
-      "apps/edr/tests/integration/test_financial_report.py",
-      "apps/edr/tests/integration/test_quality_gate_improvements.py",
-      "docs/workflows/EDR-AGENTIC-RAG-v2.1.md"
+      "apps/edr/graph/node_12_draft_json.py",
+      "apps/edr/tests/integration/test_cost_breakdown.py",
+      "docs/workflows/EDR-AGENTIC-RAG-v2.1.md",
+      "README.md",
+      ".gitignore"
     ],
-    "not_changed": "production_status, must_not_deploy, LIVE state, Al Marfa / Al Mirfa naming, ODOO_EXTENDED_SOURCES_ENABLED, extended Odoo source work, new features",
+    "not_changed": "production_status, must_not_deploy, LIVE state, Al Marfa / Al Mirfa naming, ODOO_EXTENDED_SOURCES_ENABLED, extended Odoo source work, Phase 2D Slice 7, deployment",
     "operator_steps_pending": "Branch review/merge and any NOT_LIVE-only deployment remain separate operator decisions. LIVE must stay disabled."
   },
   "latest_read_only_audit": {
@@ -129,10 +129,10 @@
     "note": "Both smoke and frontend jobs passed for the Odoo dashboard timeout reliability fix."
   },
   "latest_local_validation": {
-    "date": "2026-06-22",
-    "context": "Financial UAT defect fix branch fix/financial-uat-evidence-filter at local fix commit d6111d0c08b69da10de5fc0c01565e3ca828f728. Scope was limited to the Arabic financial query UAT defect: financial query expansion, financial SharePoint/email filtering, Odoo-led fallback synthesis, raw-filename Quality Gate blocking, Markdown main-body cleanliness, and regression tests. No deployment, merge, production_status change, LIVE enablement, Al Marfa / Al Mirfa naming change, ODOO_EXTENDED_SOURCES_ENABLED enablement, extended Odoo source work, or new feature work occurred.",
-    "head": "d6111d0c08b69da10de5fc0c01565e3ca828f728",
-    "branches": "fix/financial-uat-evidence-filter local branch from origin/main 258ca5e95f07f392c8129153c69f901be0d32204",
+    "date": "2026-07-08",
+    "context": "Financial cost-breakdown reset fix branch fix/financial-cost-breakdown-reset at local fix commit f368c29d7c57c73d0387d927e439da3046020bfd. Scope was limited to evidence-bound Odoo financial snapshot enforcement, total_incurred/variance rules, README state refresh, and ignoring local generated report captures. No deployment, merge, production_status change, LIVE enablement, Al Marfa / Al Mirfa naming change, ODOO_EXTENDED_SOURCES_ENABLED enablement, extended Odoo source work, or Phase 2D Slice 7 work occurred.",
+    "head": "f368c29d7c57c73d0387d927e439da3046020bfd",
+    "branches": "fix/financial-cost-breakdown-reset local branch from fix/financial-cost-breakdown at 6c2e4ba352800121d75c4a2658da5c29164b8fce; origin/main was 0a17c39d after PR #11 merge",
     "recovery_shas": {
       "odoo-source-map-batched-scan": "136522d",
       "connector-status-truth": "ba27557",
@@ -141,7 +141,7 @@
       "pre_cleanup_main_pr3_merge": "6f3d310"
     },
     "production_status": "NOT_LIVE",
-    "tests": "python3 scripts/agent_preflight.py clean; ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; targeted financial/QG/report-type tests passed 46; make smoke passed 2; make test passed 930 with 3 skipped and 2 deselected; make eval passed 68/68 with 0 failed, 100.00% pass rate, 94.12% precision; frontend npm run lint passed; frontend npm run build passed with existing large chunk warning; frontend npm run test:ui passed 78 across Chromium/Firefox/WebKit; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean. make phase2a-e2e was blocked by production APP_ENV guard; one-off APP_ENV=local blank-Entra attempt reached submission but failed on an older harness response-shape expectation (missing visited_nodes), so it is recorded as not applicable to this UAT defect.",
+    "tests": "python3 scripts/agent_preflight.py initially reported the expected non-main/dirty worktree state before edits; targeted cost-breakdown tests passed 12; ruff check apps scripts passed; python3 -m compileall -q apps scripts passed; python3 scripts/check_doc_drift.py clean; python3 scripts/check_ai_context.py clean; git diff --check clean; make smoke passed 2; make test passed 931 with 8 skipped and 2 deselected; make eval passed 68/68 with 0 failed, 100.00% pass rate, 94.12% precision; frontend npm run lint passed; frontend npm run build passed with existing large chunk warning; initial frontend npm run test:ui failed because Playwright browser binaries were missing, npx playwright install completed, rerun npm run test:ui passed 78 across Chromium/Firefox/WebKit; ruff check . passed; python3 -m compileall apps scripts passed; make phase2a-e2e remains blocked by the production APP_ENV guard in the running NOT_LIVE container; python3 scripts/agent_postflight.py clean.",
     "doc_drift": "clean",
     "ai_context": "clean",
     "verdict": "DEFECT_FIX_READY_FOR_REVIEW_NOT_LIVE"
