@@ -550,7 +550,9 @@ def _build_prompt(
         "  If any document references a project other than the current one, add a conflict entry.\n\n"
         "MISSING_DATA must always include at minimum:\n"
         "  - 'Project budget (AED): not available in Odoo analytic line records'\n"
-        "  - Any other section that could not be substantiated from the evidence.\n\n"
+        "  - Any other section that could not be substantiated from the evidence.\n"
+        f"  - Write every missing_data item in the report language (\"{language}\"); "
+        "translate the example above rather than copying it.\n\n"
         "Return JSON matching this exact schema:\n"
         "{\n"
         '  "request_id": "string",\n'
@@ -2357,7 +2359,14 @@ async def run(state: DecisionState) -> DecisionState:
     if not state.outputs.get("odoo_financial_available"):
         fs = report.get("financial_snapshot")
         if isinstance(fs, dict):
-            fs.setdefault("note", "financial data not available in verified Odoo evidence")
+            fs.setdefault(
+                "note",
+                (
+                    "لا تتوفر بيانات مالية موثقة من Odoo"
+                    if language == "ar"
+                    else "financial data not available in verified Odoo evidence"
+                ),
+            )
 
     state.report_json = report
     state.outputs["draft_report_status"] = "generated"
