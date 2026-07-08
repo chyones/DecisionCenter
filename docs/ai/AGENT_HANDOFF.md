@@ -3,7 +3,7 @@
 ## Current State
 
 - **Status:** `PHASE_2D_IN_PROGRESS_NOT_LIVE`
-- **Current anchor:** `d6111d0c08b69da10de5fc0c01565e3ca828f728` (financial UAT evidence-filter defect fix; local branch checked 2026-06-22)
+- **Current anchor:** `f368c29d7c57c73d0387d927e439da3046020bfd` (financial cost-breakdown reset fix; local branch checked 2026-07-08)
 - **Closed date:** 2026-05-25
 - **Latest report:** `docs/execution/PHASE_2D_SLICE_6_REPORT.md`
 - **Latest full closeout report:** `docs/execution/PHASE_2C_REPORT.md`
@@ -17,6 +17,48 @@
 - **Phase 2D Slice 5:** Production Hardening — implemented (NOT_LIVE)
 - **Phase 2D Slice 6:** Real UAT Flow — readiness implemented and CI-green (NOT_LIVE); live UAT evidence exists but remains partial/not go-live proof, operator-pending
 - **Phase 2D Slice 7:** Go-Live Gate — not started; approval-gated, follows successful Slice 6
+
+## 2026-07-08 Financial Cost-Breakdown Reset Fix
+
+Branch `fix/financial-cost-breakdown-reset` is anchored at local fix commit
+`f368c29d7c57c73d0387d927e439da3046020bfd`. It is a targeted follow-up to the
+financial cost-breakdown work. It does not deploy, enable LIVE, change
+production status, enable `ODOO_EXTENDED_SOURCES_ENABLED`, or start Phase 2D
+Slice 7.
+
+Implemented scope:
+
+- Odoo-derived financial snapshot fields reset to `not_available` when the
+  current evidence pack lacks a valid backing Odoo `evidence_id`, preventing
+  stale model-supplied numbers from surviving node_12 enforcement.
+- `total_incurred` is recomputed from evidence-backed incurred categories in
+  the current run only (`actual_cost`, `payroll_cost`, `expense_cost`) and does
+  not include committed cost.
+- Variance may use `estimate - total_incurred` when `total_incurred` is
+  evidence-backed and either multiple incurred categories are present or
+  `actual_cost` is unavailable.
+- README status now reflects Phase 2D in progress / `NOT_LIVE`, while keeping
+  the historical audit markers required by doc-drift CI.
+- Local generated report captures at `docs/output report*` are gitignored and
+  remain uncommitted.
+
+Validation on 2026-07-08:
+
+- Targeted cost-breakdown tests: `12 passed`.
+- `make smoke`: `2 passed`.
+- `make test`: `931 passed, 8 skipped, 2 deselected`.
+- `make eval`: `68/68 passed`, `0 failed`, pass rate `100.00%`, precision
+  `94.12%`.
+- Frontend: `npm run lint` passed; `npm run build` passed with existing large
+  chunk warning; first `npm run test:ui` failed because Playwright browser
+  binaries were missing, then `npx playwright install` completed and rerun
+  `npm run test:ui` passed `78` across Chromium/Firefox/WebKit.
+- `ruff check apps scripts`, `ruff check .`,
+  `python3 -m compileall -q apps scripts`,
+  `python3 -m compileall apps scripts`, `check_doc_drift.py`,
+  `check_ai_context.py`, and `agent_postflight.py` passed.
+- `make phase2a-e2e` remains blocked by the production `APP_ENV` guard in the
+  running NOT_LIVE container.
 
 ## 2026-06-22 Financial Arabic UAT Defect Fix
 
