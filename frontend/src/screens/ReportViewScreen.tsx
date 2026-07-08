@@ -350,6 +350,24 @@ function FlagList({ flags }: { flags: string[] }) {
   );
 }
 
+// Financial section headings the renderer must be able to hide, independent of
+// section numbering and report language (en + ar).
+const FINANCIAL_HEADING_RE = /Financial Snapshot|الموقف المالي/;
+
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith('|') && trimmed.endsWith('|');
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\|[\s:|-]+\|$/.test(line.trim());
+}
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  return trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+}
+
 function MarkdownReport({
   markdown,
   evidence,
@@ -365,37 +383,94 @@ function MarkdownReport({
   const lines = markdown.split('\n');
   const rendered: ReactNode[] = [];
   let skipFinancial = false;
+  let tableRows: string[][] = [];
+
+  const flushTable = (key: number) => {
+    if (tableRows.length === 0) return;
+    const [header, ...body] = tableRows;
+    rendered.push(
+      <div key={`table-${key}`} className="overflow-x-auto">
+        <table className="w-full border-collapse text-body">
+          <thead>
+            <tr>
+              {header.map((cell, i) => (
+                <th
+                  key={i}
+                  className="border-b border-border px-3 py-2 text-start font-semibold text-text-primary"
+                >
+                  {renderInline(cell, evidenceById, onCitation)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {body.map((row, r) => (
+              <tr key={r}>
+                {row.map((cell, c) => (
+                  <td key={c} className="border-b border-border px-3 py-2 text-text-secondary">
+                    {renderInline(cell, evidenceById, onCitation)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>,
+    );
+    tableRows = [];
+  };
 
   lines.forEach((line, idx) => {
-    if (!showBudget && line.startsWith('## 2. Financial Snapshot')) {
+    if (!showBudget && line.startsWith('## ') && FINANCIAL_HEADING_RE.test(line)) {
       skipFinancial = true;
       return;
     }
-    if (skipFinancial && line.startsWith('## ') && !line.startsWith('## 2.')) {
+    if (skipFinancial && line.startsWith('## ') && !FINANCIAL_HEADING_RE.test(line)) {
       skipFinancial = false;
     }
     if (skipFinancial) return;
+
+    if (isTableRow(line)) {
+      if (!isTableSeparator(line)) {
+        tableRows.push(splitTableRow(line));
+      }
+      return;
+    }
+    flushTable(idx);
+
     if (!line.trim()) return;
 
     if (line.startsWith('# ')) {
       rendered.push(
         <h1 key={idx} className="text-display font-semibold text-text-primary">
-          {line.replace(/^# /, '')}
+          {renderInline(line.replace(/^# /, ''), evidenceById, onCitation)}
         </h1>,
+      );
+    } else if (line.startsWith('### ')) {
+      rendered.push(
+        <h3 key={idx} className="mt-4 text-body font-semibold text-text-primary">
+          {renderInline(line.replace(/^### /, ''), evidenceById, onCitation)}
+        </h3>,
       );
     } else if (line.startsWith('## ')) {
       rendered.push(
         <h2 key={idx} className="mt-6 text-heading font-semibold text-text-primary">
-          {line.replace(/^## /, '')}
+          {renderInline(line.replace(/^## /, ''), evidenceById, onCitation)}
         </h2>,
+      );
+    } else if (line.startsWith('> ')) {
+      rendered.push(
+        <p key={idx} className="border-s-2 border-border ps-3 text-body italic text-text-muted">
+          {renderInline(line.replace(/^> /, ''), evidenceById, onCitation)}
+        </p>,
       );
     } else if (line.startsWith('- ')) {
       rendered.push(
-        <p key={idx} className="pl-4 text-body text-text-secondary">
+        <p key={idx} className="ps-4 text-body text-text-secondary">
           • {renderInline(line.replace(/^- /, ''), evidenceById, onCitation)}
         </p>,
       );
-    } else if (!line.startsWith('|---') && !line.startsWith('---')) {
+    } else if (!line.startsWith('---')) {
       rendered.push(
         <p key={idx} className="text-body text-text-secondary">
           {renderInline(line, evidenceById, onCitation)}
@@ -403,12 +478,53 @@ function MarkdownReport({
       );
     }
   });
+  flushTable(lines.length);
 
   return (
-    <article className="space-y-3 rounded-sm border border-border bg-surface-raised p-4">
+    <article dir="auto" className="space-y-3 rounded-sm border border-border bg-surface-raised p-4">
       {rendered}
     </article>
   );
+}
+
+function renderFormatted(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let k = 0;
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    if (match[1] !== undefined) {
+      nodes.push(
+        <strong key={`${keyPrefix}-b${k}`} className="font-semibold text-text-primary">
+          {match[1]}
+        </strong>,
+      );
+    } else if (match[2] !== undefined) {
+      nodes.push(
+        <em key={`${keyPrefix}-i${k}`} className="text-text-muted">
+          {match[2]}
+        </em>,
+      );
+    } else {
+      nodes.push(
+        <code key={`${keyPrefix}-c${k}`} className="rounded-sm bg-surface-base px-1 text-caption">
+          {match[3]}
+        </code>,
+      );
+    }
+    k += 1;
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes;
 }
 
 function renderInline(
@@ -427,7 +543,7 @@ function renderInline(
     if (!entry) continue;
 
     if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+      nodes.push(...renderFormatted(text.slice(lastIndex, match.index), `f${match.index}`));
     }
     nodes.push(
       <sup
@@ -451,7 +567,7 @@ function renderInline(
   }
 
   if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
+    nodes.push(...renderFormatted(text.slice(lastIndex), 'tail'));
   }
   return nodes.length > 0 ? nodes : [text];
 }

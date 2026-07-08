@@ -238,11 +238,14 @@ def test_financial_fallback_uses_clean_odoo_only_synthesis_when_documents_are_no
         outputs={"report_type": "financial"},
     )
     report = _build_report_from_evidence(state, resolve_project_identity(state))
+    # The Arabic query drives an Arabic report: language + localized findings.
+    assert report["language"] == "ar"
     key_text = " ".join(f.get("text", "") for f in report["key_findings"])
     assert "Project_Schedule_Rev3.pdf" not in key_text
-    assert "Odoo shows actual cost" in key_text
+    assert "التكلفة الفعلية" in key_text  # actual-cost finding, Arabic template
+    assert "57,000.00" in key_text
     md = to_markdown(report)
-    main_body = md.split("## Appendix — Sources")[0]
+    main_body = md.split("## الملحق — المصادر")[0]
     assert "Project_Schedule_Rev3.pdf" not in main_body
 
 

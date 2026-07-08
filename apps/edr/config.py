@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # n8n odoo_read workflow returns structured fields. Read-only either way.
     odoo_extended_sources_enabled: bool = False
     odoo_extended_include_medium: bool = True
+    # Per-source read cap for extended Odoo sources. The live Odoo backend
+    # needs >5s for purchase_order_lines / material_requests — a tight cap
+    # silently drops committed-cost evidence from financial reports.
+    odoo_extended_source_timeout_s: float = Field(default=15.0, gt=0, le=60)
 
     # Odoo Source Map batched scan (admin-only, read-only). These bound the
     # automatic per-source/per-batch scanning so a scan can never hit the

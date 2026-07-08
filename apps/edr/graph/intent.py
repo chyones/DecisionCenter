@@ -104,6 +104,25 @@ _DATA_REPORT_RE = re.compile(
 )
 
 
+# Arabic script (base + supplement ranges) for report-language detection.
+_ARABIC_CHAR_RE = re.compile("[؀-ۿݐ-ݿ]")
+
+
+def detect_language(query: str) -> str:
+    """Return the report language ("ar" or "en") for a user query.
+
+    A query is Arabic when at least 30% of its alphabetic characters are in the
+    Arabic script — tolerant of embedded project codes and English terms.
+    """
+    if not query:
+        return "en"
+    arabic = len(_ARABIC_CHAR_RE.findall(query))
+    letters = sum(1 for ch in query if ch.isalpha())
+    if letters and arabic / letters >= 0.3:
+        return "ar"
+    return "en"
+
+
 def classify_report_type(query: str) -> str:
     """Return the authoritative report type for a user query.
 

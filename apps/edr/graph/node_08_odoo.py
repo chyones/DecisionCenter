@@ -38,11 +38,12 @@ logger = logging.getLogger(__name__)
 # /reports/staging has a 90s route budget. Keep Odoo fail-soft and leave room
 # for the later draft/quality/export/persistence stages.
 # Inline (mandatory) reads get more time because the live Odoo backend is
-# intermittently slow; extended (optional) reads keep a tight per-source cap.
+# intermittently slow; extended (optional) reads keep a bounded per-source cap
+# (settings.odoo_extended_source_timeout_s, still clipped by the node budget).
 ODOO_NODE_BUDGET_S = 50.0
 ODOO_PROJECT_IDENTITY_TIMEOUT_S = 25.0
 ODOO_ACTUAL_COST_TIMEOUT_S = 20.0
-ODOO_EXTENDED_SOURCE_TIMEOUT_S = 5.0
+ODOO_EXTENDED_SOURCE_TIMEOUT_S = settings.odoo_extended_source_timeout_s
 ODOO_RETRY_BACKOFF_S = 0.5
 ODOO_MAX_RETRIES = 1
 

@@ -142,6 +142,7 @@ async def run(state: DecisionState) -> DecisionState:
         user_id_hash=user_id_hash,
         timestamp=datetime.now(timezone.utc).isoformat(),
         query=state.query,
+        detected_language=state.outputs.get("detected_language", "en"),
         authorized_projects=state.allowed_projects,
         authorized_mailboxes=state.allowed_mailboxes,
         blocked_sources=state.outputs.get("blocked_sources", []),

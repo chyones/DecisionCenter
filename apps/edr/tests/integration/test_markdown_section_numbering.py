@@ -45,10 +45,25 @@ def _base_report(report_type: str) -> dict:
     }
 
 
-def test_full_report_numbered_contiguously_one_to_eleven():
+def test_full_report_numbered_contiguously_no_gaps():
     md = to_markdown(_base_report("general_project_status"))
     nums = _numbered(md)
-    assert nums == list(range(1, 11)), nums  # 1..10 (Sources moved to an appendix), no gaps
+    # Executive-first layout: empty sections are suppressed entirely, so this
+    # minimal fixture renders exec summary(1), financial snapshot(2), key
+    # findings(3) — contiguous, with the pipeline metadata in the governance
+    # appendix rather than numbered body sections.
+    assert nums == [1, 2, 3], nums
+    assert "## 1. Executive Summary" in md
+    assert "## 2. Financial Snapshot — Odoo" in md
+    assert "## 3. Key Findings" in md
+    # Empty sections never render placeholder filler.
+    assert "Recommended Actions" not in md
+    assert "Conflicting Evidence" not in md
+    assert "_No recommended actions._" not in md
+    # Plumbing lives in the governance appendix, after the body.
+    assert "## Appendix — Report Governance" in md
+    assert md.index("## 1. Executive Summary") < md.index("## Appendix — Report Governance")
+    assert "Quality Gate Status" not in md  # no numbered QG body section
 
 
 def test_data_report_has_no_numbering_gap():
@@ -60,9 +75,8 @@ def test_data_report_has_no_numbering_gap():
     assert "Root Causes" not in md
     assert "Delay Analysis" not in md
     assert "Financial Snapshot" not in md
-    # exec(1), key findings(2), recommended actions(3), ...
-    assert "## 3. Recommended Actions — Proposal Only" in md
-    assert "## 7. Recommended Actions" not in md
+    # Empty recommended actions section is suppressed, not rendered as filler.
+    assert "Recommended Actions" not in md
 
 
 def test_salary_report_has_no_numbering_gap():

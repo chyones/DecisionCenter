@@ -13,6 +13,7 @@ from apps.edr.graph import coverage
 from apps.edr.graph.financial_evidence import filter_financial_evidence
 from apps.edr.graph.intent import (
     classify_report_type,
+    detect_language,
     is_management_question,
     is_salary_payroll_evidence,
 )
@@ -34,6 +35,11 @@ except Exception:  # pragma: no cover
 _FILENAME_LIKE = re.compile(
     r"\b[\w\-]+\.(pdf|xlsx?|docx?|pptx?|dwg|dxf|jpe?g|png|csv|zip|rar|txt)\b",
     re.IGNORECASE,
+)
+
+# A currency amount asserted inside claim text (figures must stay Odoo-led).
+_AMOUNT_IN_TEXT_RE = re.compile(
+    r"\d[\d,]*(?:\.\d+)?\s*(?:AED|SAR|USD|EUR|درهم|ريال)", re.IGNORECASE
 )
 
 
@@ -300,6 +306,7 @@ def _build_prompt(
     *,
     report_type: str,
     project_identity: ProjectIdentity,
+    language: str = "en",
 ) -> str:
     odoo_ev = [e for e in prompt_evidence if e.get("source_type") == "odoo"]
     email_ev = [e for e in prompt_evidence if e.get("source_type") == "email"]
@@ -510,6 +517,14 @@ def _build_prompt(
         "6. EXECUTIVE_SUMMARY must directly answer the user's query in 4–8 sentences.\n"
         "7. MISSING_DATA must list every item that could not be determined, including budget.\n"
         "8. If a source timed out, say 'not confirmed' or 'inconclusive'; NEVER say it returned no data.\n\n"
+        "LANGUAGE RULE — The user asked in "
+        + ("Arabic" if language == "ar" else "English")
+        + f' (code: "{language}").\n'
+        "Write ALL narrative text — executive_summary claims, key_findings, root_causes, "
+        "delay_analysis, contractual_implications, recommended_actions, missing_data, conflicts, "
+        "and management_question_answer — in that language, in a formal executive register.\n"
+        "Keep evidence_ids, JSON keys, currency codes, and record references unchanged. "
+        f'Set "language" to "{language}".\n\n'
         f"{compactness_instruction}\n"
         f"{intent_instruction}\n"
         f"User role: {role} | Can view financials: {can_see_finance}\n"
@@ -541,7 +556,7 @@ def _build_prompt(
         '  "request_id": "string",\n'
         '  "project_code": "string or null",\n'
         '  "query": "string",\n'
-        '  "language": "en or ar",\n'
+        f'  "language": "{language}",\n'
         '  "executive_summary": [\n'
         '    {"claim": "direct answer to the user query in 4-8 sentences", "evidence_ids": ["ev_..."], "confidence": "high|medium|low"}\n'
         "  ],\n"
@@ -923,23 +938,46 @@ def _is_filename_or_title_only(ev: dict) -> bool:
     return False
 
 
-def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
+#: Snapshot field -> per-language display label for deterministic findings.
+_FIN_FIELD_LABELS: dict[str, dict[str, str]] = {
+    "contract_value": {"en": "contract value", "ar": "قيمة العقد"},
+    "estimate": {"en": "cost estimate", "ar": "التكلفة التقديرية"},
+    "actual_cost": {
+        "en": "actual cost (analytic/journal) to date",
+        "ar": "التكلفة الفعلية حتى تاريخه (قيود تحليلية)",
+    },
+    "payroll_cost": {"en": "payroll / staff cost", "ar": "تكلفة الرواتب والموظفين"},
+    "expense_cost": {
+        "en": "expenses (petty cash, vehicle, fuel)",
+        "ar": "المصروفات النثرية (عهدة/سيارات/وقود)",
+    },
+    "committed_cost": {"en": "committed cost (LPO/PO)", "ar": "التكاليف الملتزم بها (أوامر الشراء)"},
+    "total_incurred": {
+        "en": "total incurred cost to date",
+        "ar": "إجمالي التكلفة المتكبدة حتى تاريخه",
+    },
+}
+
+
+def _financial_snapshot_findings(
+    report: dict, odoo_ctx: dict, language: str = "en"
+) -> list[dict]:
     """Build executive-facing financial findings from Odoo-backed snapshot fields."""
     fs = report.get("financial_snapshot") or {}
     if not isinstance(fs, dict):
         return []
+    lang = "ar" if language == "ar" else "en"
 
     findings: list[dict] = []
-    labels = (
-        ("contract_value", "contract value"),
-        ("estimate", "cost estimate"),
-        ("actual_cost", "actual cost (analytic/journal) to date"),
-        ("payroll_cost", "payroll / staff cost"),
-        ("expense_cost", "expenses (petty cash, vehicle, fuel)"),
-        ("committed_cost", "committed cost (LPO/PO)"),
-        ("total_incurred", "total incurred cost to date"),
-    )
-    for key, label in labels:
+    for key in (
+        "contract_value",
+        "estimate",
+        "actual_cost",
+        "payroll_cost",
+        "expense_cost",
+        "committed_cost",
+        "total_incurred",
+    ):
         node = fs.get(key)
         if not isinstance(node, dict) or node.get("status") != "available":
             continue
@@ -953,9 +991,15 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
             in ("actual_cost", "payroll_cost", "expense_cost", "total_incurred", "committed_cost")
             else value
         )
+        label = _FIN_FIELD_LABELS[key][lang]
+        text = (
+            f"يُظهر نظام Odoo أن {label} تبلغ {display_value:,.2f} درهم."
+            if lang == "ar"
+            else f"Odoo shows {label} of {display_value:,.2f} AED."
+        )
         findings.append(
             {
-                "text": f"Odoo shows {label} of {display_value:,.2f} AED.",
+                "text": text,
                 "evidence_ids": [eid],
                 "confidence": "medium",
             }
@@ -965,12 +1009,19 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
     if isinstance(variance, dict) and variance.get("value") is not None:
         eids = _flatten_eids(variance.get("evidence_ids", []))
         if eids:
+            if lang == "ar":
+                text = (
+                    f"الفرق مقارنةً بالتكلفة التقديرية في Odoo هو {variance['value']:,.2f} درهم "
+                    f"وفق {variance.get('formula') or 'مدخلات موثقة'}."
+                )
+            else:
+                text = (
+                    f"Variance against the Odoo cost estimate is "
+                    f"{variance['value']:,.2f} AED using {variance.get('formula') or 'verified inputs'}."
+                )
             findings.append(
                 {
-                    "text": (
-                        f"Variance against the Odoo cost estimate is "
-                        f"{variance['value']:,.2f} AED using {variance.get('formula') or 'verified inputs'}."
-                    ),
+                    "text": text,
                     "evidence_ids": eids,
                     "confidence": "medium",
                 }
@@ -980,8 +1031,12 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
         findings.append(
             {
                 "text": (
-                    "Budget or variance is not reported because no non-zero Odoo "
-                    "budget/estimate baseline was available for that calculation."
+                    "لا يُحتسب فرق الميزانية لعدم توفر خط أساس (ميزانية/تقدير) غير صفري في Odoo."
+                    if lang == "ar"
+                    else (
+                        "Budget or variance is not reported because no non-zero Odoo "
+                        "budget/estimate baseline was available for that calculation."
+                    )
                 ),
                 "evidence_ids": list(dict.fromkeys(eids))[:2],
                 "confidence": "low",
@@ -998,8 +1053,13 @@ def _financial_snapshot_findings(report: dict, odoo_ctx: dict) -> list[dict]:
             findings.append(
                 {
                     "text": (
-                        "Odoo project evidence was found, but no usable Odoo cost, "
-                        "budget, purchase order, invoice, or payment amount was available."
+                        "تم العثور على سجل المشروع في Odoo، لكن لا تتوفر مبالغ تكلفة أو ميزانية "
+                        "أو أوامر شراء أو فواتير قابلة للاستخدام."
+                        if lang == "ar"
+                        else (
+                            "Odoo project evidence was found, but no usable Odoo cost, "
+                            "budget, purchase order, invoice, or payment amount was available."
+                        )
                     ),
                     "evidence_ids": list(dict.fromkeys(project_ids))[:2],
                     "confidence": "low",
@@ -1031,12 +1091,35 @@ def _force_financial_odoo_synthesis(
     state: DecisionState,
     odoo_ctx: dict,
     project_identity: ProjectIdentity,
+    language: str = "en",
 ) -> None:
-    """Keep financial reports executive-facing and Odoo-led."""
-    report["key_findings"] = _financial_snapshot_findings(report, odoo_ctx)
-    if odoo_ctx.get("project_records") or odoo_ctx.get("has_amount"):
+    """Keep financial figures Odoo-led without discarding the LLM narrative.
+
+    Deterministic snapshot findings lead key_findings (every number bound to
+    its Odoo record). LLM findings that do not assert their own currency
+    amounts are kept after them; the LLM executive summary is kept when it has
+    real content, otherwise the evidence-bound fallback summary is used.
+    """
+    figure_findings = _financial_snapshot_findings(report, odoo_ctx, language=language)
+    narrative_findings = [
+        f
+        for f in report.get("key_findings", [])
+        if isinstance(f, dict)
+        and not _AMOUNT_IN_TEXT_RE.search(str(f.get("text", "")))
+        and not _is_placeholder_text(str(f.get("text", "")))
+    ]
+    report["key_findings"] = (figure_findings + narrative_findings)[:8]
+
+    es = report.get("executive_summary")
+    has_llm_summary = isinstance(es, list) and any(
+        isinstance(item, dict)
+        and (item.get("claim") or "").strip()
+        and not _is_placeholder_text(item.get("claim", ""))
+        for item in es
+    )
+    if not has_llm_summary and (odoo_ctx.get("project_records") or odoo_ctx.get("has_amount")):
         report["executive_summary"] = _basic_executive_summary(
-            state, [], [], odoo_ctx, project_identity
+            state, [], [], odoo_ctx, project_identity, language=language
         )
     report["root_causes"] = []
     report["delay_analysis"] = []
@@ -1073,6 +1156,54 @@ def _report_has_valid_claims(report: dict, evidence_ids: set[str]) -> bool:
             if not _is_placeholder_text(text):
                 has_real_claim = True
     return has_real_claim
+
+
+_CLAIM_SECTIONS = (
+    "executive_summary",
+    "key_findings",
+    "root_causes",
+    "delay_analysis",
+    "contractual_implications",
+    "recommended_actions",
+)
+
+
+def _salvage_llm_claims(report: dict, evidence_ids: set[str]) -> dict[str, int]:
+    """Drop only the invalid claims from an LLM draft, keeping the rest.
+
+    Previously a single claim with an unknown evidence_id discarded the whole
+    LLM report in favour of the skeletal deterministic fallback. Instead, a
+    claim survives when every cited evidence_id exists in the retrieved
+    evidence pack and its text is not schema placeholder text; the caller
+    falls back only when nothing survives. Returns dropped counts per section.
+    """
+    dropped: dict[str, int] = {}
+    for section in _CLAIM_SECTIONS:
+        items = report.get(section)
+        if not isinstance(items, list):
+            report[section] = []
+            dropped[section] = 0 if not items else 1
+            continue
+        kept: list = []
+        removed = 0
+        for item in items:
+            if not isinstance(item, dict):
+                removed += 1
+                continue
+            eids = _flatten_eids(item.get("evidence_ids", []))
+            text = item.get("text") or item.get("claim") or ""
+            if (
+                eids
+                and all(e and e != "ev_..." and e in evidence_ids for e in eids)
+                and not _is_placeholder_text(text)
+            ):
+                item["evidence_ids"] = eids
+                kept.append(item)
+            else:
+                removed += 1
+        report[section] = kept
+        dropped[section] = removed
+    return dropped
 
 
 def _enrich_management_question_answer(report: dict, state: DecisionState) -> None:
@@ -1184,8 +1315,9 @@ def _enrich_management_question_answer(report: dict, state: DecisionState) -> No
     mqa["evidence_used"] = first_eids or ["evidence catalogued in key_findings"]
 
 
-def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
+def _enforce_missing_data(report: dict, odoo_ctx: dict, language: str = "en") -> None:
     """Deterministically populate missing_data with items that could not be extracted."""
+    lang = "ar" if language == "ar" else "en"
     missing = report.setdefault("missing_data", [])
     if not isinstance(missing, list):
         report["missing_data"] = []
@@ -1203,32 +1335,57 @@ def _enforce_missing_data(report: dict, odoo_ctx: dict) -> None:
 
     # Budget is always missing from analytic line records
     add(
-        "Project budget (AED): not available in Odoo analytic line records",
+        (
+            "ميزانية المشروع (درهم): غير متوفرة في سجلات القيود التحليلية في Odoo"
+            if lang == "ar"
+            else "Project budget (AED): not available in Odoo analytic line records"
+        ),
         "budget",
+        "ميزانية",
     )
     # Variance is always missing without budget
     add(
-        "Cost variance (budget vs actual): not calculable without a budget baseline",
+        (
+            "فرق التكلفة (الميزانية مقابل الفعلي): لا يمكن احتسابه دون خط أساس للميزانية"
+            if lang == "ar"
+            else "Cost variance (budget vs actual): not calculable without a budget baseline"
+        ),
         "variance",
+        "فرق التكلفة",
     )
     # Actual cost if no cost lines
     if not odoo_ctx.get("has_amount"):
         add(
-            "Actual cost total: not available — no cost analytic lines in evidence",
+            (
+                "إجمالي التكلفة الفعلية: غير متوفر — لا توجد قيود تكلفة تحليلية في الأدلة"
+                if lang == "ar"
+                else "Actual cost total: not available — no cost analytic lines in evidence"
+            ),
             "actual cost",
             "actual_cost",
+            "التكلفة الفعلية",
         )
     # Delay if delay sections empty in report types that actually render delay/root cause sections.
     if report_type not in ("financial", "salary_payroll", "data_report", "document_search") and not report.get("delay_analysis") and not report.get("root_causes"):
         add(
-            "Delay analysis: no specific delay events extracted from available documents",
+            (
+                "تحليل التأخير: لم تُستخرج أحداث تأخير محددة من المستندات المتاحة"
+                if lang == "ar"
+                else "Delay analysis: no specific delay events extracted from available documents"
+            ),
             "delay",
+            "تأخير",
         )
     # Recommended actions if empty
     if not report.get("recommended_actions"):
         add(
-            "Recommended actions: insufficient specific evidence basis in current evidence set",
+            (
+                "الإجراءات الموصى بها: لا يوجد أساس كافٍ من الأدلة في المجموعة الحالية"
+                if lang == "ar"
+                else "Recommended actions: insufficient specific evidence basis in current evidence set"
+            ),
             "recommended",
+            "الموصى بها",
         )
 
 
@@ -1243,24 +1400,35 @@ def _basic_executive_summary(
     email_ev: list[dict],
     odoo_ctx: dict,
     project_identity: ProjectIdentity | None = None,
+    language: str = "en",
 ) -> list[dict]:
     """Build a minimal executive_summary so the QG check does not reject deterministic fallback reports.
 
     This summary is intentionally low-confidence and tells the reviewer that
     automated synthesis failed — it does NOT invent analytical conclusions.
     """
+    lang = "ar" if language == "ar" else "en"
     project_name = (
         project_identity.project_name
         if project_identity and project_identity.project_name not in ("", "Not verified")
         else None
     )
-    project_label = (
-        f"{project_name} ({state.project_code})"
-        if project_name and state.project_code
-        else (f"Project {state.project_code}" if state.project_code else "the requested project")
-    )
+    if project_name and state.project_code:
+        project_label = f"{project_name} ({state.project_code})"
+    elif state.project_code:
+        project_label = (
+            f"مشروع {state.project_code}" if lang == "ar" else f"Project {state.project_code}"
+        )
+    else:
+        project_label = "المشروع المطلوب" if lang == "ar" else "the requested project"
 
     def _generic(n: int) -> str:
+        if lang == "ar":
+            return (
+                f"تعذّر إكمال التحليل الآلي لـ{project_label} لهذا الطلب. "
+                f"تم فهرسة {n} من عناصر الأدلة المسترجعة في قسم المصادر لمراجعتها؛ "
+                "ولا يُقدَّم أي استنتاج آلي. الأثر الكمي على الجدول الزمني أو التكلفة غير متوفر من السجلات."
+            )
         return (
             f"Automated analysis for {project_label} could not be completed for this request. "
             f"{n} retrieved evidence item(s) are catalogued in the Sources section for reviewer "
@@ -1273,41 +1441,70 @@ def _basic_executive_summary(
     #    real numbers (not "synthesis unavailable"), each bound to its record.
     fin_eids: list[str] = []
     parts: list[str] = []
+
+    def _part(en_label: str, ar_label: str, amount: float) -> str:
+        if lang == "ar":
+            return f"{ar_label} {amount:,.0f} درهم"
+        return f"{en_label} {amount:,.0f} AED"
+
     cv, cv_eid = odoo_ctx.get("contract_value"), odoo_ctx.get("contract_value_evidence_id")
     if cv not in (None, 0) and cv_eid:
-        parts.append(f"contract value {cv:,.0f} AED")
+        parts.append(_part("contract value", "قيمة العقد", cv))
         fin_eids.append(cv_eid)
     est, est_eid = odoo_ctx.get("estimate"), odoo_ctx.get("estimate_evidence_id")
     if est not in (None, 0) and est_eid:
-        parts.append(f"cost estimate {est:,.0f} AED")
+        parts.append(_part("cost estimate", "التكلفة التقديرية", est))
         fin_eids.append(est_eid)
     if (
         odoo_ctx.get("has_amount")
         and odoo_ctx.get("total_amount") is not None
         and odoo_ctx.get("best_evidence_id")
     ):
-        parts.append(f"actual cost (analytic/journal) {abs(odoo_ctx['total_amount']):,.0f} AED")
+        parts.append(
+            _part(
+                "actual cost (analytic/journal)",
+                "التكلفة الفعلية (قيود تحليلية)",
+                abs(odoo_ctx["total_amount"]),
+            )
+        )
         fin_eids.append(odoo_ctx["best_evidence_id"])
     if odoo_ctx.get("payroll_cost") is not None and odoo_ctx.get("payroll_evidence_id"):
-        parts.append(f"payroll/staff cost {odoo_ctx['payroll_cost']:,.0f} AED")
+        parts.append(
+            _part("payroll/staff cost", "تكلفة الرواتب والموظفين", odoo_ctx["payroll_cost"])
+        )
         fin_eids.append(odoo_ctx["payroll_evidence_id"])
     if odoo_ctx.get("expense_cost") is not None and odoo_ctx.get("expense_evidence_id"):
-        parts.append(f"expenses (petty cash/vehicle/fuel) {odoo_ctx['expense_cost']:,.0f} AED")
+        parts.append(
+            _part(
+                "expenses (petty cash/vehicle/fuel)",
+                "المصروفات النثرية (عهدة/سيارات/وقود)",
+                odoo_ctx["expense_cost"],
+            )
+        )
         fin_eids.append(odoo_ctx["expense_evidence_id"])
     if (
         odoo_ctx.get("incurred_component_count", 0) > 1
         and odoo_ctx.get("total_incurred") is not None
         and odoo_ctx.get("total_incurred_evidence_id")
     ):
-        parts.append(f"total incurred {odoo_ctx['total_incurred']:,.0f} AED")
+        parts.append(
+            _part("total incurred", "إجمالي التكلفة المتكبدة", odoo_ctx["total_incurred"])
+        )
         fin_eids.append(odoo_ctx["total_incurred_evidence_id"])
     if parts:
         fin_eids = list(dict.fromkeys(fin_eids))[:5]
-        claim = (
-            f"For {project_label}, the verified Odoo financial position is: {'; '.join(parts)} "
-            "(see the Financial Snapshot, each figure bound to its Odoo record). A full analytical "
-            "narrative requires analyst review."
-        )
+        if lang == "ar":
+            claim = (
+                f"بالنسبة إلى {project_label}، الموقف المالي الموثق من Odoo هو: {'؛ '.join(parts)} "
+                "(انظر جدول الموقف المالي؛ كل رقم مرتبط بسجله في Odoo). "
+                "يتطلب السرد التحليلي الكامل مراجعة محلل."
+            )
+        else:
+            claim = (
+                f"For {project_label}, the verified Odoo financial position is: {'; '.join(parts)} "
+                "(see the Financial Snapshot, each figure bound to its Odoo record). A full analytical "
+                "narrative requires analyst review."
+            )
         return [{"claim": claim, "evidence_ids": fin_eids, "confidence": "low"}]
 
     # 2) No financial figures: document/email-backed -> synthesis pending.
@@ -1512,6 +1709,7 @@ def _build_report_from_evidence(
     """Deterministic report builder used when no LLM key is available."""
     if project_identity is None:
         project_identity = resolve_project_identity(state)
+    language = detect_language(state.query)
     report_type = state.outputs.get("report_type", classify_report_type(state.query))
     if report_type == "financial":
         evidence = filter_financial_evidence(state.evidence, query=state.query)
@@ -1597,7 +1795,11 @@ def _build_report_from_evidence(
 
     missing_data: list[str] = []
     if not evidence:
-        missing_data.append("No evidence was retrieved for this query.")
+        missing_data.append(
+            "لم يتم استرجاع أي أدلة لهذا الاستفسار."
+            if language == "ar"
+            else "No evidence was retrieved for this query."
+        )
 
     management_question_answer: dict = {
         "executive_answer": "",
@@ -1625,11 +1827,11 @@ def _build_report_from_evidence(
         "request_id": state.request_id,
         "project_code": state.project_code,
         "query": state.query,
-        "language": "en",
+        "language": language,
         "project_identity": project_identity.to_dict(),
         "report_type": report_type,
         "executive_summary": _basic_executive_summary(
-            state, doc_ev, email_ev, odoo_ctx, project_identity
+            state, doc_ev, email_ev, odoo_ctx, project_identity, language=language
         ),
         "financial_snapshot": {
             "budget": budget,
@@ -1650,7 +1852,9 @@ def _build_report_from_evidence(
     evidence_ids = {e.get("evidence_id", "") for e in evidence if isinstance(e, dict)}
     _enforce_financial_categories(report, odoo_ctx, odoo_ev, evidence_ids)
     if report_type == "financial":
-        _force_financial_odoo_synthesis(report, state, odoo_ctx, project_identity)
+        _force_financial_odoo_synthesis(
+            report, state, odoo_ctx, project_identity, language=language
+        )
     return report
 
 
@@ -1827,12 +2031,15 @@ def _flatten_eids(eids) -> list[str]:
     return flat
 
 
-def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
+def _enforce_executive_summary(
+    report: dict, state: DecisionState, language: str = "en"
+) -> None:
     """When the LLM returns an empty executive_summary but evidence exists,
     synthesize a minimal fallback from key_findings so the QG check passes.
 
     The synthesized entry is marked confidence=low to signal partial automation.
     """
+    lang = "ar" if language == "ar" else "en"
     es = report.get("executive_summary")
     if not (isinstance(es, list) and len(es) == 0 and state.evidence):
         return
@@ -1854,15 +2061,24 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
     if project_name and project_name not in ("", "Not verified") and state.project_code:
         project_label = f"{project_name} ({state.project_code})"
     elif state.project_code:
-        project_label = f"Project {state.project_code}"
+        project_label = (
+            f"مشروع {state.project_code}" if lang == "ar" else f"Project {state.project_code}"
+        )
     else:
-        project_label = "the requested project"
-    claim = (
-        f"Automated analysis for {project_label} could not be completed for this request. "
-        f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
-        "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
-        "impact is not available from the records."
-    )
+        project_label = "المشروع المطلوب" if lang == "ar" else "the requested project"
+    if lang == "ar":
+        claim = (
+            f"تعذّر إكمال التحليل الآلي لـ{project_label} لهذا الطلب. "
+            f"تم فهرسة {len(ref_eids)} من عناصر الأدلة المسترجعة في قسم المصادر لمراجعتها؛ "
+            "ولا يُقدَّم أي استنتاج آلي. الأثر الكمي على الجدول الزمني أو التكلفة غير متوفر من السجلات."
+        )
+    else:
+        claim = (
+            f"Automated analysis for {project_label} could not be completed for this request. "
+            f"{len(ref_eids)} retrieved evidence item(s) are catalogued in the Sources section for "
+            "reviewer validation; no automated conclusion is asserted. Quantified schedule or cost "
+            "impact is not available from the records."
+        )
     report["executive_summary"] = [{"claim": claim, "evidence_ids": ref_eids, "confidence": "low"}]
 
 
@@ -1873,6 +2089,8 @@ def _enforce_executive_summary(report: dict, state: DecisionState) -> None:
 
 async def run(state: DecisionState) -> DecisionState:
     report_type = state.outputs.get("report_type", classify_report_type(state.query))
+    language = detect_language(state.query)
+    state.outputs["detected_language"] = language
     project_identity = ProjectIdentity.from_dict(
         state.outputs.get("project_identity") or resolve_project_identity(state).to_dict()
     )
@@ -1897,6 +2115,7 @@ async def run(state: DecisionState) -> DecisionState:
         prompt_evidence,
         report_type=report_type,
         project_identity=project_identity,
+        language=language,
     )
     import sys
 
@@ -1934,12 +2153,20 @@ async def run(state: DecisionState) -> DecisionState:
     def _normalize(report_candidate: dict | None) -> dict:
         """Coerce a parsed/repaired report into a valid shape or fall back to deterministic builder."""
         if not isinstance(report_candidate, dict):
+            state.outputs["draft_report_source"] = "deterministic_fallback"
             return _build_report_from_evidence(state, project_identity)
         _normalize_financial_snapshot(report_candidate)
         _enforce_financial_from_odoo(report_candidate, odoo_ctx, evidence_ids)
         _remap_evidence_ids(report_candidate, state.evidence)
+        dropped = _salvage_llm_claims(report_candidate, evidence_ids)
+        if any(dropped.values()):
+            state.outputs["draft_salvage_dropped"] = {
+                k: v for k, v in dropped.items() if v
+            }
         if not _report_has_valid_claims(report_candidate, evidence_ids):
+            state.outputs["draft_report_source"] = "deterministic_fallback"
             return _build_report_from_evidence(state, project_identity)
+        state.outputs["draft_report_source"] = "llm"
         return report_candidate
 
     report: dict | None = None
@@ -2049,7 +2276,8 @@ async def run(state: DecisionState) -> DecisionState:
     report.setdefault("request_id", state.request_id)
     report.setdefault("project_code", state.project_code)
     report.setdefault("query", state.query)
-    report.setdefault("language", "en")
+    # Deterministic: the report language follows the query language.
+    report["language"] = language
     report.setdefault("executive_summary", [])
     report.setdefault(
         "financial_snapshot",
@@ -2108,12 +2336,14 @@ async def run(state: DecisionState) -> DecisionState:
     _enforce_financial_from_odoo(report, odoo_ctx, evidence_ids)
     _enforce_financial_categories(report, odoo_ctx, _odoo_evidence, evidence_ids)
     if report_type == "financial":
-        _force_financial_odoo_synthesis(report, state, odoo_ctx, project_identity)
+        _force_financial_odoo_synthesis(
+            report, state, odoo_ctx, project_identity, language=language
+        )
     _remap_evidence_ids(report, state.evidence)
     if report_type == "financial":
         _rebuild_sources_from_citations(report, state.evidence)
-    _enforce_missing_data(report, odoo_ctx)
-    _enforce_executive_summary(report, state)
+    _enforce_missing_data(report, odoo_ctx, language=language)
+    _enforce_executive_summary(report, state, language=language)
     _enrich_management_question_answer(report, state)
 
     # Enforce the verified Project Identity Contract on every report.

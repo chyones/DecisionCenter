@@ -223,7 +223,7 @@ async def test_management_question_not_raw_evidence_dump() -> None:
     report = result.report_json or {}
     md = to_markdown(report)
 
-    assert "Management Question Answer" in md
+    assert "Management Question — Answer" in md
     assert "Executive answer:" in md
     assert "Recommended action:" in md
     assert "Business impact:" in md
