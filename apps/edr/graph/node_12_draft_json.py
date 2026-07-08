@@ -1265,6 +1265,62 @@ def _salvage_llm_claims(report: dict, evidence_ids: set[str]) -> dict[str, int]:
     return dropped
 
 
+def _drop_filename_claims(report: dict) -> int:
+    """Remove claims whose visible text leaks a raw filename.
+
+    The QG hard-blocks any body claim containing a filename; dropping the
+    offending claim keeps the rest of an otherwise-valid draft publishable.
+    Documents remain listed in the Sources appendix.
+    """
+    removed = 0
+    for section in _CLAIM_SECTIONS:
+        items = report.get(section)
+        if not isinstance(items, list):
+            continue
+        kept: list = []
+        for item in items:
+            text = (
+                (item.get("text") or item.get("claim") or "") if isinstance(item, dict) else ""
+            )
+            if text and _FILENAME_LIKE.search(text):
+                removed += 1
+                continue
+            kept.append(item)
+        report[section] = kept
+    return removed
+
+
+def _cap_confidence_for_partial_sources(report: dict, state: DecisionState) -> bool:
+    """Cap claim confidence at medium when any enabled source timed out or errored.
+
+    Mirrors QG ``_check_confidence_against_evidence``: confidence cannot be
+    high on partial evidence. Enforcing the cap deterministically stops an
+    otherwise-valid draft from bouncing to review over a label.
+    """
+    cov = coverage.summary(state)
+    has_timeouts = any(
+        entry.get("status") == "timeout"
+        for entry in cov["sources"].values()
+        if entry.get("enabled")
+    )
+    if not has_timeouts and not cov.get("connector_errors"):
+        return False
+    capped = False
+    for section in _CLAIM_SECTIONS:
+        items = report.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, dict) and item.get("confidence") == "high":
+                item["confidence"] = "medium"
+                capped = True
+    mqa = report.get("management_question_answer")
+    if isinstance(mqa, dict) and mqa.get("confidence") == "high":
+        mqa["confidence"] = "medium"
+        capped = True
+    return capped
+
+
 def _enrich_management_question_answer(report: dict, state: DecisionState) -> None:
     """Populate a minimal management_question_answer when the LLM left it empty or as a placeholder."""
     if not is_management_question(state.query):
@@ -2401,9 +2457,14 @@ async def run(state: DecisionState) -> DecisionState:
     _remap_evidence_ids(report, state.evidence)
     if report_type == "financial":
         _rebuild_sources_from_citations(report, state.evidence)
+    dropped_filename_claims = _drop_filename_claims(report)
+    if dropped_filename_claims:
+        state.outputs["draft_filename_claims_dropped"] = dropped_filename_claims
     _enforce_missing_data(report, odoo_ctx, language=language)
     _enforce_executive_summary(report, state, language=language)
     _enrich_management_question_answer(report, state)
+    if _cap_confidence_for_partial_sources(report, state):
+        state.outputs["draft_confidence_capped"] = True
 
     # Enforce the verified Project Identity Contract on every report.
     report["project_identity"] = project_identity.to_dict()

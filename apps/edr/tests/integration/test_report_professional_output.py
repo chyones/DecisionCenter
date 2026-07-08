@@ -19,6 +19,8 @@ from apps.edr.exporters.markdown import to_markdown
 from apps.edr.graph import node_12_draft_json
 from apps.edr.graph.intent import detect_language
 from apps.edr.graph.node_12_draft_json import (
+    _cap_confidence_for_partial_sources,
+    _drop_filename_claims,
     _force_financial_odoo_synthesis,
     _salvage_llm_claims,
 )
@@ -161,6 +163,113 @@ async def test_run_keeps_llm_draft_when_one_claim_is_invalid():
     assert "Consultant approvals for phase 2 have been pending since March." in findings
     claims = [c["claim"] for c in result.report_json["executive_summary"]]
     assert claims == ["Phase 2 approvals are the current bottleneck for the project."]
+
+
+# ---------------------------------------------------------------------------
+# Deterministic self-correction: filename leaks + confidence caps
+# ---------------------------------------------------------------------------
+
+
+def test_filename_claims_are_dropped_not_gate_failed():
+    report = {
+        "executive_summary": [
+            {"claim": "Clean analytical summary.", "evidence_ids": ["e1"], "confidence": "medium"}
+        ],
+        "key_findings": [
+            {"text": "Scope changed repeatedly.", "evidence_ids": ["e1"], "confidence": "medium"},
+            {
+                "text": "See REVISED BOQ- AL MIRFA -129-2025.pdf for the updated quantities.",
+                "evidence_ids": ["e2"],
+                "confidence": "medium",
+            },
+        ],
+        "root_causes": [],
+        "delay_analysis": [],
+        "contractual_implications": [],
+        "recommended_actions": [],
+    }
+    removed = _drop_filename_claims(report)
+    assert removed == 1
+    assert [f["text"] for f in report["key_findings"]] == ["Scope changed repeatedly."]
+    assert len(report["executive_summary"]) == 1
+
+
+def test_confidence_capped_when_source_timed_out():
+    state = DecisionState(
+        request_id="r-cap-1",
+        user_id="u-1",
+        role="executive",
+        project_code="PRJ-001",
+        query="expense report",
+        evidence=[],
+    )
+    state.outputs["connector_coverage_truth"] = {}
+    state.outputs["sharepoint_status"] = "timeout"
+    report = {
+        "executive_summary": [
+            {"claim": "x", "evidence_ids": ["e1"], "confidence": "high"}
+        ],
+        "key_findings": [{"text": "y", "evidence_ids": ["e1"], "confidence": "high"}],
+        "root_causes": [],
+        "delay_analysis": [],
+        "contractual_implications": [],
+        "recommended_actions": [],
+        "management_question_answer": {"confidence": "high"},
+    }
+    from apps.edr.graph import coverage as coverage_mod
+
+    real_summary = coverage_mod.summary
+
+    def fake_summary(_state):
+        cov = real_summary(_state)
+        cov["sources"]["sharepoint"] = {"enabled": True, "status": "timeout"}
+        return cov
+
+    from unittest import mock as _mock
+
+    with _mock.patch("apps.edr.graph.node_12_draft_json.coverage.summary", fake_summary):
+        capped = _cap_confidence_for_partial_sources(report, state)
+    assert capped
+    assert report["executive_summary"][0]["confidence"] == "medium"
+    assert report["key_findings"][0]["confidence"] == "medium"
+    assert report["management_question_answer"]["confidence"] == "medium"
+
+
+def test_confidence_not_capped_when_sources_clean():
+    state = DecisionState(
+        request_id="r-cap-2",
+        user_id="u-1",
+        role="executive",
+        project_code="PRJ-001",
+        query="expense report",
+        evidence=[],
+    )
+    report = {
+        "executive_summary": [
+            {"claim": "x", "evidence_ids": ["e1"], "confidence": "high"}
+        ],
+        "key_findings": [],
+        "root_causes": [],
+        "delay_analysis": [],
+        "contractual_implications": [],
+        "recommended_actions": [],
+    }
+    from apps.edr.graph import coverage as coverage_mod
+
+    real_summary = coverage_mod.summary
+
+    def fake_summary(_state):
+        cov = real_summary(_state)
+        cov["sources"] = {"odoo": {"enabled": True, "status": "ok"}}
+        cov["connector_errors"] = []
+        return cov
+
+    from unittest import mock as _mock
+
+    with _mock.patch("apps.edr.graph.node_12_draft_json.coverage.summary", fake_summary):
+        capped = _cap_confidence_for_partial_sources(report, state)
+    assert not capped
+    assert report["executive_summary"][0]["confidence"] == "high"
 
 
 # ---------------------------------------------------------------------------
