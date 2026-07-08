@@ -3,7 +3,7 @@
 ## Current State
 
 - Project name: DecisionCenter
-- Current verified commit (anchor): `d6111d0c08b69da10de5fc0c01565e3ca828f728` (financial UAT evidence-filter defect fix; local branch checked 2026-06-22)
+- Current verified commit (anchor): `0a17c39482821bc551ca60c7d476c28548c7fd23` (PR #11 financial cost-breakdown merge; main checked 2026-07-08)
 - Current status: `PHASE_2D_IN_PROGRESS_NOT_LIVE`
 - Production status: `NOT_LIVE`
 - Phase 2C closed: 2026-05-24
@@ -18,6 +18,32 @@
 - Phase 2D Slice 5 (production hardening): implemented; production NOT_LIVE
 - Phase 2D Slice 6 (real UAT flow): readiness implemented and CI-green; live UAT evidence exists but remains partial/not go-live proof; operator-pending; production NOT_LIVE
 - Phase 2D Slice 7 (go-live gate): not started; approval-gated, follows successful Slice 6
+
+## 2026-07-08 Main Cleanup And Governance Anchor Refresh
+
+Local `main` is fast-forwarded to `origin/main` at merge commit
+`0a17c39482821bc551ca60c7d476c28548c7fd23` (PR #11,
+`fix/financial-cost-breakdown`). The working tree is clean and production
+remains `NOT_LIVE`.
+
+Cleanup performed:
+
+- Local generated report captures `docs/output report` and
+  `docs/output report 1` were moved out of the repo to
+  `/root/DecisionCenter-untracked-archive/2026-07-08-clean/`.
+- Local branches already merged into `main` were deleted.
+- Temporary clean worktrees `/tmp/decisioncenter-ci-b` and
+  `/tmp/decisioncenter-ci-main` were removed, then the stale local branch
+  `fix/ci-odoo-config-coverage` was deleted.
+- The unmerged draft PR branch `fix/financial-cost-breakdown-reset` remains
+  locally and on GitHub as PR #12. It was intentionally not deleted.
+- Ignored local secrets, backups, virtualenvs, node modules, runtime data,
+  logs, and private operator files remain untouched.
+
+Validation for the cleanup: `git fetch --prune origin`, `git pull --ff-only`,
+`git status -sb`, `git branch -vv`, and `git worktree list` were checked.
+Preflight initially failed only because `agent-state.json.current_commit` was
+4 commits behind `main`; this governance refresh updates the anchor.
 
 ## 2026-06-22 Financial Arabic UAT Defect Fix
 
