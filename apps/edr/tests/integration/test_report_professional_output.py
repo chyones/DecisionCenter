@@ -208,6 +208,68 @@ def _financial_report_with_narrative() -> dict:
     }
 
 
+def test_financial_summary_with_llm_computed_total_is_replaced():
+    """A summary asserting its own (wrong) total must not survive next to the snapshot."""
+    report = _financial_report_with_narrative()
+    report["executive_summary"] = [
+        {
+            "claim": "Total recorded expenses reached 98,367.61 AED across 19 analytic lines.",
+            "evidence_ids": ["odoo-line-1"],
+            "confidence": "medium",
+        }
+    ]
+    state = DecisionState(
+        request_id="r-fin-2",
+        user_id="u-1",
+        role="executive",
+        project_code="PRJ-001",
+        query="expense report",
+        evidence=[],
+    )
+    identity = resolve_project_identity(state)
+    _force_financial_odoo_synthesis(
+        report, state, {"project_records": [], "has_amount": False}, identity
+    )
+    claims = " ".join(c.get("claim", "") for c in report["executive_summary"])
+    assert "98,367.61" not in claims
+
+
+def test_financial_summary_matching_snapshot_amount_survives():
+    report = _financial_report_with_narrative()
+    report["executive_summary"] = [
+        {
+            "claim": "Actual cost to date stands at 57,000.00 AED against a 5,000,000.00 AED contract.",
+            "evidence_ids": ["odoo-line-1"],
+            "confidence": "medium",
+        }
+    ]
+    state = DecisionState(
+        request_id="r-fin-3",
+        user_id="u-1",
+        role="executive",
+        project_code="PRJ-001",
+        query="expense report",
+        evidence=[],
+    )
+    identity = resolve_project_identity(state)
+    _force_financial_odoo_synthesis(report, state, {"project_records": []}, identity)
+    assert report["executive_summary"][0]["claim"].startswith("Actual cost to date")
+
+
+def test_markdown_cost_rows_render_as_magnitudes():
+    """Odoo stores costs negative; the executive table must not show a minus sign."""
+    report = _renderable_report()
+    report["financial_snapshot"]["actual_cost"] = {
+        "value": -130_648.30,
+        "currency": "AED",
+        "evidence_id": "e1",
+        "status": "available",
+    }
+    md = to_markdown(report)
+    assert "| 130,648.30 AED |" in md
+    assert "-130,648.30" not in md
+
+
 def test_financial_synthesis_keeps_llm_narrative():
     report = _financial_report_with_narrative()
     state = DecisionState(

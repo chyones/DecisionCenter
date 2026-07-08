@@ -205,6 +205,12 @@ _FIN_ROWS: tuple[tuple[str, str], ...] = (
     ("total_incurred", "fin.total_incurred"),
 )
 
+#: Cost rows display as magnitudes — Odoo stores costs as negative amounts,
+#: and a minus sign in an executive table reads as a credit.
+_FIN_COST_KEYS = frozenset(
+    ("actual_cost", "payroll_cost", "expense_cost", "committed_cost", "total_incurred")
+)
+
 # Source titles occasionally carry an empty-excerpt artifact ("RCC-PO-33107: .").
 _EMPTY_TITLE_TAIL = re.compile(r"[:;,\s]+\.?\s*$")
 
@@ -336,6 +342,8 @@ def to_markdown(report: dict) -> str:
                     unavailable.append(t[label_key])
                     continue
                 value = node.get("value")
+                if key in _FIN_COST_KEYS:
+                    value = abs(value)
                 cur = node.get("currency", currency)
                 src = node.get("evidence_id") or "—"
                 rows.append(f"| {t[label_key]} | {value:,.2f} {cur} | {src} |")

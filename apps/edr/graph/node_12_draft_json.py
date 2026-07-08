@@ -41,6 +41,49 @@ _FILENAME_LIKE = re.compile(
 _AMOUNT_IN_TEXT_RE = re.compile(
     r"\d[\d,]*(?:\.\d+)?\s*(?:AED|SAR|USD|EUR|درهم|ريال)", re.IGNORECASE
 )
+_AMOUNT_CAPTURE_RE = re.compile(
+    r"(\d[\d,]*(?:\.\d+)?)\s*(?:AED|SAR|USD|EUR|درهم|ريال)", re.IGNORECASE
+)
+
+
+def _snapshot_amount_strings(fs: dict) -> set[str]:
+    """Formatted magnitudes of every verified snapshot figure (2dp + rounded)."""
+    amounts: set[str] = set()
+    if not isinstance(fs, dict):
+        return amounts
+    for key in (
+        "contract_value",
+        "estimate",
+        "budget",
+        "actual_cost",
+        "payroll_cost",
+        "expense_cost",
+        "committed_cost",
+        "total_incurred",
+        "variance",
+    ):
+        node = fs.get(key)
+        if isinstance(node, dict) and node.get("value") is not None:
+            v = abs(node["value"])
+            amounts.add(f"{v:,.2f}")
+            amounts.add(f"{v:,.0f}")
+    return amounts
+
+
+def _claim_amounts_match_snapshot(text: str, snapshot_amounts: set[str]) -> bool:
+    """True when every currency amount asserted in ``text`` is a snapshot figure.
+
+    The LLM must never publish its own cost arithmetic: a summary total computed
+    from a truncated evidence sample contradicts the deterministic snapshot.
+    """
+    for raw in _AMOUNT_CAPTURE_RE.findall(text):
+        try:
+            v = abs(float(raw.replace(",", "")))
+        except ValueError:
+            return False
+        if f"{v:,.2f}" not in snapshot_amounts and f"{v:,.0f}" not in snapshot_amounts:
+            return False
+    return True
 
 
 def _coerce_number(value) -> float | None:
@@ -541,7 +584,9 @@ def _build_prompt(
         "FINANCIAL_SNAPSHOT:\n"
         "  budget → always: value=null, evidence_id=null, status='not_available'\n"
         f"  {actual_hint}\n"
-        "  variance → always: value=null, formula=null, status effectively 'not_available'\n\n"
+        "  variance → always: value=null, formula=null, status effectively 'not_available'\n"
+        "  NEVER compute your own totals or sums in narrative text (the evidence sample is\n"
+        "  truncated); only restate the exact amounts provided above or in single records.\n\n"
         "DELAY_ANALYSIS:\n"
         "  Look for: revision numbers (Rev N), 'update', 'extension', 'EOT', delay keywords in titles/excerpts.\n"
         "  If delay signals found: produce specific findings with evidence_ids.\n"
@@ -1112,7 +1157,19 @@ def _force_financial_odoo_synthesis(
     ]
     report["key_findings"] = (figure_findings + narrative_findings)[:8]
 
+    # The LLM summary survives only when every amount it asserts matches a
+    # verified snapshot figure — an LLM-computed total from a truncated
+    # evidence sample must never contradict the Financial Snapshot table.
+    snapshot_amounts = _snapshot_amount_strings(report.get("financial_snapshot") or {})
     es = report.get("executive_summary")
+    if isinstance(es, list):
+        es = [
+            item
+            for item in es
+            if isinstance(item, dict)
+            and _claim_amounts_match_snapshot(item.get("claim", ""), snapshot_amounts)
+        ]
+        report["executive_summary"] = es
     has_llm_summary = isinstance(es, list) and any(
         isinstance(item, dict)
         and (item.get("claim") or "").strip()
