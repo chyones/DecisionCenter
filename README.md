@@ -1,5 +1,19 @@
 # Decision Center
 
+<!-- portfolio-overview:start -->
+## Project overview
+
+An internal AI decision-support project designed to turn executive business questions into structured reports grounded in verifiable company evidence rather than unsupported model output.
+
+- **Purpose:** evidence-backed management reporting and decision support.
+- **Technology:** Python, FastAPI, LangGraph and containerized support services documented in this repository.
+- **Design:** controlled retrieval and integrations, structured reports and auditability.
+- **Status:** project documentation identifies production as **NOT_LIVE**. This README and `docs/execution/IMPLEMENTATION_PHASES.md` provide differing snapshots of Phase 2D progress; consult the dated phase record before claiming a feature is complete.
+- **Boundary:** documented components and test evidence do not establish production availability or independently prove real-world reporting outcomes.
+
+The technical architecture, evidence and execution documentation remain below.
+<!-- portfolio-overview:end -->
+
 > An internal AI Decision Center for senior management. One business question in, one structured executive report out — grounded only in verified company evidence.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
